@@ -1,0 +1,277 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────
+// Enums
+// ──────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  ADVISOR
+  CLIENT
+}
+
+// ──────────────────────────────────────────────
+// User
+// ──────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(CLIENT)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  advisorProfile    AdvisorProfile?
+  clientProfile     ClientProfile?
+  sentMessages      Message[]          @relation("SentMessages")
+  receivedMessages  Message[]          @relation("ReceivedMessages")
+  broadcastMessages BroadcastMessage[]
+  auditLogs         AuditLog[]
+  posts             Post[]
+
+  @@map("users")
+}
+
+// ──────────────────────────────────────────────
+// Advisor Profile
+// ──────────────────────────────────────────────
+
+model AdvisorProfile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  displayName   String
+  bio           String?
+  ratePerMinute Decimal  @default(0)
+  isOnline      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  availabilitySlots   AvailabilitySchedule[]
+  callQueues          CallQueue[]
+  callSessionsAsAdvisor CallSession[]        @relation("AdvisorSessions")
+
+  @@map("advisor_profiles")
+}
+
+// ──────────────────────────────────────────────
+// Client Profile
+// ──────────────────────────────────────────────
+
+model ClientProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  displayName    String
+  balanceMinutes Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user                    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  callSessionsAsClient    CallSession[] @relation("ClientSessions")
+  queueAssignments        QueueAssignment[]
+
+  @@map("client_profiles")
+}
+
+// ──────────────────────────────────────────────
+// Availability Schedule
+// ──────────────────────────────────────────────
+
+model AvailabilitySchedule {
+  id        String   @id @default(cuid())
+  advisorId String
+  dayOfWeek Int      // 0 = Sunday … 6 = Saturday
+  startTime String   // "HH:MM"
+  endTime   String   // "HH:MM"
+  timezone  String   @default("UTC")
+  createdAt DateTime @default(now())
+
+  advisor AdvisorProfile @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+
+  @@map("availability_schedules")
+}
+
+// ──────────────────────────────────────────────
+// Call Session
+// ──────────────────────────────────────────────
+
+model CallSession {
+  id              String    @id @default(cuid())
+  advisorId       String
+  clientId        String
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+  durationSeconds Int?
+  billedMinutes   Int?
+  status          String    @default("ACTIVE") // ACTIVE | ENDED | FAILED
+
+  advisor AdvisorProfile @relation("AdvisorSessions", fields: [advisorId], references: [id])
+  client  ClientProfile  @relation("ClientSessions", fields: [clientId], references: [id])
+
+  @@map("call_sessions")
+}
+
+// ──────────────────────────────────────────────
+// Call Queue
+// ──────────────────────────────────────────────
+
+model CallQueue {
+  id        String   @id @default(cuid())
+  advisorId String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  advisor     AdvisorProfile    @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+  assignments QueueAssignment[]
+
+  @@map("call_queues")
+}
+
+model QueueAssignment {
+  id        String   @id @default(cuid())
+  queueId   String
+  clientId  String
+  position  Int
+  joinedAt  DateTime @default(now())
+  status    String   @default("WAITING") // WAITING | CALLED | CANCELLED
+
+  queue  CallQueue     @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  client ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("queue_assignments")
+}
+
+// ──────────────────────────────────────────────
+// Messages
+// ──────────────────────────────────────────────
+
+model Message {
+  id          String    @id @default(cuid())
+  senderId    String
+  recipientId String
+  body        String
+  sentAt      DateTime  @default(now())
+  readAt      DateTime?
+
+  sender    User @relation("SentMessages", fields: [senderId], references: [id])
+  recipient User @relation("ReceivedMessages", fields: [recipientId], references: [id])
+
+  @@map("messages")
+}
+
+model BroadcastMessage {
+  id       String   @id @default(cuid())
+  authorId String
+  subject  String
+  body     String
+  sentAt   DateTime @default(now())
+
+  author  User              @relation(fields: [authorId], references: [id])
+  targets BroadcastTarget[]
+
+  @@map("broadcast_messages")
+}
+
+model BroadcastTarget {
+  id          String @id @default(cuid())
+  broadcastId String
+  targetRole  Role?  // null = all
+  userId      String?
+
+  broadcast BroadcastMessage @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@map("broadcast_targets")
+}
+
+// ──────────────────────────────────────────────
+// CMS – Pages & Posts
+// ──────────────────────────────────────────────
+
+model Page {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  content     String
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("pages")
+}
+
+model Post {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  excerpt     String?
+  content     String
+  publishedAt DateTime?
+  authorId    String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  author User @relation(fields: [authorId], references: [id])
+
+  @@map("posts")
+}
+
+// ──────────────────────────────────────────────
+// Settings
+// ──────────────────────────────────────────────
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// ──────────────────────────────────────────────
+// Modules
+// ──────────────────────────────────────────────
+
+model Module {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  version   String
+  enabled   Boolean  @default(false)
+  config    Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("modules")
+}
+
+// ──────────────────────────────────────────────
+// Audit Log
+// ──────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}

@@ -1,0 +1,27 @@
+{
+  "name": "pl-cms",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Psychic Link CMS – pnpm monorepo",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @pl-cms/api dev",
+    "dev:web": "pnpm --filter @pl-cms/web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore",
+    "db:generate": "pnpm --filter @pl-cms/db generate",
+    "db:migrate:dev": "pnpm --filter @pl-cms/db migrate:dev",
+    "db:migrate:deploy": "pnpm --filter @pl-cms/db migrate:deploy"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4"
+  }
+}

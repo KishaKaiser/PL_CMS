@@ -1,0 +1,61 @@
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcryptjs';
+import { PrismaService } from '../prisma/prisma.service';
+import { Role } from '@pl-cms/shared';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+    private readonly config: ConfigService,
+  ) {}
+
+  async validateUser(email: string, password: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) throw new UnauthorizedException('Invalid credentials');
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) throw new UnauthorizedException('Invalid credentials');
+
+    return user;
+  }
+
+  async login(email: string, password: string) {
+    const user = await this.validateUser(email, password);
+    return this.generateTokens(user.id, user.email, user.role as Role);
+  }
+
+  async refresh(token: string) {
+    try {
+      const payload = this.jwt.verify(token, {
+        secret: this.config.get<string>('JWT_REFRESH_SECRET'),
+      });
+      return this.generateTokens(payload.sub, payload.email, payload.role);
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+  }
+
+  private generateTokens(sub: string, email: string, role: Role) {
+    const accessToken = this.jwt.sign(
+      { sub, email, role },
+      {
+        secret: this.config.get<string>('JWT_ACCESS_SECRET'),
+        expiresIn: this.config.get<string>('JWT_ACCESS_EXPIRES_IN') ?? '15m',
+      },
+    );
+
+    const refreshToken = this.jwt.sign(
+      { sub, email, role },
+      {
+        secret: this.config.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.config.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '7d',
+      },
+    );
+
+    return { accessToken, refreshToken };
+  }
+}
