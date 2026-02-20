@@ -166,3 +166,68 @@ export interface PaginationQuery {
   page?: number;
   pageSize?: number;
 }
+
+// ──────────────────────────────────────────────
+// Product DTOs
+// ──────────────────────────────────────────────
+export interface ProductDto {
+  id: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency: string;
+  minutesPack: number;
+  isActive: boolean;
+}
+
+// ──────────────────────────────────────────────
+// Order DTOs
+// ──────────────────────────────────────────────
+export interface OrderItemDto {
+  productId: string;
+  quantity: number;
+}
+
+export interface CreateOrderDto {
+  items: OrderItemDto[];
+}
+
+export interface OrderDto {
+  id: string;
+  userId: string;
+  status: string;
+  totalAmount: number;
+  currency: string;
+  createdAt: string;
+}
+
+// ──────────────────────────────────────────────
+// Wallet DTOs
+// ──────────────────────────────────────────────
+export interface WalletBalanceDto {
+  balanceMinutes: number;
+}
+
+export interface WalletTransactionDto {
+  id: string;
+  type: string;
+  amount: number;
+  currency: string;
+  description?: string;
+  createdAt: string;
+}
+
+// ──────────────────────────────────────────────
+// Billing DTOs
+// ──────────────────────────────────────────────
+export interface StartSessionDto {
+  advisorId: string;
+}
+
+export interface BillingSessionDto {
+  id: string;
+  advisorId: string;
+  clientId: string;
+  startedAt: string;
+  status: string;
+}
