@@ -12,6 +12,14 @@ export default function AdminPage() {
         <li>Audit log</li>
         <li>Settings</li>
       </ul>
+      <div className="mt-6">
+        <a
+          href="/admin/products"
+          className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
+        >
+          Manage Products →
+        </a>
+      </div>
     </main>
   );
 }
