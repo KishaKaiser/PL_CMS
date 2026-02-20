@@ -1,0 +1,74 @@
+import Link from 'next/link';
+
+interface Product {
+  id: string;
+  name: string;
+  description?: string;
+  price: string | number;
+  currency: string;
+  minutesPack: number;
+  isActive: boolean;
+}
+
+async function getProducts(): Promise<Product[]> {
+  const apiBase = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
+  try {
+    const res = await fetch(`${apiBase}/products`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    return res.json() as Promise<Product[]>;
+  } catch {
+    return [];
+  }
+}
+
+export default async function ShopPage() {
+  const products = await getProducts();
+
+  return (
+    <main className="mx-auto max-w-5xl p-8">
+      <h1 className="mb-2 text-3xl font-bold">Shop</h1>
+      <p className="mb-8 text-gray-600">Browse our available minute packs and products.</p>
+
+      {products.length === 0 ? (
+        <p className="text-gray-500">No products available at the moment.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {products.map((p) => (
+            <div
+              key={p.id}
+              className="flex flex-col rounded-lg border bg-white p-5 shadow-sm"
+            >
+              <h2 className="text-lg font-semibold">{p.name}</h2>
+              {p.description && (
+                <p className="mt-1 flex-1 text-sm text-gray-500">{p.description}</p>
+              )}
+              <div className="mt-3 flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-indigo-700">
+                  ${Number(p.price).toFixed(2)}
+                </span>
+                <span className="text-sm text-gray-400">{p.currency}</span>
+              </div>
+              {p.minutesPack > 0 && (
+                <p className="mt-1 text-sm font-medium text-green-700">
+                  {p.minutesPack} minutes included
+                </p>
+              )}
+              <Link
+                href={`/shop/${p.id}`}
+                className="mt-4 rounded bg-indigo-600 py-2 text-center text-sm text-white hover:bg-indigo-700"
+              >
+                View Details
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-8">
+        <Link href="/" className="text-sm text-indigo-600 hover:underline">
+          ← Back to Home
+        </Link>
+      </div>
+    </main>
+  );
+}
