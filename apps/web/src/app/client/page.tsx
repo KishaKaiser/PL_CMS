@@ -12,6 +12,20 @@ export default function ClientPage() {
         <li>Call history</li>
         <li>Account &amp; balance</li>
       </ul>
+      <div className="mt-6 flex gap-3">
+        <a
+          href="/client/shop"
+          className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
+        >
+          Buy Minutes →
+        </a>
+        <a
+          href="/client/session"
+          className="rounded border px-4 py-2 text-sm hover:bg-gray-100"
+        >
+          Active Session →
+        </a>
+      </div>
     </main>
   );
 }
