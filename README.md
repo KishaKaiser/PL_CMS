@@ -59,7 +59,7 @@ docker compose -f infra/docker-compose.yml up -d
 
 ```bash
 cp apps/api/.env.example apps/api/.env
-# Edit apps/api/.env if your DB credentials differ
+# Edit apps/api/.env – fill in DB credentials, JWT secrets, and PayPal keys
 ```
 
 ### 4 – Run Prisma migration & generate client
@@ -68,6 +68,11 @@ cp apps/api/.env.example apps/api/.env
 pnpm db:generate          # generate Prisma client
 pnpm db:migrate:dev       # run initial migration (creates schema)
 ```
+
+> After adding PayPal fields (`paypalOrderId`, `payerEmail` on `Order`), run:
+> ```bash
+> pnpm db:migrate:dev --name add-paypal-order-fields
+> ```
 
 > On first run you will be prompted for a migration name – enter `init` or similar.
 
@@ -98,6 +103,70 @@ pnpm dev:web
 | `JWT_REFRESH_SECRET` | JWT signing secret (refresh) | — |
 | `JWT_ACCESS_EXPIRES_IN` | Access token TTL | `15m` |
 | `JWT_REFRESH_EXPIRES_IN` | Refresh token TTL | `7d` |
+| `PAYPAL_CLIENT_ID` | PayPal REST API client ID | — |
+| `PAYPAL_CLIENT_SECRET` | PayPal REST API client secret | — |
+| `PAYPAL_ENVIRONMENT` | `sandbox` or `live` | `sandbox` |
+| `PAYPAL_WEBHOOK_ID` | PayPal webhook ID (from Developer Dashboard) | — |
+| `WEB_BASE_URL` | Web app base URL (for PayPal return/cancel URLs) | `http://localhost:3000` |
+
+---
+
+## PayPal Advanced Checkout Setup
+
+### 1 – Create a PayPal developer account
+
+1. Go to [developer.paypal.com](https://developer.paypal.com/) and log in.
+2. Navigate to **Apps & Credentials**.
+3. Click **Create App**, choose **Merchant**, and give it a name.
+4. Copy the **Client ID** and **Secret** for the **Sandbox** environment into `apps/api/.env`:
+
+```env
+PAYPAL_CLIENT_ID=your-sandbox-client-id
+PAYPAL_CLIENT_SECRET=your-sandbox-client-secret
+PAYPAL_ENVIRONMENT=sandbox
+```
+
+### 2 – Set up a Webhook (optional but recommended)
+
+1. In the PayPal Developer Dashboard, select your app → **Webhooks** → **Add Webhook**.
+2. Enter your webhook URL: `https://your-api-host/api/payments/paypal/webhook`
+3. Select events:
+   - `PAYMENT.CAPTURE.COMPLETED`
+   - `PAYMENT.CAPTURE.DENIED`
+4. Copy the **Webhook ID** into your `.env`:
+
+```env
+PAYPAL_WEBHOOK_ID=your-webhook-id
+```
+
+> **Local testing**: Use [ngrok](https://ngrok.com/) or [PayPal's mock webhook tool](https://developer.paypal.com/dashboard/webhooksimulator) to test webhooks locally.
+
+### 3 – Expose the client ID to the frontend
+
+Add to `apps/web/.env.local`:
+
+```env
+NEXT_PUBLIC_PAYPAL_CLIENT_ID=your-sandbox-client-id
+```
+
+Alternatively, the frontend fetches the client ID automatically from `GET /api/payments/paypal-client-id`.
+
+### 4 – Sandbox testing
+
+1. Go to **Sandbox** → **Accounts** in the Developer Dashboard.
+2. Note the pre-created buyer and seller sandbox accounts.
+3. Use the buyer account credentials when prompted by the PayPal button in the checkout flow.
+
+### Payment flow
+
+```
+User clicks "Buy Now" → /shop/checkout
+  ↓ PayPal button rendered
+  ↓ POST /api/checkout/paypal-order    (creates DB order + PayPal order)
+  ↓ User approves in PayPal popup
+  ↓ POST /api/checkout/paypal-capture/:paypalOrderId  (captures payment, marks order CONFIRMED)
+  ↓ Webhook: POST /api/payments/paypal/webhook        (secondary confirmation)
+```
 
 ---
 
@@ -142,7 +211,11 @@ Prisma schema with the following models:
 | `Post` | Blog/news posts |
 | `Setting` | Key-value platform settings |
 | `Module` | Pluggable feature modules |
-| `AuditLog` | Admin action trail |
+| `Product` | Purchasable products (minute packs, etc.) |
+| `Order` | Customer orders with PayPal tracking |
+| `OrderItem` | Line items within an order |
+| `Payment` | Payment records per order |
+| `WalletTransaction` | Credit/debit entries for client balance |
 
 ### Frontend (`apps/web`)
 
