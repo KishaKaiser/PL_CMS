@@ -201,6 +201,20 @@ export interface OrderDto {
   createdAt: string;
 }
 
+
+export interface CheckoutPaypalOrderDto {
+  orderId: string;
+  paypalOrderId: string;
+  approvalUrl: string;
+}
+
+export interface CapturePaypalOrderDto {
+  success: boolean;
+  orderId: string;
+  paypalOrderId: string;
+  minutesCredited: number;
+}
+
 // ──────────────────────────────────────────────
 // Wallet DTOs
 // ──────────────────────────────────────────────
@@ -214,6 +228,20 @@ export interface WalletTransactionDto {
   amount: number;
   currency: string;
   description?: string;
+  createdAt: string;
+}
+
+// ──────────────────────────────────────────────
+// Payment DTOs
+// ──────────────────────────────────────────────
+export interface PaymentDto {
+  id: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+  method: string;
+  status: string;
+  transactionId?: string;
   createdAt: string;
 }
 

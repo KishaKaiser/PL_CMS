@@ -186,4 +186,31 @@ export class CheckoutService {
       minutesCredited,
     };
   }
+
+  listUserOrders(userId: string) {
+    return this.prisma.order.findMany({
+      where: { userId },
+      include: {
+        items: { include: { product: true } },
+        payments: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getUserOrderById(userId: string, orderId: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, userId },
+      include: {
+        items: { include: { product: true } },
+        payments: true,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+
+    return order;
+  }
 }
