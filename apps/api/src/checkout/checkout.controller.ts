@@ -5,6 +5,7 @@ import {
   UseGuards,
   Request,
   Param,
+  Get,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CheckoutService } from './checkout.service';
@@ -37,5 +38,18 @@ export class CheckoutController {
   @Post('paypal-capture/:paypalOrderId')
   capturePaypalOrder(@Param('paypalOrderId') paypalOrderId: string) {
     return this.checkoutService.capturePaypalOrder(paypalOrderId);
+  }
+
+  @Get('orders')
+  listOrders(@Request() req: { user: { id: string } }) {
+    return this.checkoutService.listUserOrders(req.user.id);
+  }
+
+  @Get('orders/:orderId')
+  getOrder(
+    @Request() req: { user: { id: string } },
+    @Param('orderId') orderId: string,
+  ) {
+    return this.checkoutService.getUserOrderById(req.user.id, orderId);
   }
 }
