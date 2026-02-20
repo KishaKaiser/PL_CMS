@@ -14,7 +14,11 @@ export class CheckoutService {
     });
 
     if (products.length !== productIds.length) {
-      throw new BadRequestException('One or more products are invalid or inactive');
+      const foundIds = new Set(products.map((p) => p.id));
+      const missing = productIds.filter((id) => !foundIds.has(id));
+      throw new BadRequestException(
+        `One or more products are invalid or inactive: ${missing.join(', ')}`,
+      );
     }
 
     const productMap = new Map(products.map((p) => [p.id, p]));

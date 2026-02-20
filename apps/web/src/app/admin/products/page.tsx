@@ -54,12 +54,17 @@ export default function AdminProductsPage() {
   }
 
   async function handleDelete(id: string) {
-    const res = await fetch(`/api/proxy/products/${id}`, { method: 'DELETE' });
-    if (!res.ok) {
-      setError('Failed to delete product. Please try again.');
-      return;
+    setError('');
+    try {
+      const res = await fetch(`/api/proxy/products/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.message ?? 'Failed to delete product');
+      }
+      setProducts((p) => p.filter((x) => x.id !== id));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error deleting product');
     }
-    setProducts((p) => p.filter((x) => x.id !== id));
   }
 
   return (

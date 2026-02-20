@@ -17,7 +17,9 @@ export class BillingService {
     });
     if (!clientProfile) throw new NotFoundException('Client profile not found');
     if (clientProfile.balanceMinutes < 1) {
-      throw new BadRequestException('Insufficient minute balance');
+      throw new BadRequestException(
+        `Insufficient minute balance. You have ${clientProfile.balanceMinutes} minutes, but at least 1 minute is required.`,
+      );
     }
 
     const advisorProfile = await this.prisma.advisorProfile.findUnique({
