@@ -14,6 +14,12 @@ export default function AdminPage() {
       </ul>
       <div className="mt-6 flex flex-wrap gap-3">
         <a
+          href="/admin/orders"
+          className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
+        >
+          Manage Orders →
+        </a>
+        <a
           href="/admin/products"
           className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
         >

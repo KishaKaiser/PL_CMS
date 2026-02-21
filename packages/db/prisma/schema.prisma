@@ -24,9 +24,19 @@ enum Role {
 enum OrderStatus {
   PENDING
   CONFIRMED
+  PROCESSING
+  SHIPPED
   CANCELLED
   COMPLETED
   REFUNDED
+}
+
+enum ShipmentStatus {
+  PENDING
+  LABEL_PURCHASED
+  SHIPPED
+  DELIVERED
+  CANCELLED
 }
 
 enum PaymentStatus {
@@ -387,6 +397,7 @@ model Order {
   payments          Payment[]
   walletTransactions WalletTransaction[]
   shippingAddress   OrderAddress?
+  shipments         Shipment[]
 
   @@index([userId])
   @@map("orders")
@@ -484,4 +495,28 @@ model WalletTransaction {
   @@index([paymentId])
   @@index([callSessionId])
   @@map("wallet_transactions")
+}
+
+// ──────────────────────────────────────────────
+// Fulfillment – Shipments
+// ──────────────────────────────────────────────
+
+model Shipment {
+  id                    String         @id @default(cuid())
+  orderId               String
+  shipstationShipmentId String?
+  carrier               String?
+  service               String?
+  trackingNumber        String?
+  labelUrl              String?
+  status                ShipmentStatus @default(PENDING)
+  shippedAt             DateTime?
+  deliveredAt           DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("shipments")
 }
