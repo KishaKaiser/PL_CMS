@@ -18,10 +18,18 @@ interface PaypalCreateOrderResponse {
   links: Array<{ href: string; rel: string; method: string }>;
 }
 
+interface PaypalOrderCapture {
+  id: string;
+  status: string;
+}
+
 interface PaypalCaptureResponse {
   id: string;
   status: string;
   payer?: { email_address?: string };
+  purchase_units?: Array<{
+    payments?: { captures?: PaypalOrderCapture[] };
+  }>;
 }
 
 interface PaypalWebhookVerifyResponse {
@@ -123,7 +131,7 @@ export class PaypalService {
 
   async captureOrder(
     paypalOrderId: string,
-  ): Promise<{ status: string; payerEmail?: string }> {
+  ): Promise<{ status: string; payerEmail?: string; captureId?: string }> {
     const token = await this.getAccessToken();
 
     const res = await fetch(
@@ -144,9 +152,12 @@ export class PaypalService {
     }
 
     const data = (await res.json()) as PaypalCaptureResponse;
+    const captureId = data.purchase_units?.[0]?.payments?.captures?.[0]?.id;
+
     return {
       status: data.status,
       payerEmail: data.payer?.email_address,
+      captureId,
     };
   }
 

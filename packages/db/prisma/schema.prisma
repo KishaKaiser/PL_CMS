@@ -384,7 +384,7 @@ model Payment {
   method        PaymentMethod
   status        PaymentStatus @default(PENDING)
   paypalOrderId String?
-  paypalCaptureId String?
+  paypalCaptureId String?      @unique
   paypalPayerId String?
   transactionId String?       @unique
   createdAt     DateTime      @default(now())
@@ -394,7 +394,6 @@ model Payment {
   walletTransactions WalletTransaction[]
 
   @@index([paypalOrderId])
-  @@index([paypalCaptureId])
   @@map("payments")
 }
 
