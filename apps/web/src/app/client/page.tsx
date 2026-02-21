@@ -20,6 +20,12 @@ export default function ClientPage() {
           Buy Minutes →
         </a>
         <a
+          href="/client/orders"
+          className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
+        >
+          My Orders →
+        </a>
+        <a
           href="/client/session"
           className="rounded border px-4 py-2 text-sm hover:bg-gray-100"
         >

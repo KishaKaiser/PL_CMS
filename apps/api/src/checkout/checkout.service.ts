@@ -400,6 +400,7 @@ export class CheckoutService {
         items: { include: { product: true } },
         payments: true,
         shippingAddress: true,
+        shipments: { orderBy: { createdAt: 'desc' } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -412,6 +413,7 @@ export class CheckoutService {
         items: { include: { product: true } },
         payments: true,
         shippingAddress: true,
+        shipments: { orderBy: { createdAt: 'desc' } },
       },
     });
 
