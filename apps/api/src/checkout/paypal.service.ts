@@ -187,6 +187,14 @@ export class PaypalService {
 
     const token = await this.getAccessToken();
 
+    let webhookEvent: unknown;
+    try {
+      webhookEvent = JSON.parse(rawBody) as unknown;
+    } catch {
+      this.logger.error('PayPal webhook verification failed: invalid JSON in rawBody');
+      return false;
+    }
+
     const payload = {
       auth_algo: headers['paypal-auth-algo'],
       cert_url: headers['paypal-cert-url'],
@@ -194,7 +202,7 @@ export class PaypalService {
       transmission_sig: headers['paypal-transmission-sig'],
       transmission_time: headers['paypal-transmission-time'],
       webhook_id: webhookId,
-      webhook_event: JSON.parse(rawBody) as unknown,
+      webhook_event: webhookEvent,
     };
 
     const res = await fetch(
