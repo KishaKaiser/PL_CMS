@@ -3,6 +3,7 @@ import { ConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
+import { InstallModule } from './install/install.module';
 import { WebSocketGatewayModule } from './websocket/websocket.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ProductsModule } from './products/products.module';
@@ -24,6 +25,7 @@ import { FulfillmentModule } from './fulfillment/fulfillment.module';
     ]),
     PrismaModule,
     HealthModule,
+    InstallModule,
     AuthModule,
     WebSocketGatewayModule,
     ProductsModule,
