@@ -26,12 +26,15 @@ interface Product {
 
 interface CartItem {
   product: Product;
+  variantId?: string;
+  variantColor?: string;
   quantity: number;
 }
 
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const productId = searchParams.get('productId');
+  const variantId = searchParams.get('variantId');
   const successParam = searchParams.get('success');
   const cancelledParam = searchParams.get('cancelled');
 
@@ -47,9 +50,20 @@ function CheckoutContent() {
     if (!productId) return;
     fetch(`/api/proxy/products/${productId}`)
       .then((r) => r.json())
-      .then((p: Product) => setCart([{ product: p, quantity: 1 }]))
+      .then((p: Product & { variants?: Array<{ id: string; color: string; priceOverride?: number | null }> }) => {
+        const variant = variantId
+          ? p.variants?.find((v) => v.id === variantId)
+          : undefined;
+        const effectivePrice = variant?.priceOverride ?? p.price;
+        setCart([{
+          product: { ...p, price: Number(effectivePrice) },
+          variantId: variant?.id,
+          variantColor: variant?.color,
+          quantity: 1,
+        }]);
+      })
       .catch(() => setMessage('Failed to load product.'));
-  }, [productId]);
+  }, [productId, variantId]);
 
   // Fetch PayPal client ID
   useEffect(() => {
@@ -81,6 +95,7 @@ function CheckoutContent() {
             body: JSON.stringify({
               items: cart.map((item) => ({
                 productId: item.product.id,
+                variantId: item.variantId,
                 quantity: item.quantity,
               })),
             }),
@@ -182,9 +197,12 @@ function CheckoutContent() {
           <div className="mb-6 rounded-lg border bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold">Order Summary</h2>
             {cart.map((item) => (
-              <div key={item.product.id} className="flex justify-between py-2 text-sm">
+              <div key={`${item.product.id}-${item.variantId ?? ''}`} className="flex justify-between py-2 text-sm">
                 <span>
-                  {item.product.name}{' '}
+                  {item.product.name}
+                  {item.variantColor && (
+                    <span className="ml-1 text-gray-500">({item.variantColor})</span>
+                  )}{' '}
                   <span className="text-gray-400">× {item.quantity}</span>
                 </span>
                 <span className="font-medium">

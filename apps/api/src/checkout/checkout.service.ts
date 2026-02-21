@@ -35,13 +35,29 @@ export class CheckoutService {
       );
     }
 
+    // Validate variants if provided
+    const variantIds = dto.items.map((i) => i.variantId).filter(Boolean) as string[];
+    const variants =
+      variantIds.length > 0
+        ? await this.prisma.productVariant.findMany({
+            where: { id: { in: variantIds }, isActive: true },
+          })
+        : [];
+    const variantMap = new Map(variants.map((v) => [v.id, v]));
+
     const productMap = new Map(products.map((p) => [p.id, p]));
     let totalAmount = new Decimal(0);
     const items = dto.items.map((item) => {
       const product = productMap.get(item.productId)!;
-      const unitPrice = product.price;
+      const variant = item.variantId ? variantMap.get(item.variantId) : undefined;
+      const unitPrice = variant?.priceOverride ?? product.price;
       totalAmount = totalAmount.add(unitPrice.mul(item.quantity));
-      return { productId: item.productId, quantity: item.quantity, unitPrice };
+      return {
+        productId: item.productId,
+        variantId: item.variantId ?? null,
+        quantity: item.quantity,
+        unitPrice,
+      };
     });
 
     return this.prisma.order.create({
