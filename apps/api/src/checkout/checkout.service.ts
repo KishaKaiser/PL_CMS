@@ -55,6 +55,60 @@ export class CheckoutService {
     });
   }
 
+  private async creditMinutesIfNeeded(orderId: string, paymentId: string): Promise<number> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: { include: { product: true } },
+        user: { include: { clientProfile: true } },
+      },
+    });
+
+    if (!order || !order.user.clientProfile) {
+      return 0;
+    }
+
+    let minutesCredited = 0;
+    for (const item of order.items) {
+      minutesCredited += item.product.minutesPack * item.quantity;
+    }
+
+    if (minutesCredited <= 0) {
+      return 0;
+    }
+
+    const existingCredit = await this.prisma.walletTransaction.findFirst({
+      where: {
+        paymentId,
+        type: 'CREDIT',
+      },
+      select: { id: true },
+    });
+
+    if (existingCredit) {
+      return 0;
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.clientProfile.update({
+        where: { id: order.user.clientProfile.id },
+        data: { balanceMinutes: { increment: minutesCredited } },
+      }),
+      this.prisma.walletTransaction.create({
+        data: {
+          userId: order.userId,
+          paymentId,
+          type: 'CREDIT',
+          amount: order.totalAmount,
+          currency: order.currency,
+          description: `Purchased ${minutesCredited} minutes via PayPal (order ${order.id})`,
+        },
+      }),
+    ]);
+
+    return minutesCredited;
+  }
+
   /** Legacy: create DB order only (plain checkout, no PayPal). */
   async createOrder(userId: string, dto: CreateCheckoutDto) {
     return this.buildOrder(userId, dto);
@@ -97,15 +151,11 @@ export class CheckoutService {
 
   /**
    * PayPal Advanced Checkout – step 2:
-   * Capture the PayPal order; mark DB order as CONFIRMED.
+   * Capture the PayPal order; minutes are credited only for COMPLETED captures.
    */
   async capturePaypalOrder(paypalOrderId: string) {
     const order = await this.prisma.order.findUnique({
       where: { paypalOrderId },
-      include: {
-        items: { include: { product: true } },
-        user: { include: { clientProfile: true } },
-      },
     });
 
     if (!order) {
@@ -114,75 +164,73 @@ export class CheckoutService {
       );
     }
 
-    // Idempotency: if already confirmed, return success without re-capturing
-    if (order.status === 'CONFIRMED') {
+    const capture = await this.paypal.captureOrder(paypalOrderId);
+
+    if (!capture.captureId) {
+      this.logger.warn(`Missing capture ID for PayPal order ${paypalOrderId}`);
+      throw new BadRequestException('PayPal capture response missing capture ID');
+    }
+
+    const existingPayment = await this.prisma.payment.findUnique({
+      where: { paypalCaptureId: capture.captureId },
+      select: { id: true, status: true, orderId: true },
+    });
+
+    if (existingPayment) {
+      const minutesCredited = await this.creditMinutesIfNeeded(order.id, existingPayment.id);
       return {
-        success: true,
+        success: existingPayment.status === 'SUCCEEDED',
         orderId: order.id,
         paypalOrderId,
-        minutesCredited: 0,
+        captureId: capture.captureId,
+        minutesCredited,
       };
     }
 
-    const capture = await this.paypal.captureOrder(paypalOrderId);
+    const completed = capture.status === 'COMPLETED';
 
-    if (capture.status !== 'COMPLETED') {
-      this.logger.warn(
-        `PayPal capture status ${capture.status} for order ${order.id}`,
-      );
-    }
-
-    // Persist payment record (upsert for idempotency)
-    await this.prisma.payment.upsert({
-      where: { transactionId: paypalOrderId },
-      create: {
+    const payment = await this.prisma.payment.create({
+      data: {
         orderId: order.id,
         amount: order.totalAmount,
         currency: order.currency,
         method: 'CARD',
-        status: capture.status === 'COMPLETED' ? 'SUCCEEDED' : 'PENDING',
+        status: completed ? 'SUCCEEDED' : 'PENDING',
         transactionId: paypalOrderId,
+        paypalOrderId,
+        paypalCaptureId: capture.captureId,
       },
-      update: {
-        status: capture.status === 'COMPLETED' ? 'SUCCEEDED' : 'PENDING',
-      },
+      select: { id: true },
     });
 
-    // Confirm order and store payer email
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
-        status: capture.status === 'COMPLETED' ? 'CONFIRMED' : 'PENDING',
+        status: completed ? 'CONFIRMED' : 'PENDING',
         payerEmail: capture.payerEmail,
       },
     });
 
-    // Credit minute packs
-    let minutesCredited = 0;
-    for (const item of order.items) {
-      minutesCredited += item.product.minutesPack * item.quantity;
+    if (!completed) {
+      this.logger.warn(
+        `PayPal capture status ${capture.status} for order ${order.id}`,
+      );
+      return {
+        success: false,
+        orderId: order.id,
+        paypalOrderId,
+        captureId: capture.captureId,
+        minutesCredited: 0,
+      };
     }
 
-    if (minutesCredited > 0 && order.user.clientProfile) {
-      await this.prisma.clientProfile.update({
-        where: { id: order.user.clientProfile.id },
-        data: { balanceMinutes: { increment: minutesCredited } },
-      });
-      await this.prisma.walletTransaction.create({
-        data: {
-          userId: order.userId,
-          type: 'CREDIT',
-          amount: order.totalAmount,
-          currency: order.currency,
-          description: `Purchased ${minutesCredited} minutes via PayPal (order ${order.id})`,
-        },
-      });
-    }
+    const minutesCredited = await this.creditMinutesIfNeeded(order.id, payment.id);
 
     return {
-      success: capture.status === 'COMPLETED',
+      success: true,
       orderId: order.id,
       paypalOrderId,
+      captureId: capture.captureId,
       minutesCredited,
     };
   }

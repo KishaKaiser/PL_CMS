@@ -1,6 +1,22 @@
-import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaypalService } from '../checkout/paypal.service';
+
+interface PaypalWebhookEvent {
+  id?: string;
+  event_type: string;
+  resource?: {
+    id?: string;
+    status?: string;
+    supplementary_data?: { related_ids?: { order_id?: string } };
+    payer?: { email_address?: string };
+  };
+}
 
 @Injectable()
 export class PaymentsService {
@@ -24,17 +40,10 @@ export class PaymentsService {
       throw new BadRequestException('Invalid PayPal webhook signature');
     }
 
-    let event: {
-      event_type: string;
-      resource?: {
-        id?: string;
-        purchase_units?: Array<{ reference_id?: string }>;
-        payer?: { email_address?: string };
-      };
-    };
+    let event: PaypalWebhookEvent;
 
     try {
-      event = JSON.parse(rawBody) as typeof event;
+      event = JSON.parse(rawBody) as PaypalWebhookEvent;
     } catch {
       throw new BadRequestException('Invalid JSON in PayPal webhook body');
     }
@@ -43,10 +52,10 @@ export class PaymentsService {
 
     switch (event.event_type) {
       case 'PAYMENT.CAPTURE.COMPLETED':
-        await this.onCaptureCompleted(event.resource);
+        await this.onCaptureCompleted(event);
         break;
       case 'PAYMENT.CAPTURE.DENIED':
-        await this.onCaptureDenied(event.resource);
+        await this.onCaptureDenied(event);
         break;
       default:
         this.logger.log(`Unhandled PayPal event: ${event.event_type}`);
@@ -55,54 +64,112 @@ export class PaymentsService {
     return { received: true };
   }
 
-  private async onCaptureCompleted(resource?: {
-    id?: string;
-    purchase_units?: Array<{ reference_id?: string }>;
-    payer?: { email_address?: string };
-  }) {
-    const paypalOrderId = resource?.id;
-    if (!paypalOrderId) return;
-
+  private async creditMinutesIfNeeded(orderId: string, paymentId: string): Promise<void> {
     const order = await this.prisma.order.findUnique({
-      where: { paypalOrderId },
+      where: { id: orderId },
+      include: {
+        items: { include: { product: true } },
+        user: { include: { clientProfile: true } },
+      },
     });
+
+    if (!order || !order.user.clientProfile) {
+      return;
+    }
+
+    let totalMinutes = 0;
+    for (const item of order.items) {
+      totalMinutes += item.product.minutesPack * item.quantity;
+    }
+
+    if (totalMinutes <= 0) {
+      return;
+    }
+
+    const existingCredit = await this.prisma.walletTransaction.findFirst({
+      where: { paymentId, type: 'CREDIT' },
+      select: { id: true },
+    });
+
+    if (existingCredit) {
+      return;
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.clientProfile.update({
+        where: { id: order.user.clientProfile.id },
+        data: { balanceMinutes: { increment: totalMinutes } },
+      }),
+      this.prisma.walletTransaction.create({
+        data: {
+          userId: order.userId,
+          paymentId,
+          type: 'CREDIT',
+          amount: order.totalAmount,
+          currency: order.currency,
+          description: `Purchased ${totalMinutes} minutes via PayPal (order ${order.id})`,
+        },
+      }),
+    ]);
+
+    this.logger.log(`Credited ${totalMinutes} minutes to client ${order.userId}`);
+  }
+
+  private async onCaptureCompleted(event: PaypalWebhookEvent) {
+    const captureId = event.resource?.id;
+    if (!captureId) {
+      this.logger.warn('PayPal capture completed webhook missing capture id');
+      return;
+    }
+
+    const paypalOrderId = event.resource?.supplementary_data?.related_ids?.order_id;
+    if (!paypalOrderId) {
+      this.logger.warn(`Capture ${captureId} missing related PayPal order id`);
+      return;
+    }
+
+    const order = await this.prisma.order.findUnique({ where: { paypalOrderId } });
     if (!order) {
-      this.logger.warn(`No order found for PayPal ID ${paypalOrderId}`);
+      this.logger.warn(`No order found for PayPal order ID ${paypalOrderId}`);
       return;
     }
 
-    // Idempotency: skip if already confirmed
-    if (order.status === 'CONFIRMED') {
-      this.logger.log(`Order ${order.id} already confirmed; skipping webhook`);
-      return;
-    }
-
-    await this.prisma.payment.upsert({
-      where: { transactionId: paypalOrderId },
+    const payment = await this.prisma.payment.upsert({
+      where: { paypalCaptureId: captureId },
       create: {
         orderId: order.id,
         amount: order.totalAmount,
         currency: order.currency,
         method: 'CARD',
         status: 'SUCCEEDED',
-        transactionId: paypalOrderId,
+        transactionId: event.id,
+        paypalOrderId,
+        paypalCaptureId: captureId,
       },
-      update: { status: 'SUCCEEDED' },
+      update: {
+        status: 'SUCCEEDED',
+        paypalOrderId,
+      },
+      select: { id: true },
     });
 
     await this.prisma.order.update({
       where: { id: order.id },
       data: {
         status: 'CONFIRMED',
-        payerEmail: resource?.payer?.email_address,
+        payerEmail: event.resource?.payer?.email_address,
       },
     });
 
-    this.logger.log(`Order ${order.id} confirmed via PayPal webhook`);
+    await this.creditMinutesIfNeeded(order.id, payment.id);
+
+    this.logger.log(
+      `Order ${order.id} confirmed via PayPal webhook (capture ${captureId})`,
+    );
   }
 
-  private async onCaptureDenied(resource?: { id?: string }) {
-    const paypalOrderId = resource?.id;
+  private async onCaptureDenied(event: PaypalWebhookEvent) {
+    const paypalOrderId = event.resource?.supplementary_data?.related_ids?.order_id;
     if (!paypalOrderId) return;
 
     const order = await this.prisma.order.findUnique({
