@@ -40,8 +40,11 @@ export class CheckoutController {
 
   /** Capture a PayPal order after buyer approval. */
   @Post('paypal-capture/:paypalOrderId')
-  capturePaypalOrder(@Param('paypalOrderId') paypalOrderId: string) {
-    return this.checkoutService.capturePaypalOrder(paypalOrderId);
+  capturePaypalOrder(
+    @Request() req: { user: { id: string } },
+    @Param('paypalOrderId') paypalOrderId: string,
+  ) {
+    return this.checkoutService.capturePaypalOrder(paypalOrderId, req.user.id);
   }
 
   @Get('orders')

@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { WalletService } from './wallet.service';
 
@@ -13,7 +13,16 @@ export class WalletController {
   }
 
   @Get('transactions')
-  getTransactions(@Request() req: { user: { id: string } }) {
-    return this.walletService.getTransactions(req.user.id);
+  getTransactions(
+    @Request() req: { user: { id: string } },
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : undefined;
+    return this.walletService.getTransactions(
+      req.user.id,
+      parsedLimit && !isNaN(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined,
+      cursor,
+    );
   }
 }

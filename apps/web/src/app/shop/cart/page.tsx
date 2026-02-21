@@ -79,7 +79,7 @@ export default function CartPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() =>
-                    handleQuantityChange(item.productId, item.variantId, item.quantity - 1)
+                    handleQuantityChange(item.productId, item.variantId, Math.max(1, item.quantity - 1))
                   }
                   className="flex h-7 w-7 items-center justify-center rounded border text-lg font-bold hover:bg-gray-100"
                 >

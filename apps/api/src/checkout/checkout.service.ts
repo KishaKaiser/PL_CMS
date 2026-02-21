@@ -24,13 +24,14 @@ export class CheckoutService {
   /** Build and persist an Order row; returns it with items. */
   private async buildOrder(userId: string, dto: CreateCheckoutDto) {
     const productIds = dto.items.map((i) => i.productId);
+    const uniqueProductIds = [...new Set(productIds)];
     const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds }, isActive: true },
+      where: { id: { in: uniqueProductIds }, isActive: true },
     });
 
-    if (products.length !== productIds.length) {
+    if (products.length !== uniqueProductIds.length) {
       const foundIds = new Set(products.map((p) => p.id));
-      const missing = productIds.filter((id) => !foundIds.has(id));
+      const missing = uniqueProductIds.filter((id) => !foundIds.has(id));
       throw new BadRequestException(
         `One or more products are invalid or inactive: ${missing.join(', ')}`,
       );
@@ -66,6 +67,15 @@ export class CheckoutService {
 
     const shippingDecimal =
       dto.shippingAmount != null ? new Decimal(dto.shippingAmount) : new Decimal(0);
+
+    // Require carrier and service when a non-zero shipping amount is provided,
+    // so clients cannot set arbitrary shipping costs for physical products.
+    if (shippingDecimal.gt(0) && (!dto.shippingCarrier || !dto.shippingService)) {
+      throw new BadRequestException(
+        'shippingCarrier and shippingService are required when shippingAmount > 0',
+      );
+    }
+
     const totalAmount = itemSubtotalBeforeTx.add(shippingDecimal);
 
     const orderItems = dto.items.map((item) => {
@@ -82,23 +92,24 @@ export class CheckoutService {
 
     // Create order and reserve inventory atomically in a single transaction
     const order = await this.prisma.$transaction(async (tx) => {
-      // Re-validate and reserve stock inside transaction to reduce race conditions
+      // Re-validate and reserve stock inside transaction to reduce race conditions.
+      // The UPDATE is atomic: it only increments reserved if sufficient stock exists.
       for (const item of dto.items) {
         if (!item.variantId) continue;
-        const inv = await tx.inventory.findUnique({
-          where: { variantId: item.variantId },
-        });
-        if (inv) {
-          const available = inv.onHand - inv.reserved;
-          if (available < item.quantity) {
-            throw new ConflictException(
-              `Insufficient stock for variant ${item.variantId}: ${available} available, ${item.quantity} requested`,
-            );
-          }
-          await tx.inventory.update({
+        const count = await tx.$executeRaw`
+          UPDATE inventory
+          SET reserved = reserved + ${item.quantity}
+          WHERE "variantId" = ${item.variantId}
+            AND "onHand" - reserved >= ${item.quantity}`;
+        if (count === 0) {
+          // Either no inventory record exists or stock is insufficient
+          const inv = await tx.inventory.findUnique({
             where: { variantId: item.variantId },
-            data: { reserved: { increment: item.quantity } },
           });
+          const available = inv ? inv.onHand - inv.reserved : 0;
+          throw new ConflictException(
+            `Insufficient stock for variant ${item.variantId}: ${available} available, ${item.quantity} requested`,
+          );
         }
       }
 
@@ -281,9 +292,9 @@ export class CheckoutService {
    * PayPal Advanced Checkout – step 2:
    * Capture the PayPal order; minutes are credited only for COMPLETED captures.
    */
-  async capturePaypalOrder(paypalOrderId: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { paypalOrderId },
+  async capturePaypalOrder(paypalOrderId: string, userId: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { paypalOrderId, userId },
     });
 
     if (!order) {
@@ -322,7 +333,7 @@ export class CheckoutService {
         orderId: order.id,
         amount: order.totalAmount,
         currency: order.currency,
-        method: 'CARD',
+        method: 'PAYPAL',
         status: completed ? 'SUCCEEDED' : 'PENDING',
         transactionId: paypalOrderId,
         paypalOrderId,

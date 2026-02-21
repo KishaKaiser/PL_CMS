@@ -48,6 +48,7 @@ enum PaymentStatus {
 
 enum PaymentMethod {
   CARD
+  PAYPAL
   WALLET
   BANK_TRANSFER
 }
