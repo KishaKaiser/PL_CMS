@@ -7,18 +7,31 @@ export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
   findAll() {
-    return this.prisma.product.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prisma.product.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { variants: { include: { inventory: true }, orderBy: { createdAt: 'asc' } } },
+    });
   }
 
   findActive() {
     return this.prisma.product.findMany({
       where: { isActive: true },
       orderBy: { createdAt: 'desc' },
+      include: {
+        variants: {
+          where: { isActive: true },
+          include: { inventory: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
     });
   }
 
   async findOne(id: string) {
-    const product = await this.prisma.product.findUnique({ where: { id } });
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: { variants: { include: { inventory: true }, orderBy: { createdAt: 'asc' } } },
+    });
     if (!product) throw new NotFoundException(`Product ${id} not found`);
     return product;
   }

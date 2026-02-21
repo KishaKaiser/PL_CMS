@@ -170,6 +170,24 @@ export interface PaginationQuery {
 // ──────────────────────────────────────────────
 // Product DTOs
 // ──────────────────────────────────────────────
+export interface InventoryDto {
+  id: string;
+  variantId: string;
+  onHand: number;
+  reserved: number;
+}
+
+export interface ProductVariantDto {
+  id: string;
+  productId: string;
+  color: string;
+  sku: string;
+  priceOverride?: number | null;
+  imageUrl?: string | null;
+  isActive: boolean;
+  inventory?: InventoryDto | null;
+}
+
 export interface ProductDto {
   id: string;
   name: string;
@@ -178,6 +196,7 @@ export interface ProductDto {
   currency: string;
   minutesPack: number;
   isActive: boolean;
+  variants?: ProductVariantDto[];
 }
 
 // ──────────────────────────────────────────────
@@ -185,6 +204,7 @@ export interface ProductDto {
 // ──────────────────────────────────────────────
 export interface OrderItemDto {
   productId: string;
+  variantId?: string;
   quantity: number;
 }
 
