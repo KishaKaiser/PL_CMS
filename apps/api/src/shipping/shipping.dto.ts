@@ -8,6 +8,7 @@ import {
   IsEmail,
   Length,
   Matches,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -36,7 +37,8 @@ export class ShippingAddressDto {
   @Matches(/^\d{5}(-\d{4})?$/, { message: 'postalCode must be a valid US ZIP code' })
   postalCode!: string;
 
-  @IsString()
+  /** US-only at this time. */
+  @IsIn(['US'])
   country!: string;
 
   @IsEmail()
@@ -51,7 +53,7 @@ export class QuoteItemDto {
   @Min(1)
   quantity!: number;
 
-  /** Weight in ounces (optional – defaults to 16 oz per item). */
+  /** Weight in ounces (optional – defaults to DEFAULT_ITEM_WEIGHT_OZ per item). */
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -94,6 +96,7 @@ export class WarehouseAddressDto {
   @Matches(/^\d{5}(-\d{4})?$/, { message: 'postalCode must be a valid US ZIP code' })
   postalCode!: string;
 
-  @IsString()
+  /** US-only at this time. */
+  @IsIn(['US'])
   country!: string;
 }

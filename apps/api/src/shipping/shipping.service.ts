@@ -14,6 +14,8 @@ import {
 
 const SHIPSTATION_BASE = 'https://ssapi.shipstation.com';
 const WAREHOUSE_ADDRESS_KEY = 'warehouse_address';
+/** Default weight per item when no weight is provided by the product (16 oz = 1 lb). */
+const DEFAULT_ITEM_WEIGHT_OZ = 16;
 
 export interface ShippingRate {
   serviceName: string;
@@ -102,7 +104,7 @@ export class ShippingService {
     }
 
     const totalWeightOz = dto.items.reduce(
-      (sum, item) => sum + (item.weightOz ?? 16) * item.quantity,
+      (sum, item) => sum + (item.weightOz ?? DEFAULT_ITEM_WEIGHT_OZ) * item.quantity,
       0,
     );
 
