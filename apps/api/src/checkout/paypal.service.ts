@@ -167,13 +167,22 @@ export class PaypalService {
   ): Promise<boolean> {
     const webhookId = this.config.get<string>('PAYPAL_WEBHOOK_ID');
     if (!webhookId) {
-      const env = this.config.get<string>('PAYPAL_ENVIRONMENT') ?? 'sandbox';
-      if (env === 'live') {
-        this.logger.error('PAYPAL_WEBHOOK_ID must be configured in production');
-        return false;
-      }
-      this.logger.warn('PAYPAL_WEBHOOK_ID not configured; skipping signature verification (sandbox only)');
-      return true;
+      this.logger.error('PAYPAL_WEBHOOK_ID must be configured for webhook signature verification');
+      return false;
+    }
+
+    const requiredHeaders = [
+      'paypal-auth-algo',
+      'paypal-cert-url',
+      'paypal-transmission-id',
+      'paypal-transmission-sig',
+      'paypal-transmission-time',
+    ] as const;
+
+    const missingHeader = requiredHeaders.find((header) => !headers[header]);
+    if (missingHeader) {
+      this.logger.error(`Missing PayPal webhook header: ${missingHeader}`);
+      return false;
     }
 
     const token = await this.getAccessToken();
