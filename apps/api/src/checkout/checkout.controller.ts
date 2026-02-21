@@ -10,9 +10,12 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { CheckoutService } from './checkout.service';
 import { CreateCheckoutDto } from './checkout.dto';
+import { Roles, RolesGuard } from '../auth/roles.guard';
+import { Role } from '@pl-cms/shared';
 
 @Controller('checkout')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
+@Roles(Role.CLIENT)
 export class CheckoutController {
   constructor(private readonly checkoutService: CheckoutService) {}
 

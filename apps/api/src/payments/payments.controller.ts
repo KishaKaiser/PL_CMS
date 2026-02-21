@@ -8,10 +8,14 @@ import {
   Req,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PaymentsService } from './payments.service';
 import { IsString } from 'class-validator';
+import { AuthGuard } from '@nestjs/passport';
+import { Roles, RolesGuard } from '../auth/roles.guard';
+import { Role } from '@pl-cms/shared';
 
 export class LegacyWebhookDto {
   @IsString()
@@ -50,6 +54,8 @@ export class PaymentsController {
 
   /** Legacy internal webhook for non-PayPal confirmations. */
   @Post('webhook')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.OK)
   handleWebhook(@Body() dto: LegacyWebhookDto) {
     return this.paymentsService.handleWebhook(dto.transactionId, dto.orderId);
