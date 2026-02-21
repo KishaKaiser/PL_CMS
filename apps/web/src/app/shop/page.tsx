@@ -26,8 +26,18 @@ export default async function ShopPage() {
 
   return (
     <main className="mx-auto max-w-5xl p-8">
-      <h1 className="mb-2 text-3xl font-bold">Shop</h1>
-      <p className="mb-8 text-gray-600">Browse our available minute packs and products.</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="mb-1 text-3xl font-bold">Shop</h1>
+          <p className="text-gray-600">Browse our available minute packs and products.</p>
+        </div>
+        <Link
+          href="/shop/cart"
+          className="rounded border border-indigo-300 px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50"
+        >
+          🛒 View Cart
+        </Link>
+      </div>
 
       {products.length === 0 ? (
         <p className="text-gray-500">No products available at the moment.</p>
@@ -72,3 +82,4 @@ export default async function ShopPage() {
     </main>
   );
 }
+

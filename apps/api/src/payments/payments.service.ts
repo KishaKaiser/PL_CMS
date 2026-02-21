@@ -161,6 +161,28 @@ export class PaymentsService {
       },
     });
 
+    // Decrement inventory for physical variant items
+    const inventoryUpdates = (
+      await this.prisma.order.findUnique({
+        where: { id: order.id },
+        include: { items: true },
+      })
+    )?.items
+      .filter((item) => item.variantId)
+      .map((item) =>
+        this.prisma.inventory.updateMany({
+          where: { variantId: item.variantId! },
+          data: {
+            onHand: { decrement: item.quantity },
+            reserved: { decrement: item.quantity },
+          },
+        }),
+      ) ?? [];
+
+    if (inventoryUpdates.length > 0) {
+      await this.prisma.$transaction(inventoryUpdates);
+    }
+
     await this.creditMinutesIfNeeded(order.id, payment.id);
 
     this.logger.log(
@@ -174,8 +196,23 @@ export class PaymentsService {
 
     const order = await this.prisma.order.findUnique({
       where: { paypalOrderId },
+      include: { items: true },
     });
     if (!order) return;
+
+    // Release inventory reservations for variant items
+    const releases = order.items
+      .filter((item) => item.variantId)
+      .map((item) =>
+        this.prisma.inventory.updateMany({
+          where: { variantId: item.variantId! },
+          data: { reserved: { decrement: item.quantity } },
+        }),
+      );
+
+    if (releases.length > 0) {
+      await this.prisma.$transaction(releases);
+    }
 
     await this.prisma.order.update({
       where: { id: order.id },

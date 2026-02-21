@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Script from 'next/script';
+import { getCart, clearCart, CartItem as StoredCartItem } from '../../../lib/cart';
 
 declare global {
   interface Window {
@@ -16,16 +17,8 @@ declare global {
   }
 }
 
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  currency: string;
-  minutesPack: number;
-}
-
 interface CartItem {
-  product: Product;
+  product: { id: string; name: string; price: number; currency: string; minutesPack: number };
   variantId?: string;
   variantColor?: string;
   quantity: number;
@@ -63,6 +56,22 @@ const emptyAddress: ShippingAddress = {
   email: '',
 };
 
+/** Convert a stored cart item to the checkout CartItem shape */
+function storedToCartItem(s: StoredCartItem): CartItem {
+  return {
+    product: {
+      id: s.productId,
+      name: s.productName,
+      price: s.variantPrice ?? s.productPrice,
+      currency: s.currency,
+      minutesPack: 0,
+    },
+    variantId: s.variantId,
+    variantColor: s.variantColor,
+    quantity: s.quantity,
+  };
+}
+
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const productId = searchParams.get('productId');
@@ -85,12 +94,18 @@ function CheckoutContent() {
   const [ratesLoading, setRatesLoading] = useState(false);
   const [ratesError, setRatesError] = useState('');
 
-  // Load product if productId query param is present
+  // Load cart: from localStorage first, then fall back to URL params
   useEffect(() => {
+    const stored = getCart();
+    if (stored.length > 0) {
+      setCart(stored.map(storedToCartItem));
+      return;
+    }
+
     if (!productId) return;
     fetch(`/api/proxy/products/${productId}`)
       .then((r) => r.json())
-      .then((p: Product & { variants?: Array<{ id: string; color: string; priceOverride?: number | null }> }) => {
+      .then((p: { id: string; name: string; price: number; currency: string; minutesPack: number; variants?: Array<{ id: string; color: string; priceOverride?: number | null }> }) => {
         const variant = variantId
           ? p.variants?.find((v) => v.id === variantId)
           : undefined;
@@ -204,6 +219,7 @@ function CheckoutContent() {
             setMessage('Payment capture failed. Please contact support.');
             return;
           }
+          clearCart();
           setStatus('success');
           setMessage('🎉 Payment successful! Your order has been confirmed.');
           setCart([]);
@@ -460,8 +476,8 @@ function CheckoutContent() {
       )}
 
       <div className="mt-8">
-        <a href="/shop" className="text-sm text-indigo-600 hover:underline">
-          ← Back to Shop
+        <a href="/shop/cart" className="text-sm text-indigo-600 hover:underline">
+          ← Back to Cart
         </a>
       </div>
     </>

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { addToCart } from '../../../lib/cart';
 
 interface Inventory {
   onHand: number;
@@ -34,11 +35,26 @@ interface Props {
 
 export default function ProductDetailClient({ product, variants }: Props) {
   const [selectedVariantId, setSelectedVariantId] = useState<string>(variants[0]?.id ?? '');
+  const [addedToCart, setAddedToCart] = useState(false);
 
   const selected = variants.find((v) => v.id === selectedVariantId) ?? variants[0];
   const displayPrice = selected?.priceOverride ?? Number(product.price);
   const inStock = (selected?.inventory?.onHand ?? 0) - (selected?.inventory?.reserved ?? 0);
   const outOfStock = inStock <= 0;
+
+  const handleAddToCart = () => {
+    addToCart({
+      productId: product.id,
+      productName: product.name,
+      productPrice: Number(product.price),
+      currency: product.currency,
+      variantId: selected?.id,
+      variantColor: selected?.color,
+      variantPrice: selected?.priceOverride != null ? Number(selected.priceOverride) : undefined,
+      quantity: 1,
+    });
+    setAddedToCart(true);
+  };
 
   return (
     <>
@@ -83,7 +99,10 @@ export default function ProductDetailClient({ product, variants }: Props) {
               <button
                 key={v.id}
                 title={`${v.color}${unavailable ? ' (out of stock)' : ''}`}
-                onClick={() => setSelectedVariantId(v.id)}
+                onClick={() => {
+                  setSelectedVariantId(v.id);
+                  setAddedToCart(false);
+                }}
                 className={`flex h-9 w-9 items-center justify-center rounded-full border-2 transition ${
                   selectedVariantId === v.id
                     ? 'border-indigo-600 ring-2 ring-indigo-300'
@@ -110,7 +129,7 @@ export default function ProductDetailClient({ product, variants }: Props) {
         {outOfStock ? 'Out of stock' : `In stock (${inStock} available)`}
       </p>
 
-      {/* Buy button */}
+      {/* Add to Cart / Buy buttons */}
       {outOfStock ? (
         <button
           disabled
@@ -119,13 +138,31 @@ export default function ProductDetailClient({ product, variants }: Props) {
           Out of Stock
         </button>
       ) : (
-        <Link
-          href={`/shop/checkout?productId=${product.id}&variantId=${selected?.id}`}
-          className="inline-block rounded bg-indigo-600 px-8 py-3 text-white hover:bg-indigo-700"
-        >
-          Buy Now – ${Number(displayPrice).toFixed(2)}
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleAddToCart}
+            className="rounded border border-indigo-600 px-8 py-3 text-indigo-600 hover:bg-indigo-50"
+          >
+            {addedToCart ? '✓ Added to Cart' : 'Add to Cart'}
+          </button>
+          <Link
+            href={`/shop/checkout?productId=${product.id}&variantId=${selected?.id}`}
+            className="inline-block rounded bg-indigo-600 px-8 py-3 text-white hover:bg-indigo-700"
+          >
+            Buy Now – ${Number(displayPrice).toFixed(2)}
+          </Link>
+        </div>
+      )}
+
+      {addedToCart && (
+        <div className="mt-4 flex items-center gap-4 rounded border border-green-200 bg-green-50 p-3 text-sm">
+          <span className="text-green-700">Added to your cart!</span>
+          <Link href="/shop/cart" className="font-medium text-indigo-600 hover:underline">
+            View Cart →
+          </Link>
+        </div>
       )}
     </>
   );
 }
+
