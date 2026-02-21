@@ -1,15 +1,11 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException, SetMetadata } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Role } from '@pl-cms/shared';
 
 export const ROLES_KEY = 'roles';
 
 /** Decorator: @Roles(Role.ADMIN, Role.ADVISOR) */
-export const Roles = (...roles: Role[]) => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const SetMetadata = require('@nestjs/common').SetMetadata;
-  return SetMetadata(ROLES_KEY, roles);
-};
+export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
 
 @Injectable()
 export class RolesGuard implements CanActivate {
