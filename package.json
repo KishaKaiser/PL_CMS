@@ -1,27 +1,43 @@
-{
-  "name": "pl-cms",
-  "private": true,
-  "version": "0.1.0",
-  "description": "Psychic Link CMS – pnpm monorepo",
-  "engines": {
-    "node": ">=20.0.0",
-    "pnpm": ">=9.0.0"
-  },
-  "scripts": {
-    "dev:api": "pnpm --filter @pl-cms/api dev",
-    "dev:web": "pnpm --filter @pl-cms/web dev",
-    "build": "pnpm -r build",
-    "lint": "pnpm -r lint",
-    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore",
-    "db:generate": "pnpm --filter @pl-cms/db generate",
-    "db:migrate:dev": "pnpm --filter @pl-cms/db migrate:dev",
-    "db:migrate:deploy": "pnpm --filter @pl-cms/db migrate:deploy"
-  },
-  "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
-    "@typescript-eslint/parser": "^7.18.0",
-    "eslint": "^8.57.0",
-    "prettier": "^3.3.3",
-    "typescript": "^5.5.4"
-  }
-}
+# API Environment Variables
+# Copy to .env and fill in values
+
+NODE_ENV=development
+PORT=3001
+
+# Database
+DATABASE_URL=postgresql://plcms:plcms@localhost:5432/plcms
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# JWT
+JWT_ACCESS_SECRET=change-me-access-secret
+JWT_REFRESH_SECRET=change-me-refresh-secret
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+
+# PayPal Advanced Checkout
+# Create credentials at https://developer.paypal.com/
+PAYPAL_CLIENT_ID=
+PAYPAL_CLIENT_SECRET=
+# "sandbox" for testing, "live" for production
+PAYPAL_ENVIRONMENT=sandbox
+# Webhook ID from PayPal Developer Dashboard (optional but recommended)
+PAYPAL_WEBHOOK_ID=
+
+# Web app base URL (used for PayPal return/cancel URLs)
+WEB_BASE_URL=http://localhost:3000
+
+# ShipStation API (for live shipping rate quotes and label purchasing)
+# Create API keys at https://app.shipstation.com/settings/api
+SHIPSTATION_API_KEY=
+SHIPSTATION_API_SECRET=
+
+# SMTP Email (optional – used for shipment notification emails)
+# If not set, notifications are logged to console only
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=no-reply@example.com

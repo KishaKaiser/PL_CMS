@@ -1,0 +1,49 @@
+{
+  "name": "@pl-cms/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "dev": "nest start --watch",
+    "start": "node dist/main",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.4.4",
+    "@nestjs/config": "^3.2.3",
+    "@nestjs/core": "^10.4.4",
+    "@nestjs/jwt": "^10.2.0",
+    "@nestjs/passport": "^10.0.3",
+    "@nestjs/platform-express": "^10.4.4",
+    "@nestjs/platform-socket.io": "^10.4.4",
+    "@nestjs/terminus": "^10.2.3",
+    "@nestjs/throttler": "^6.2.1",
+    "@nestjs/websockets": "^10.4.4",
+    "@pl-cms/db": "workspace:*",
+    "@pl-cms/shared": "workspace:*",
+    "@prisma/client": "^5.17.0",
+    "bcryptjs": "^2.4.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "nodemailer": "^7.0.11",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "passport-local": "^1.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.4.5",
+    "@nestjs/schematics": "^10.1.4",
+    "@nestjs/testing": "^10.4.4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/nodemailer": "^6.4.17",
+    "@types/passport-jwt": "^4.0.1",
+    "@types/passport-local": "^1.0.38",
+    "prisma": "^5.17.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}
