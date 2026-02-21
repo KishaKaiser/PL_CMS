@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
+  ConflictException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -35,23 +36,42 @@ export class CheckoutService {
       );
     }
 
-    // Validate variants if provided
+    // Validate variants exist and are active
     const variantIds = dto.items.map((i) => i.variantId).filter(Boolean) as string[];
     const variants =
       variantIds.length > 0
         ? await this.prisma.productVariant.findMany({
             where: { id: { in: variantIds }, isActive: true },
+            include: { inventory: true },
           })
         : [];
     const variantMap = new Map(variants.map((v) => [v.id, v]));
 
+    for (const item of dto.items) {
+      if (!item.variantId) continue;
+      if (!variantMap.has(item.variantId)) {
+        throw new BadRequestException(
+          `Variant ${item.variantId} is invalid or inactive`,
+        );
+      }
+    }
+
     const productMap = new Map(products.map((p) => [p.id, p]));
-    let totalAmount = new Decimal(0);
-    const items = dto.items.map((item) => {
+    const itemSubtotalBeforeTx = dto.items.reduce((sum, item) => {
       const product = productMap.get(item.productId)!;
       const variant = item.variantId ? variantMap.get(item.variantId) : undefined;
       const unitPrice = variant?.priceOverride ?? product.price;
-      totalAmount = totalAmount.add(unitPrice.mul(item.quantity));
+      return sum.add(unitPrice.mul(item.quantity));
+    }, new Decimal(0));
+
+    const shippingDecimal =
+      dto.shippingAmount != null ? new Decimal(dto.shippingAmount) : new Decimal(0);
+    const totalAmount = itemSubtotalBeforeTx.add(shippingDecimal);
+
+    const orderItems = dto.items.map((item) => {
+      const product = productMap.get(item.productId)!;
+      const variant = item.variantId ? variantMap.get(item.variantId) : undefined;
+      const unitPrice = variant?.priceOverride ?? product.price;
       return {
         productId: item.productId,
         variantId: item.variantId ?? null,
@@ -60,35 +80,107 @@ export class CheckoutService {
       };
     });
 
-    return this.prisma.order.create({
-      data: {
-        userId,
-        totalAmount,
-        currency: 'USD',
-        shippingCarrier: dto.shippingCarrier ?? null,
-        shippingService: dto.shippingService ?? null,
-        shippingAmount: dto.shippingAmount != null ? new Decimal(dto.shippingAmount) : null,
-        items: { create: items },
-        ...(dto.shippingAddress
-          ? {
-              shippingAddress: {
-                create: {
-                  fullName: dto.shippingAddress.fullName,
-                  phone: dto.shippingAddress.phone,
-                  line1: dto.shippingAddress.line1,
-                  line2: dto.shippingAddress.line2 ?? null,
-                  city: dto.shippingAddress.city,
-                  state: dto.shippingAddress.state,
-                  postalCode: dto.shippingAddress.postalCode,
-                  country: dto.shippingAddress.country,
-                  email: dto.shippingAddress.email,
+    // Create order and reserve inventory atomically in a single transaction
+    const order = await this.prisma.$transaction(async (tx) => {
+      // Re-validate and reserve stock inside transaction to reduce race conditions
+      for (const item of dto.items) {
+        if (!item.variantId) continue;
+        const inv = await tx.inventory.findUnique({
+          where: { variantId: item.variantId },
+        });
+        if (inv) {
+          const available = inv.onHand - inv.reserved;
+          if (available < item.quantity) {
+            throw new ConflictException(
+              `Insufficient stock for variant ${item.variantId}: ${available} available, ${item.quantity} requested`,
+            );
+          }
+          await tx.inventory.update({
+            where: { variantId: item.variantId },
+            data: { reserved: { increment: item.quantity } },
+          });
+        }
+      }
+
+      return tx.order.create({
+        data: {
+          userId,
+          totalAmount,
+          currency: 'USD',
+          shippingCarrier: dto.shippingCarrier ?? null,
+          shippingService: dto.shippingService ?? null,
+          shippingAmount: shippingDecimal.gt(0) ? shippingDecimal : null,
+          items: { create: orderItems },
+          ...(dto.shippingAddress
+            ? {
+                shippingAddress: {
+                  create: {
+                    fullName: dto.shippingAddress.fullName,
+                    phone: dto.shippingAddress.phone,
+                    line1: dto.shippingAddress.line1,
+                    line2: dto.shippingAddress.line2 ?? null,
+                    city: dto.shippingAddress.city,
+                    state: dto.shippingAddress.state,
+                    postalCode: dto.shippingAddress.postalCode,
+                    country: dto.shippingAddress.country,
+                    email: dto.shippingAddress.email,
+                  },
                 },
-              },
-            }
-          : {}),
-      },
-      include: { items: true, shippingAddress: true },
+              }
+            : {}),
+        },
+        include: { items: true, shippingAddress: true },
+      });
     });
+
+    return order;
+  }
+
+  /** Release inventory reservations for all variant items in an order. */
+  private async releaseInventoryReservations(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order) return;
+
+    const releases = order.items
+      .filter((item) => item.variantId)
+      .map((item) =>
+        this.prisma.inventory.updateMany({
+          where: { variantId: item.variantId! },
+          data: { reserved: { decrement: item.quantity } },
+        }),
+      );
+
+    if (releases.length > 0) {
+      await this.prisma.$transaction(releases);
+    }
+  }
+
+  /** Decrement inventory on successful payment (onHand -= qty, reserved -= qty). */
+  private async decrementInventory(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order) return;
+
+    const updates = order.items
+      .filter((item) => item.variantId)
+      .map((item) =>
+        this.prisma.inventory.updateMany({
+          where: { variantId: item.variantId! },
+          data: {
+            onHand: { decrement: item.quantity },
+            reserved: { decrement: item.quantity },
+          },
+        }),
+      );
+
+    if (updates.length > 0) {
+      await this.prisma.$transaction(updates);
+    }
   }
 
   private async creditMinutesIfNeeded(orderId: string, paymentId: string): Promise<number> {
@@ -260,6 +352,7 @@ export class CheckoutService {
       };
     }
 
+    await this.decrementInventory(order.id);
     const minutesCredited = await this.creditMinutesIfNeeded(order.id, payment.id);
 
     return {
@@ -269,6 +362,35 @@ export class CheckoutService {
       captureId: capture.captureId,
       minutesCredited,
     };
+  }
+
+  /**
+   * Cancel a pending order and release inventory reservations.
+   * Only PENDING orders can be cancelled this way.
+   */
+  async cancelOrder(userId: string, orderId: string): Promise<{ orderId: string; status: string }> {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, userId },
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+
+    if (order.status !== 'PENDING') {
+      throw new BadRequestException(
+        `Order ${orderId} cannot be cancelled (current status: ${order.status})`,
+      );
+    }
+
+    await this.releaseInventoryReservations(orderId);
+
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'CANCELLED' },
+    });
+
+    return { orderId, status: 'CANCELLED' };
   }
 
   listUserOrders(userId: string) {

@@ -6,6 +6,7 @@ import {
   Request,
   Param,
   Get,
+  Patch,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CheckoutService } from './checkout.service';
@@ -54,5 +55,14 @@ export class CheckoutController {
     @Param('orderId') orderId: string,
   ) {
     return this.checkoutService.getUserOrderById(req.user.id, orderId);
+  }
+
+  /** Cancel a pending order and release inventory reservations. */
+  @Patch('orders/:orderId/cancel')
+  cancelOrder(
+    @Request() req: { user: { id: string } },
+    @Param('orderId') orderId: string,
+  ) {
+    return this.checkoutService.cancelOrder(req.user.id, orderId);
   }
 }
