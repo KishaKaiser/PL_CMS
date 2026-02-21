@@ -1,0 +1,203 @@
+import {
+  Injectable,
+  BadRequestException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  GetShippingQuoteDto,
+  ShippingAddressDto,
+  WarehouseAddressDto,
+} from './shipping.dto';
+
+const SHIPSTATION_BASE = 'https://ssapi.shipstation.com';
+const WAREHOUSE_ADDRESS_KEY = 'warehouse_address';
+
+export interface ShippingRate {
+  serviceName: string;
+  serviceCode: string;
+  carrierCode: string;
+  shipmentCost: number;
+  otherCost: number;
+}
+
+interface ShipStationRate {
+  serviceName: string;
+  serviceCode: string;
+  carrierCode: string;
+  shipmentCost: number;
+  otherCost: number;
+}
+
+interface ShipStationValidateResponse {
+  isValid: boolean;
+  addressVerified?: boolean;
+  address?: {
+    name?: string;
+    street1?: string;
+    street2?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  message?: string;
+}
+
+@Injectable()
+export class ShippingService {
+  private readonly logger = new Logger(ShippingService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
+
+  private getAuthHeader(): string {
+    const key = this.config.get<string>('SHIPSTATION_API_KEY') ?? '';
+    const secret = this.config.get<string>('SHIPSTATION_API_SECRET') ?? '';
+    if (!key || !secret) {
+      throw new BadRequestException(
+        'ShipStation API credentials are not configured. ' +
+          'Set SHIPSTATION_API_KEY and SHIPSTATION_API_SECRET.',
+      );
+    }
+    return 'Basic ' + Buffer.from(`${key}:${secret}`).toString('base64');
+  }
+
+  /** Returns the stored warehouse origin address or null if not set. */
+  async getWarehouseAddress(): Promise<WarehouseAddressDto | null> {
+    const setting = await this.prisma.setting.findUnique({
+      where: { key: WAREHOUSE_ADDRESS_KEY },
+    });
+    if (!setting) return null;
+    try {
+      return JSON.parse(setting.value) as WarehouseAddressDto;
+    } catch {
+      this.logger.warn('warehouse_address setting is not valid JSON');
+      return null;
+    }
+  }
+
+  /** Upserts the warehouse origin address in the Settings table. */
+  async upsertWarehouseAddress(dto: WarehouseAddressDto): Promise<WarehouseAddressDto> {
+    await this.prisma.setting.upsert({
+      where: { key: WAREHOUSE_ADDRESS_KEY },
+      create: { key: WAREHOUSE_ADDRESS_KEY, value: JSON.stringify(dto) },
+      update: { value: JSON.stringify(dto) },
+    });
+    return dto;
+  }
+
+  /** Calls ShipStation /shipments/getrates and returns available rates. */
+  async getShippingQuote(dto: GetShippingQuoteDto): Promise<ShippingRate[]> {
+    const warehouse = await this.getWarehouseAddress();
+    if (!warehouse) {
+      throw new NotFoundException(
+        'Warehouse origin address is not configured. ' +
+          'Please set it in Admin → Settings → Shipping.',
+      );
+    }
+
+    const totalWeightOz = dto.items.reduce(
+      (sum, item) => sum + (item.weightOz ?? 16) * item.quantity,
+      0,
+    );
+
+    const requestBody = {
+      carrierCode: null,
+      serviceCode: null,
+      packageCode: 'package',
+      fromPostalCode: warehouse.postalCode,
+      toState: dto.address.state,
+      toCountry: dto.address.country,
+      toPostalCode: dto.address.postalCode,
+      toCity: dto.address.city,
+      weight: { value: totalWeightOz, units: 'ounces' },
+      residential: true,
+    };
+
+    const authHeader = this.getAuthHeader();
+    const response = await fetch(`${SHIPSTATION_BASE}/shipments/getrates`, {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      this.logger.warn(`ShipStation getrates failed: ${response.status} ${text}`);
+      throw new BadRequestException(
+        `ShipStation returned an error (${response.status}). Check your API credentials and warehouse address.`,
+      );
+    }
+
+    const rates = (await response.json()) as ShipStationRate[];
+    return rates.map((r) => ({
+      serviceName: r.serviceName,
+      serviceCode: r.serviceCode,
+      carrierCode: r.carrierCode,
+      shipmentCost: r.shipmentCost,
+      otherCost: r.otherCost,
+    }));
+  }
+
+  /** Calls ShipStation /addresses/validate and returns the result. */
+  async validateAddress(address: ShippingAddressDto): Promise<{
+    isValid: boolean;
+    normalized?: ShippingAddressDto;
+    message?: string;
+  }> {
+    const authHeader = this.getAuthHeader();
+    const response = await fetch(`${SHIPSTATION_BASE}/addresses/validate`, {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: address.fullName,
+        street1: address.line1,
+        street2: address.line2 ?? null,
+        city: address.city,
+        state: address.state,
+        postalCode: address.postalCode,
+        country: address.country,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      this.logger.warn(`ShipStation validate-address failed: ${response.status} ${text}`);
+      throw new BadRequestException(
+        `ShipStation address validation returned an error (${response.status}).`,
+      );
+    }
+
+    const data = (await response.json()) as ShipStationValidateResponse;
+    const normalized: ShippingAddressDto | undefined = data.address
+      ? {
+          fullName: data.address.name ?? address.fullName,
+          phone: address.phone,
+          line1: data.address.street1 ?? address.line1,
+          line2: data.address.street2 ?? address.line2,
+          city: data.address.city ?? address.city,
+          state: data.address.state ?? address.state,
+          postalCode: data.address.postalCode ?? address.postalCode,
+          country: data.address.country ?? address.country,
+          email: address.email,
+        }
+      : undefined;
+
+    return {
+      isValid: data.isValid ?? data.addressVerified ?? false,
+      normalized,
+      message: data.message,
+    };
+  }
+}

@@ -12,12 +12,18 @@ export default function AdminPage() {
         <li>Audit log</li>
         <li>Settings</li>
       </ul>
-      <div className="mt-6">
+      <div className="mt-6 flex flex-wrap gap-3">
         <a
           href="/admin/products"
           className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
         >
           Manage Products →
+        </a>
+        <a
+          href="/admin/settings/shipping"
+          className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
+        >
+          Shipping Settings →
         </a>
       </div>
     </main>

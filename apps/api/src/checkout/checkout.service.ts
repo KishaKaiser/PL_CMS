@@ -65,9 +65,29 @@ export class CheckoutService {
         userId,
         totalAmount,
         currency: 'USD',
+        shippingCarrier: dto.shippingCarrier ?? null,
+        shippingService: dto.shippingService ?? null,
+        shippingAmount: dto.shippingAmount != null ? new Decimal(dto.shippingAmount) : null,
         items: { create: items },
+        ...(dto.shippingAddress
+          ? {
+              shippingAddress: {
+                create: {
+                  fullName: dto.shippingAddress.fullName,
+                  phone: dto.shippingAddress.phone,
+                  line1: dto.shippingAddress.line1,
+                  line2: dto.shippingAddress.line2 ?? null,
+                  city: dto.shippingAddress.city,
+                  state: dto.shippingAddress.state,
+                  postalCode: dto.shippingAddress.postalCode,
+                  country: dto.shippingAddress.country,
+                  email: dto.shippingAddress.email,
+                },
+              },
+            }
+          : {}),
       },
-      include: { items: true },
+      include: { items: true, shippingAddress: true },
     });
   }
 
@@ -257,6 +277,7 @@ export class CheckoutService {
       include: {
         items: { include: { product: true } },
         payments: true,
+        shippingAddress: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -268,6 +289,7 @@ export class CheckoutService {
       include: {
         items: { include: { product: true } },
         payments: true,
+        shippingAddress: true,
       },
     });
 
