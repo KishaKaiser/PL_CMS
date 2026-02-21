@@ -237,3 +237,52 @@ Placeholder pages: `/` `/login` `/admin` `/advisor` `/client`.
 ## Billing
 
 Per-minute billing only. `CallSession.billedMinutes` tracks consumed minutes; `ClientProfile.balanceMinutes` tracks the client's prepaid balance. No call recording.
+
+---
+
+## CloudPanel Deployment & Web Installer
+
+### 1 – Set environment variables in CloudPanel
+
+In your CloudPanel vhost configuration, add the following environment variables (do **not** commit `.env` files):
+
+| Variable | Description |
+|----------|-------------|
+| `NODE_ENV` | `production` |
+| `PORT` | API listen port (default `3001`) |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_URL` | Redis connection string |
+| `JWT_ACCESS_SECRET` | Secret for access tokens |
+| `JWT_REFRESH_SECRET` | Secret for refresh tokens |
+| `JWT_ACCESS_EXPIRES_IN` | e.g. `15m` |
+| `JWT_REFRESH_EXPIRES_IN` | e.g. `7d` |
+| `WEB_BASE_URL` | Public URL of the web app |
+| `NEXT_PUBLIC_API_BASE_URL` | Public URL of the API (used by the web installer) |
+
+Any additional integration secrets (PayPal, ShipStation, SMTP) should also be added here.
+
+### 2 – Deploy the application
+
+```bash
+pnpm install
+pnpm build          # or your CloudPanel deployment hook
+```
+
+### 3 – Visit `/install`
+
+Open your browser to `https://<your-domain>/install`.
+
+- The installer checks database connectivity and whether an admin already exists.
+- Fill in the admin email, password (min 8 characters), and optional name.
+- Click **Run Installation** — this will:
+  1. Verify DB connectivity.
+  2. Run `prisma migrate deploy` automatically (safe, idempotent).
+  3. Seed default settings and modules.
+  4. Create the first ADMIN user.
+- Once complete, you are redirected to `/login`.
+
+> **Security**: The installer returns HTTP 409 if an admin user already exists, effectively locking itself after first use.
+
+### 4 – Log in
+
+Use the admin credentials you just created at `/login`.
