@@ -13,6 +13,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { BillingModule } from './billing/billing.module';
 import { ShippingModule } from './shipping/shipping.module';
 import { FulfillmentModule } from './fulfillment/fulfillment.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { FulfillmentModule } from './fulfillment/fulfillment.module';
     BillingModule,
     ShippingModule,
     FulfillmentModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

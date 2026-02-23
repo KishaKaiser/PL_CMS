@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
 
-/**
- * Allowlist of upstream path prefixes the proxy is permitted to forward.
- * Requests to any other paths are rejected with 403 to reduce attack surface.
- */
 const ALLOWED_PATH_PREFIXES = [
   'products',
   'checkout',
@@ -14,6 +11,15 @@ const ALLOWED_PATH_PREFIXES = [
   'payments',
   'auth',
   'orders',
+  'fulfillment',
+  'pages',
+  'posts',
+  'users',
+  'settings',
+  'audit',
+  'admin',
+  'modules',
+  'media',
 ];
 
 type Context = { params: Promise<{ path: string[] }> };
@@ -22,7 +28,6 @@ async function proxy(req: NextRequest, { params }: Context) {
   const { path } = await params;
   const targetPath = path.join('/');
 
-  // Enforce path allowlist
   const isAllowed = ALLOWED_PATH_PREFIXES.some(
     (prefix) => targetPath === prefix || targetPath.startsWith(`${prefix}/`),
   );
@@ -38,11 +43,17 @@ async function proxy(req: NextRequest, { params }: Context) {
 
   const headers = new Headers();
 
-  // Forward Authorization header if present (set by client-side JS from stored token)
+  // Forward Authorization header if explicitly set by the caller
   const auth = req.headers.get('authorization');
-  if (auth) headers.set('authorization', auth);
+  if (auth) {
+    headers.set('authorization', auth);
+  } else {
+    // Auto-inject from httpOnly access_token cookie
+    const cookieStore = await cookies();
+    const token = cookieStore.get('access_token')?.value;
+    if (token) headers.set('authorization', `Bearer ${token}`);
+  }
 
-  // Forward cookies so cookie-based auth also works from browser requests
   const cookie = req.headers.get('cookie');
   if (cookie) headers.set('cookie', cookie);
 
