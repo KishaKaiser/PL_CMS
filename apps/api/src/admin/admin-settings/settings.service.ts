@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpsertSettingDto } from './settings.dto';
 
@@ -22,7 +22,9 @@ export class SettingsService {
     });
   }
 
-  remove(key: string) {
+  async remove(key: string) {
+    const existing = await this.prisma.setting.findUnique({ where: { key } });
+    if (!existing) throw new NotFoundException(`Setting with key "${key}" not found`);
     return this.prisma.setting.delete({ where: { key } });
   }
 }

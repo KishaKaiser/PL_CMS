@@ -14,5 +14,5 @@ export class UpdatePostDto {
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsString() excerpt?: string;
   @IsOptional() @IsString() content?: string;
-  @IsOptional() publishedAt?: string | null;
+  @IsOptional() @IsDateString() publishedAt?: string | null;
 }
