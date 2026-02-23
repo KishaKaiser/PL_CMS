@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const data = await upstream.json() as { accessToken?: string; refreshToken?: string; message?: string };
 
-  if (!upstream.ok || !data.accessToken) {
+  if (!upstream.ok || !data.accessToken || !data.refreshToken) {
     return NextResponse.json(
       { message: data.message ?? 'Invalid credentials' },
       { status: upstream.status },
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     maxAge: 60 * 15, // 15 minutes
   });
 
-  res.cookies.set('refresh_token', data.refreshToken!, {
+  res.cookies.set('refresh_token', data.refreshToken, {
     httpOnly: true,
     secure: isProduction,
     sameSite: 'lax',
