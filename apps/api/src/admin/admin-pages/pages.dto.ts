@@ -1,9 +1,9 @@
 import { IsString, IsOptional, IsDateString } from 'class-validator';
 
 export class CreatePageDto {
-  @IsString() slug: string;
-  @IsString() title: string;
-  @IsString() content: string;
+  @IsString() slug!: string;
+  @IsString() title!: string;
+  @IsString() content!: string;
   @IsOptional() @IsDateString() publishedAt?: string;
 }
 

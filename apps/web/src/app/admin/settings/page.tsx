@@ -65,7 +65,10 @@ export default function AdminSettingsPage() {
       });
       if (!res.ok) throw new Error('Add failed');
       const added = await res.json() as Setting;
-      setSettings((ss) => [...ss.filter((s) => s.key !== added.key), added].sort((a, b) => a.key.localeCompare(b.key)));
+      setSettings((ss) => {
+        const without = ss.filter((s) => s.key !== added.key);
+        return [...without, added].sort((a, b) => a.key.localeCompare(b.key));
+      });
       setEditValues((v) => ({ ...v, [added.key]: added.value }));
       setNewKey('');
       setNewValue('');

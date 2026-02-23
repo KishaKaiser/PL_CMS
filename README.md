@@ -286,3 +286,41 @@ Open your browser to `https://<your-domain>/install`.
 ### 4 – Log in
 
 Use the admin credentials you just created at `/login`.
+
+---
+
+## Admin UI
+
+The admin interface is available at `/admin` and is restricted to users with the `ADMIN` role.
+
+### Logging In
+
+1. Navigate to `http://localhost:3000/login`
+2. Enter your admin email and password
+3. On successful authentication you will be redirected to `/admin`
+
+If your session has not been set up yet, visit `/install` first to create the initial admin user.
+
+### Admin Navigation
+
+| Page | URL | Description |
+|------|-----|-------------|
+| Dashboard | `/admin` | Overview with quick-action links |
+| Pages | `/admin/pages` | CMS static pages – create, edit, publish/unpublish, delete |
+| Posts | `/admin/posts` | Blog/news posts – create, edit, publish/unpublish, delete |
+| Media | `/admin/media` | Media library (placeholder) |
+| Users | `/admin/users` | List all users, change roles, reset passwords |
+| Settings | `/admin/settings` | Key-value platform settings |
+| Audit Log | `/admin/audit` | Recent admin activity log |
+| Products | `/admin/products` | Product & variant management |
+| Orders | `/admin/orders` | Order management & fulfilment |
+
+### Authentication Architecture
+
+- Login submits to the Next.js API route `POST /api/auth/login` which calls the NestJS `/api/auth/login` endpoint and sets two **httpOnly, SameSite=Lax** cookies:
+  - `access_token` – 15-minute JWT
+  - `refresh_token` – 7-day JWT
+- The Next.js **middleware** (`src/middleware.ts`) protects all `/admin/*` routes by decoding the access token and checking `role === 'ADMIN'`. Unauthenticated or non-admin users are redirected to `/login`.
+- The **proxy route** (`/api/proxy/*`) automatically injects the `Authorization: Bearer <token>` header from the httpOnly cookie so client components never handle raw tokens.
+- To refresh the session call `POST /api/auth/refresh` (happens automatically on next page load if the token is still valid in the refresh cookie).
+- To log out click **Sign Out** in the sidebar (calls `POST /api/auth/logout` which deletes both cookies).
