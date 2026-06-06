@@ -43,51 +43,53 @@ npm install -g pnpm@9
 
 ## Quick Start
 
-### 1 – Install dependencies
+### One-command setup
 
 ```bash
+pnpm setup
+```
+
+That's it. The command will automatically:
+
+1. Create `apps/api/.env` from `.env.example` (only if it doesn't already exist)
+2. Install all workspace dependencies
+3. Start PostgreSQL + Redis via Docker Compose (`infra/docker-compose.yml`)
+4. Generate the Prisma client
+5. Apply the initial database migration
+
+> **Prerequisites**: [Node.js ≥ 20](https://nodejs.org/), [pnpm ≥ 9](https://pnpm.io/installation), and [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker + Compose CLI) must be installed and Docker must be running before executing `pnpm setup`.
+
+> **Secrets**: After setup completes, open `apps/api/.env` and fill in `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, and any optional integration keys (PayPal, ShipStation, SMTP) before starting the app.
+
+### Start the app
+
+```bash
+pnpm dev:api   # → http://localhost:3001/api/health
+pnpm dev:web   # → http://localhost:3000
+```
+
+### Manual setup (optional)
+
+If you prefer to run each step individually:
+
+```bash
+# 1 – Install dependencies
 pnpm install
-```
 
-### 2 – Start infrastructure (Postgres + Redis)
-
-```bash
+# 2 – Start infrastructure (Postgres + Redis)
 docker compose -f infra/docker-compose.yml up -d
-```
 
-### 3 – Configure environment
-
-```bash
+# 3 – Configure environment
 cp apps/api/.env.example apps/api/.env
 # Edit apps/api/.env – fill in DB credentials, JWT secrets, and PayPal keys
-```
 
-### 4 – Run Prisma migration & generate client
+# 4 – Generate Prisma client & run migrations
+pnpm db:generate
+pnpm db:migrate:dev
 
-```bash
-pnpm db:generate          # generate Prisma client
-pnpm db:migrate:dev       # run initial migration (creates schema)
-```
-
-> After adding PayPal fields (`paypalOrderId`, `payerEmail` on `Order`), run:
-> ```bash
-> pnpm db:migrate:dev --name add-paypal-order-fields
-> ```
-
-> On first run you will be prompted for a migration name – enter `init` or similar.
-
-### 5 – Start the API
-
-```bash
-pnpm dev:api
-# → http://localhost:3001/api/health
-```
-
-### 6 – Start the web app
-
-```bash
-pnpm dev:web
-# → http://localhost:3000
+# 5 – Start the servers
+pnpm dev:api   # → http://localhost:3001/api/health
+pnpm dev:web   # → http://localhost:3000
 ```
 
 ---
@@ -174,6 +176,7 @@ User clicks "Buy Now" → /shop/checkout
 
 | Script | Description |
 |--------|-------------|
+| `pnpm setup` | **One-command local setup** (install, infra, env, migrate) |
 | `pnpm dev:api` | Start API in watch mode |
 | `pnpm dev:web` | Start Next.js dev server |
 | `pnpm build` | Build all packages |
