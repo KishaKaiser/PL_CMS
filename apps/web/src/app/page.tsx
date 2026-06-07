@@ -3,16 +3,18 @@ import { PublicSiteShell } from '../components/public-site-shell';
 import { getPublishedPage, getPublishedPages, getPublishedPosts, toPlainText } from '../lib/public-cms';
 
 const HOMEPAGE_EXCERPT_LENGTH = 120;
+const MAX_FEATURED_PAGES = 3;
+const MAX_FEATURED_POSTS = 3;
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const [homePage, posts, pages] = await Promise.all([
     getPublishedPage('home'),
     getPublishedPosts(),
-    getPublishedPages(),
+    getPublishedPages('home'),
   ]);
-  const featuredPages = pages.filter((page) => page.slug !== 'home').slice(0, 3);
-  const featuredPosts = posts.slice(0, 3);
+  const featuredPages = pages.slice(0, MAX_FEATURED_PAGES);
+  const featuredPosts = posts.slice(0, MAX_FEATURED_POSTS);
 
   return (
     <PublicSiteShell>

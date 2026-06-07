@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { PublicContentService } from './public-content.service';
 
 @Controller('public')
@@ -6,8 +6,8 @@ export class PublicContentController {
   constructor(private readonly publicContentService: PublicContentService) {}
 
   @Get('pages')
-  findPages() {
-    return this.publicContentService.findPublishedPages();
+  findPages(@Query('excludeSlug') excludeSlug?: string) {
+    return this.publicContentService.findPublishedPages(excludeSlug);
   }
 
   @Get('pages/:slug')

@@ -29,8 +29,10 @@ export function toPlainText(content: string): string {
   return content.replace(/<[^>]*>/g, '');
 }
 
-export async function getPublishedPages(): Promise<PublicPage[]> {
-  const path = '/public/pages';
+export async function getPublishedPages(excludeSlug?: string): Promise<PublicPage[]> {
+  const params = new URLSearchParams();
+  if (excludeSlug) params.set('excludeSlug', excludeSlug);
+  const path = `/public/pages${params.size > 0 ? `?${params.toString()}` : ''}`;
   try {
     const res = await fetch(`${API_BASE}${path}`, { next: { revalidate: CMS_REVALIDATE_SECONDS } });
     if (!res.ok) {

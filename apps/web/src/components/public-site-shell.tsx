@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { getPublishedPages } from '../lib/public-cms';
 
+const MAX_FOOTER_PAGES = 3;
+
 export async function PublicSiteShell({ children }: { children: React.ReactNode }) {
-  const pages = (await getPublishedPages()).filter((page) => page.slug !== 'home');
+  const pages = await getPublishedPages('home');
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900">
@@ -46,7 +48,7 @@ export async function PublicSiteShell({ children }: { children: React.ReactNode 
             <Link href="/blog" className="hover:text-indigo-700">
               Blog
             </Link>
-            {pages.slice(0, 3).map((page) => (
+            {pages.slice(0, MAX_FOOTER_PAGES).map((page) => (
               <Link key={page.id} href={`/${page.slug}`} className="hover:text-indigo-700">
                 {page.title}
               </Link>

@@ -5,10 +5,11 @@ import { PrismaService } from '../prisma/prisma.service';
 export class PublicContentService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findPublishedPages() {
+  findPublishedPages(excludeSlug?: string) {
     const now = new Date();
     return this.prisma.page.findMany({
       where: {
+        slug: excludeSlug ? { not: excludeSlug } : undefined,
         publishedAt: { not: null, lte: now },
       },
       orderBy: { title: 'asc' },
