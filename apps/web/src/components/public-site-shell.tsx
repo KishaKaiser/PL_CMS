@@ -1,8 +1,6 @@
 import Link from 'next/link';
 import { getPublishedPages, type PublicPage } from '../lib/public-cms';
 
-const MAX_FOOTER_PAGES = 3;
-
 type Props = {
   children: React.ReactNode;
   pages?: PublicPage[];
@@ -53,7 +51,7 @@ export async function PublicSiteShell({ children, pages }: Props) {
             <Link href="/blog" className="hover:text-indigo-700">
               Blog
             </Link>
-            {navPages.slice(0, MAX_FOOTER_PAGES).map((page) => (
+            {navPages.map((page) => (
               <Link key={page.id} href={`/${page.slug}`} className="hover:text-indigo-700">
                 {page.title}
               </Link>
