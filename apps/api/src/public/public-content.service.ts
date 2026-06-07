@@ -9,7 +9,7 @@ export class PublicContentService {
     const now = new Date();
     return this.prisma.page.findMany({
       where: {
-        slug: excludeSlug ? { not: excludeSlug } : undefined,
+        ...(excludeSlug ? { slug: { not: excludeSlug } } : {}),
         publishedAt: { not: null, lte: now },
       },
       orderBy: { title: 'asc' },

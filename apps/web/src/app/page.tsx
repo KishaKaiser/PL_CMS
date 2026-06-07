@@ -17,7 +17,7 @@ export default async function HomePage() {
   const featuredPosts = posts.slice(0, MAX_FEATURED_POSTS);
 
   return (
-    <PublicSiteShell>
+    <PublicSiteShell pages={pages}>
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 p-8">
         <header className="rounded-lg border bg-white p-6 shadow-sm">
           <h1 className="text-4xl font-bold text-indigo-700">{homePage?.title ?? 'Psychic Link CMS'}</h1>

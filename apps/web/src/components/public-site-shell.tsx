@@ -1,10 +1,15 @@
 import Link from 'next/link';
-import { getPublishedPages } from '../lib/public-cms';
+import { getPublishedPages, type PublicPage } from '../lib/public-cms';
 
 const MAX_FOOTER_PAGES = 3;
 
-export async function PublicSiteShell({ children }: { children: React.ReactNode }) {
-  const pages = await getPublishedPages('home');
+type Props = {
+  children: React.ReactNode;
+  pages?: PublicPage[];
+};
+
+export async function PublicSiteShell({ children, pages }: Props) {
+  const navPages = pages ?? (await getPublishedPages('home'));
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900">
@@ -24,7 +29,7 @@ export async function PublicSiteShell({ children }: { children: React.ReactNode 
             <Link href="/blog" className="rounded px-3 py-2 hover:bg-gray-100">
               Blog
             </Link>
-            {pages.map((page) => (
+            {navPages.map((page) => (
               <Link key={page.id} href={`/${page.slug}`} className="rounded px-3 py-2 hover:bg-gray-100">
                 {page.title}
               </Link>
@@ -48,7 +53,7 @@ export async function PublicSiteShell({ children }: { children: React.ReactNode 
             <Link href="/blog" className="hover:text-indigo-700">
               Blog
             </Link>
-            {pages.slice(0, MAX_FOOTER_PAGES).map((page) => (
+            {navPages.slice(0, MAX_FOOTER_PAGES).map((page) => (
               <Link key={page.id} href={`/${page.slug}`} className="hover:text-indigo-700">
                 {page.title}
               </Link>
