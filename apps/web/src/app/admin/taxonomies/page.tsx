@@ -118,7 +118,7 @@ export default function AdminTaxonomiesPage() {
             <input
               value={categoryForm.slug}
               onChange={(event) => setCategoryForm((current) => ({ ...current, slug: slugify(event.target.value) }))}
-              placeholder="slug"
+              placeholder="Slug"
               className="rounded border border-gray-200 px-3 py-2 font-mono text-sm"
             />
             <button
@@ -165,7 +165,7 @@ export default function AdminTaxonomiesPage() {
             <input
               value={tagForm.slug}
               onChange={(event) => setTagForm((current) => ({ ...current, slug: slugify(event.target.value) }))}
-              placeholder="slug"
+              placeholder="Slug"
               className="rounded border border-gray-200 px-3 py-2 font-mono text-sm"
             />
             <button
