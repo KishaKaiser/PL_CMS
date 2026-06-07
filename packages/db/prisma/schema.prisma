@@ -251,8 +251,9 @@ model Page {
   id          String    @id @default(cuid())
   slug        String    @unique
   title       String
-  content     String
-  publishedAt DateTime?
+  content          String
+  featuredImageUrl String?
+  publishedAt      DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -264,8 +265,9 @@ model Post {
   slug        String    @unique
   title       String
   excerpt     String?
-  content     String
-  publishedAt DateTime?
+  content          String
+  featuredImageUrl String?
+  publishedAt      DateTime?
   authorId    String
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

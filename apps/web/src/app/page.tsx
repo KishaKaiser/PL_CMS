@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { PublicSiteShell } from '../components/public-site-shell';
+import { RichContent } from '../components/cms/rich-content';
 import { getPublishedPage, getPublishedPages, getPublishedPosts, toPlainText } from '../lib/public-cms';
 
 const HOMEPAGE_EXCERPT_LENGTH = 120;
@@ -19,13 +20,19 @@ export default async function HomePage() {
   return (
     <PublicSiteShell pages={pages}>
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 p-8">
-        <header className="rounded-lg border bg-white p-6 shadow-sm">
-          <h1 className="text-4xl font-bold text-indigo-700">{homePage?.title ?? 'Psychic Link CMS'}</h1>
-          <p className="mt-3 whitespace-pre-wrap text-gray-700">
-            {toPlainText(
-              homePage?.content ?? 'Welcome to the public site. Read our latest posts or browse CMS pages.',
-            )}
-          </p>
+        <header className="overflow-hidden rounded-lg border bg-white shadow-sm">
+          {homePage?.featuredImageUrl && (
+            <img src={homePage.featuredImageUrl} alt={homePage.title} className="h-64 w-full object-cover" />
+          )}
+          <div className="p-6">
+            <h1 className="text-4xl font-bold text-indigo-700">{homePage?.title ?? 'Psychic Link CMS'}</h1>
+            <div className="mt-4 text-gray-700">
+              <RichContent
+                html={homePage?.content ?? '<p>Welcome to the public site. Read our latest posts or browse CMS pages.</p>'}
+                className="prose max-w-none text-gray-700"
+              />
+            </div>
+          </div>
         </header>
 
         <nav className="flex flex-wrap gap-3">
@@ -53,16 +60,21 @@ export default async function HomePage() {
                 const preview = toPlainText(page.content);
 
                 return (
-                  <article key={page.id} className="rounded-lg border bg-white p-4 shadow-sm">
-                    <h3 className="text-lg font-semibold">
-                      <Link href={`/${page.slug}`} className="hover:underline">
-                        {page.title}
-                      </Link>
-                    </h3>
-                    <p className="mt-2 text-sm text-gray-700">
-                      {preview.slice(0, HOMEPAGE_EXCERPT_LENGTH)}
-                      {preview.length > HOMEPAGE_EXCERPT_LENGTH ? '…' : ''}
-                    </p>
+                  <article key={page.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
+                    {page.featuredImageUrl && (
+                      <img src={page.featuredImageUrl} alt={page.title} className="h-40 w-full object-cover" />
+                    )}
+                    <div className="p-4">
+                      <h3 className="text-lg font-semibold">
+                        <Link href={`/${page.slug}`} className="hover:underline">
+                          {page.title}
+                        </Link>
+                      </h3>
+                      <p className="mt-2 text-sm text-gray-700">
+                        {preview.slice(0, HOMEPAGE_EXCERPT_LENGTH)}
+                        {preview.length > HOMEPAGE_EXCERPT_LENGTH ? '…' : ''}
+                      </p>
+                    </div>
                   </article>
                 );
               })}
@@ -86,17 +98,22 @@ export default async function HomePage() {
                 const preview = toPlainText(post.excerpt || post.content);
 
                 return (
-                  <article key={post.id} className="rounded-lg border bg-white p-4 shadow-sm">
-                    <h3 className="text-lg font-semibold">
-                      <Link href={`/blog/${post.slug}`} className="hover:underline">
-                        {post.title}
-                      </Link>
-                    </h3>
-                    <p className="mt-1 text-xs text-gray-500">{new Date(post.publishedAt).toLocaleDateString()}</p>
-                    <p className="mt-2 text-sm text-gray-700">
-                      {preview.slice(0, HOMEPAGE_EXCERPT_LENGTH)}
-                      {preview.length > HOMEPAGE_EXCERPT_LENGTH ? '…' : ''}
-                    </p>
+                  <article key={post.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
+                    {post.featuredImageUrl && (
+                      <img src={post.featuredImageUrl} alt={post.title} className="h-40 w-full object-cover" />
+                    )}
+                    <div className="p-4">
+                      <h3 className="text-lg font-semibold">
+                        <Link href={`/blog/${post.slug}`} className="hover:underline">
+                          {post.title}
+                        </Link>
+                      </h3>
+                      <p className="mt-1 text-xs text-gray-500">{new Date(post.publishedAt).toLocaleDateString()}</p>
+                      <p className="mt-2 text-sm text-gray-700">
+                        {preview.slice(0, HOMEPAGE_EXCERPT_LENGTH)}
+                        {preview.length > HOMEPAGE_EXCERPT_LENGTH ? '…' : ''}
+                      </p>
+                    </div>
                   </article>
                 );
               })}
