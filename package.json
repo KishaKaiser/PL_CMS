@@ -2,7 +2,7 @@
   "name": "pl-cms",
   "private": true,
   "version": "0.1.0",
-  "description": "Psychic Link CMS – pnpm monorepo",
+  "description": "Psychic Link CMS \u2013 pnpm monorepo",
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"

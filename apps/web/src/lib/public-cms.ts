@@ -6,6 +6,7 @@ export interface PublicPage {
   slug: string;
   title: string;
   content: string;
+  featuredImageUrl: string | null;
   publishedAt: string;
   updatedAt: string;
 }
@@ -16,6 +17,7 @@ export interface PublicPost {
   title: string;
   excerpt: string | null;
   content: string;
+  featuredImageUrl: string | null;
   publishedAt: string;
   updatedAt: string;
   author: { id: string; name: string };
@@ -25,9 +27,7 @@ function logCmsFetchError(path: string, status?: number) {
   console.error(`[public-cms] Failed request to ${path}${status ? ` (status ${status})` : ''}`);
 }
 
-export function toPlainText(content: string): string {
-  return content.replace(/<[^>]*>/g, '');
-}
+export { toPlainText } from './cms';
 
 export async function getPublishedPages(excludeSlug?: string): Promise<PublicPage[]> {
   const params = new URLSearchParams();

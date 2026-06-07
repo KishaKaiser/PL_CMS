@@ -1,0 +1,9 @@
+interface Props {
+  html: string;
+  className?: string;
+}
+
+export function RichContent({ html, className }: Props) {
+  // CMS HTML is sanitized by sanitizeCmsHtml in the API layer before it is persisted and rendered here.
+  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+}
