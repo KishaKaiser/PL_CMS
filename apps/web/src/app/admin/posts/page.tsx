@@ -154,7 +154,7 @@ export default function AdminPostsPage() {
         if (!form.scheduledAt) throw new Error('Choose a future publish date and time.');
         publishedAt = fromDatetimeLocalValue(form.scheduledAt);
         if (new Date(publishedAt).getTime() < now.getTime() + SCHEDULE_MIN_LEAD_MS) {
-          throw new Error('Scheduled publish time must be at least one minute ahead of your current local time.');
+          throw new Error('Scheduled publish time must be at least one minute in the future.');
         }
       } else if (form.editorialStatus === 'published') {
         publishedAt =
