@@ -1,4 +1,3 @@
-import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsNotEmpty,
@@ -7,7 +6,7 @@ import {
   IsUrl,
   Matches,
 } from 'class-validator';
-import { normalizeSlug, SLUG_PATTERN } from '../admin-content/cms-content.util';
+import { SLUG_PATTERN } from '../admin-content/cms-content.util';
 
 const FEATURED_IMAGE_OPTIONS = {
   protocols: ['http', 'https'],
@@ -15,7 +14,6 @@ const FEATURED_IMAGE_OPTIONS = {
 };
 
 export class CreatePostDto {
-  @Transform(({ value }) => normalizeSlug(String(value ?? '')))
   @IsString()
   @IsNotEmpty()
   @Matches(SLUG_PATTERN, {
@@ -50,7 +48,6 @@ export class CreatePostDto {
 
 export class UpdatePostDto {
   @IsOptional()
-  @Transform(({ value }) => normalizeSlug(String(value ?? '')))
   @IsString()
   @IsNotEmpty()
   @Matches(SLUG_PATTERN, {

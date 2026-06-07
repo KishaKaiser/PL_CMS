@@ -148,18 +148,19 @@ export default function AdminPostsPage() {
       if (slugError) throw new Error(slugError);
       if (!form.authorId) throw new Error('Choose an author before saving this post.');
 
+      const now = new Date();
       let publishedAt: string | null = null;
       if (form.editorialStatus === 'scheduled') {
         if (!form.scheduledAt) throw new Error('Choose a future publish date and time.');
         publishedAt = fromDatetimeLocalValue(form.scheduledAt);
-        if (new Date(publishedAt).getTime() < Date.now() + SCHEDULE_MIN_LEAD_MS) {
+        if (new Date(publishedAt).getTime() < now.getTime() + SCHEDULE_MIN_LEAD_MS) {
           throw new Error('Scheduled publish date must be at least one minute in the future.');
         }
       } else if (form.editorialStatus === 'published') {
         publishedAt =
           form.currentPublishedAt && getEditorialStatus(form.currentPublishedAt) === 'published'
             ? form.currentPublishedAt
-            : new Date().toISOString();
+            : now.toISOString();
       }
 
       const payload = {

@@ -25,7 +25,16 @@ export function sanitizeCmsHtml(content: string) {
       img: ['http', 'https'],
     },
     transformTags: {
-      a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer' }),
+      a: (_tagName, attribs) => {
+        const nextAttribs = { ...attribs };
+        if (nextAttribs.target === '_blank') {
+          nextAttribs.rel = 'noopener noreferrer';
+        } else {
+          delete nextAttribs.target;
+          delete nextAttribs.rel;
+        }
+        return { tagName: 'a', attribs: nextAttribs };
+      },
     },
   });
 }
