@@ -27,8 +27,8 @@ const POST_SELECT = {
 
 // 1970 keeps archives aligned with Unix-epoch era content and rejects obviously invalid historical years.
 const MIN_ARCHIVE_YEAR = 1970;
-// 3000 acts as a practical upper guardrail against malformed far-future archive inputs.
-const MAX_ARCHIVE_YEAR = 3000;
+// A small future buffer supports scheduled content while rejecting malformed far-future years.
+const MAX_ARCHIVE_YEARS_AHEAD = 20;
 
 @Injectable()
 export class PublicContentService {
@@ -319,6 +319,7 @@ export class PublicContentService {
   }
 
   private getPublishedAtRange(now: Date, year?: string, month?: string): Prisma.DateTimeNullableFilter {
+    const maxArchiveYear = now.getUTCFullYear() + MAX_ARCHIVE_YEARS_AHEAD;
     const parsedYear = Number.parseInt(year ?? '', 10);
     const parsedMonth = Number.parseInt(month ?? '', 10);
 
@@ -326,7 +327,7 @@ export class PublicContentService {
       return { not: null, lte: now };
     }
 
-    if (parsedMonth < 1 || parsedMonth > 12 || parsedYear < MIN_ARCHIVE_YEAR || parsedYear > MAX_ARCHIVE_YEAR) {
+    if (parsedMonth < 1 || parsedMonth > 12 || parsedYear < MIN_ARCHIVE_YEAR || parsedYear > maxArchiveYear) {
       return { not: null, lte: now };
     }
 

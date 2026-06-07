@@ -44,7 +44,7 @@ export default async function BlogPage({ searchParams }: Props) {
     getArchives(),
   ]);
 
-  const activeFilterCount = [search, category, tag, authorId, `${year}${month}`].filter(Boolean).length;
+  const activeFilterCount = [search, category, tag, authorId, year, month].filter(Boolean).length;
 
   return (
     <PublicSiteShell>
