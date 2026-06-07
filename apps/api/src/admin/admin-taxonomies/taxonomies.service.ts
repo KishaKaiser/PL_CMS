@@ -1,4 +1,5 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTaxonomyDto, UpdateTaxonomyDto } from './taxonomies.dto';
 import { normalizeSlug } from '../admin-content/cms-content.util';
@@ -63,8 +64,11 @@ export class TaxonomiesService {
         return await this.prisma.category.create({ data });
       }
       return await this.prisma.tag.create({ data });
-    } catch {
-      throw new ConflictException(`A ${kind} with that name or slug already exists`);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException(`A ${kind} with that name or slug already exists`);
+      }
+      throw new InternalServerErrorException(`Unable to create ${kind}`);
     }
   }
 
@@ -79,8 +83,11 @@ export class TaxonomiesService {
         return await this.prisma.category.update({ where: { id }, data });
       }
       return await this.prisma.tag.update({ where: { id }, data });
-    } catch {
-      throw new ConflictException(`A ${kind} with that name or slug already exists`);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException(`A ${kind} with that name or slug already exists`);
+      }
+      throw new InternalServerErrorException(`Unable to update ${kind}`);
     }
   }
 }
