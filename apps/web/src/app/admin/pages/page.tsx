@@ -35,6 +35,8 @@ interface PageForm {
   currentPublishedAt: string | null;
 }
 
+const SCHEDULE_MIN_LEAD_MS = 60_000;
+
 const emptyForm: PageForm = {
   slug: '',
   title: '',
@@ -117,8 +119,8 @@ export default function AdminPagesPage() {
       if (form.editorialStatus === 'scheduled') {
         if (!form.scheduledAt) throw new Error('Choose a future publish date and time.');
         publishedAt = fromDatetimeLocalValue(form.scheduledAt);
-        if (new Date(publishedAt).getTime() <= Date.now()) {
-          throw new Error('Scheduled publish date must be in the future.');
+        if (new Date(publishedAt).getTime() < Date.now() + SCHEDULE_MIN_LEAD_MS) {
+          throw new Error('Scheduled publish date must be at least one minute in the future.');
         }
       } else if (form.editorialStatus === 'published') {
         publishedAt =
