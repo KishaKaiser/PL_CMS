@@ -29,6 +29,21 @@ export function toPlainText(content: string): string {
   return content.replace(/<[^>]*>/g, '');
 }
 
+export async function getPublishedPages(): Promise<PublicPage[]> {
+  const path = '/public/pages';
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { next: { revalidate: CMS_REVALIDATE_SECONDS } });
+    if (!res.ok) {
+      logCmsFetchError(path, res.status);
+      return [];
+    }
+    return res.json() as Promise<PublicPage[]>;
+  } catch {
+    logCmsFetchError(path);
+    return [];
+  }
+}
+
 export async function getPublishedPage(slug: string): Promise<PublicPage | null> {
   const path = `/public/pages/${encodeURIComponent(slug)}`;
   try {

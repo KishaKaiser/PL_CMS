@@ -5,6 +5,11 @@ import { PublicContentService } from './public-content.service';
 export class PublicContentController {
   constructor(private readonly publicContentService: PublicContentService) {}
 
+  @Get('pages')
+  findPages() {
+    return this.publicContentService.findPublishedPages();
+  }
+
   @Get('pages/:slug')
   findPageBySlug(@Param('slug') slug: string) {
     return this.publicContentService.findPublishedPageBySlug(slug);

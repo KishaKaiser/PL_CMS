@@ -5,6 +5,24 @@ import { PrismaService } from '../prisma/prisma.service';
 export class PublicContentService {
   constructor(private readonly prisma: PrismaService) {}
 
+  findPublishedPages() {
+    const now = new Date();
+    return this.prisma.page.findMany({
+      where: {
+        publishedAt: { not: null, lte: now },
+      },
+      orderBy: { title: 'asc' },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        content: true,
+        publishedAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
   async findPublishedPageBySlug(slug: string) {
     const now = new Date();
     const page = await this.prisma.page.findFirst({
