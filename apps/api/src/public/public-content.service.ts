@@ -25,7 +25,9 @@ const POST_SELECT = {
   tags: { select: { id: true, slug: true, name: true } },
 } as const;
 
+// 1970 keeps archives aligned with Unix-epoch era content and rejects obviously invalid historical years.
 const MIN_ARCHIVE_YEAR = 1970;
+// 3000 acts as a practical upper guardrail against malformed far-future archive inputs.
 const MAX_ARCHIVE_YEAR = 3000;
 
 @Injectable()
@@ -307,6 +309,7 @@ export class PublicContentService {
       ...(search
         ? {
             OR: [
+              // Keep search lightweight for now: title and excerpt remain index-friendly compared with full HTML content scans.
               { title: { contains: search, mode: 'insensitive' } },
               { excerpt: { contains: search, mode: 'insensitive' } },
             ],
