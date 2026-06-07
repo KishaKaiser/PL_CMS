@@ -29,6 +29,23 @@ export function toPlainText(content: string): string {
   return content.replace(/<[^>]*>/g, '');
 }
 
+export async function getPublishedPages(excludeSlug?: string): Promise<PublicPage[]> {
+  const params = new URLSearchParams();
+  if (excludeSlug) params.set('excludeSlug', excludeSlug);
+  const path = `/public/pages${params.size > 0 ? `?${params.toString()}` : ''}`;
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { next: { revalidate: CMS_REVALIDATE_SECONDS } });
+    if (!res.ok) {
+      logCmsFetchError(path, res.status);
+      return [];
+    }
+    return res.json() as Promise<PublicPage[]>;
+  } catch {
+    logCmsFetchError(path);
+    return [];
+  }
+}
+
 export async function getPublishedPage(slug: string): Promise<PublicPage | null> {
   const path = `/public/pages/${encodeURIComponent(slug)}`;
   try {
