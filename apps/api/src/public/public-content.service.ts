@@ -25,6 +25,9 @@ const POST_SELECT = {
   tags: { select: { id: true, slug: true, name: true } },
 } as const;
 
+const MIN_ARCHIVE_YEAR = 1970;
+const MAX_ARCHIVE_YEAR = 3000;
+
 @Injectable()
 export class PublicContentService {
   constructor(private readonly prisma: PrismaService) {}
@@ -306,7 +309,6 @@ export class PublicContentService {
             OR: [
               { title: { contains: search, mode: 'insensitive' } },
               { excerpt: { contains: search, mode: 'insensitive' } },
-              { content: { contains: search, mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -321,7 +323,7 @@ export class PublicContentService {
       return { not: null, lte: now };
     }
 
-    if (parsedMonth < 1 || parsedMonth > 12 || parsedYear < 1970 || parsedYear > 3000) {
+    if (parsedMonth < 1 || parsedMonth > 12 || parsedYear < MIN_ARCHIVE_YEAR || parsedYear > MAX_ARCHIVE_YEAR) {
       return { not: null, lte: now };
     }
 
