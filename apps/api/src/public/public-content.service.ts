@@ -309,7 +309,8 @@ export class PublicContentService {
       ...(search
         ? {
             OR: [
-              // Keep search lightweight for now: title and excerpt remain index-friendly compared with full HTML content scans.
+              // Keep search lightweight for now: title/excerpt checks are cheaper than scanning full HTML body content,
+              // which avoids broad content-table scans until a dedicated full-text strategy is added.
               { title: { contains: search, mode: 'insensitive' } },
               { excerpt: { contains: search, mode: 'insensitive' } },
             ],
