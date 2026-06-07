@@ -35,6 +35,7 @@ interface PageForm {
   currentPublishedAt: string | null;
 }
 
+// Minimum 1 minute lead time keeps minute-level scheduling from slipping into the past during save.
 const SCHEDULE_MIN_LEAD_MS = 60_000;
 
 const emptyForm: PageForm = {
