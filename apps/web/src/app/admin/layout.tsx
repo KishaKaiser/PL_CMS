@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', exact: true },
   { href: '/admin/pages', label: 'Pages' },
   { href: '/admin/posts', label: 'Posts' },
+  { href: '/admin/taxonomies', label: 'Categories & Tags' },
   { href: '/admin/media', label: 'Media' },
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/settings', label: 'Settings' },

@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsDateString,
   IsNotEmpty,
   IsOptional,
@@ -44,6 +45,16 @@ export class CreatePostDto {
   @IsString()
   @IsNotEmpty()
   authorId!: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  categoryIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tagIds?: string[];
 }
 
 export class UpdatePostDto {
@@ -81,4 +92,14 @@ export class UpdatePostDto {
   @IsString()
   @IsNotEmpty()
   authorId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  categoryIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tagIds?: string[];
 }

@@ -3,6 +3,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePostDto, UpdatePostDto } from './posts.dto';
 import { normalizeSlug, sanitizeCmsHtml } from '../admin-content/cms-content.util';
 
+const POST_INCLUDE = {
+  author: { select: { id: true, name: true, email: true } },
+  categories: { select: { id: true, slug: true, name: true } },
+  tags: { select: { id: true, slug: true, name: true } },
+} as const;
+
 @Injectable()
 export class PostsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -10,14 +16,14 @@ export class PostsService {
   findAll() {
     return this.prisma.post.findMany({
       orderBy: { updatedAt: 'desc' },
-      include: { author: { select: { id: true, name: true, email: true } } },
+      include: POST_INCLUDE,
     });
   }
 
   async findOne(id: string) {
     const post = await this.prisma.post.findUnique({
       where: { id },
-      include: { author: { select: { id: true, name: true, email: true } } },
+      include: POST_INCLUDE,
     });
     if (!post) throw new NotFoundException(`Post ${id} not found`);
     return post;
@@ -36,8 +42,10 @@ export class PostsService {
         featuredImageUrl: dto.featuredImageUrl ?? null,
         publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : null,
         authorId: dto.authorId,
+        categories: dto.categoryIds ? { connect: dto.categoryIds.map((id) => ({ id })) } : undefined,
+        tags: dto.tagIds ? { connect: dto.tagIds.map((id) => ({ id })) } : undefined,
       },
-      include: { author: { select: { id: true, name: true, email: true } } },
+      include: POST_INCLUDE,
     });
   }
 
@@ -58,8 +66,10 @@ export class PostsService {
         featuredImageUrl: dto.featuredImageUrl === undefined ? undefined : dto.featuredImageUrl,
         publishedAt: dto.publishedAt === null ? null : dto.publishedAt ? new Date(dto.publishedAt) : undefined,
         authorId: dto.authorId,
+        categories: dto.categoryIds ? { set: dto.categoryIds.map((id) => ({ id })) } : undefined,
+        tags: dto.tagIds ? { set: dto.tagIds.map((id) => ({ id })) } : undefined,
       },
-      include: { author: { select: { id: true, name: true, email: true } } },
+      include: POST_INCLUDE,
     });
   }
 
@@ -68,7 +78,7 @@ export class PostsService {
     return this.prisma.post.update({
       where: { id },
       data: { publishedAt: new Date() },
-      include: { author: { select: { id: true, name: true, email: true } } },
+      include: POST_INCLUDE,
     });
   }
 
@@ -77,7 +87,7 @@ export class PostsService {
     return this.prisma.post.update({
       where: { id },
       data: { publishedAt: null },
-      include: { author: { select: { id: true, name: true, email: true } } },
+      include: POST_INCLUDE,
     });
   }
 

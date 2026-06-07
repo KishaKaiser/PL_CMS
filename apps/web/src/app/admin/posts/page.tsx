@@ -25,6 +25,8 @@ interface Post {
   createdAt: string;
   updatedAt: string;
   author: { id: string; name: string; email: string };
+  categories: { id: string; slug: string; name: string }[];
+  tags: { id: string; slug: string; name: string }[];
 }
 
 interface User {
@@ -44,6 +46,14 @@ interface PostForm {
   editorialStatus: EditorialStatus;
   scheduledAt: string;
   currentPublishedAt: string | null;
+  categoryIds: string[];
+  tagIds: string[];
+}
+
+interface TaxonomyItem {
+  id: string;
+  slug: string;
+  name: string;
 }
 
 // Minimum 1 minute lead time keeps minute-level scheduling from slipping into the past during save.
@@ -59,6 +69,8 @@ const emptyForm: PostForm = {
   editorialStatus: 'draft',
   scheduledAt: '',
   currentPublishedAt: null,
+  categoryIds: [],
+  tagIds: [],
 };
 
 function getPrimaryAction(status: EditorialStatus) {
@@ -81,6 +93,8 @@ function getPrimaryAction(status: EditorialStatus) {
 export default function AdminPostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [authors, setAuthors] = useState<User[]>([]);
+  const [categories, setCategories] = useState<TaxonomyItem[]>([]);
+  const [tags, setTags] = useState<TaxonomyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [form, setForm] = useState<PostForm>(emptyForm);
@@ -91,17 +105,25 @@ export default function AdminPostsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [postsRes, usersRes] = await Promise.all([
+      const [postsRes, usersRes, categoriesRes, tagsRes] = await Promise.all([
         fetch('/api/proxy/posts'),
         fetch('/api/proxy/users'),
+        fetch('/api/proxy/admin/categories'),
+        fetch('/api/proxy/admin/tags'),
       ]);
       if (!postsRes.ok) throw new Error('Failed to load posts');
       if (!usersRes.ok) throw new Error('Failed to load authors');
+      if (!categoriesRes.ok) throw new Error('Failed to load categories');
+      if (!tagsRes.ok) throw new Error('Failed to load tags');
 
       const nextPosts = (await postsRes.json()) as Post[];
       const nextAuthors = (await usersRes.json()) as User[];
+      const nextCategories = (await categoriesRes.json()) as TaxonomyItem[];
+      const nextTags = (await tagsRes.json()) as TaxonomyItem[];
       setPosts(nextPosts);
       setAuthors(nextAuthors);
+      setCategories(nextCategories);
+      setTags(nextTags);
       setForm((currentForm) => ({
         ...currentForm,
         authorId: currentForm.authorId || nextAuthors[0]?.id || '',
@@ -171,6 +193,8 @@ export default function AdminPostsPage() {
         featuredImageUrl: form.featuredImageUrl || null,
         authorId: form.authorId,
         publishedAt,
+        categoryIds: form.categoryIds,
+        tagIds: form.tagIds,
       };
 
       const url = editingId ? `/api/proxy/posts/${editingId}` : '/api/proxy/posts';
@@ -238,6 +262,8 @@ export default function AdminPostsPage() {
       editorialStatus,
       scheduledAt: editorialStatus === 'scheduled' ? toDatetimeLocalValue(post.publishedAt) : '',
       currentPublishedAt: post.publishedAt,
+      categoryIds: post.categories.map((category) => category.id),
+      tagIds: post.tags.map((tag) => tag.id),
     });
     setSlugTouched(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -248,6 +274,10 @@ export default function AdminPostsPage() {
     setForm({ ...emptyForm, authorId: authors[0]?.id ?? '' });
     setSlugTouched(false);
     setError('');
+  }
+
+  function toggleSelection(ids: string[], id: string) {
+    return ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id];
   }
 
   return (
@@ -426,6 +456,50 @@ export default function AdminPostsPage() {
               )}
             </section>
 
+            <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h3 className="text-sm font-semibold text-gray-900">Categories</h3>
+              <p className="mt-1 text-xs text-gray-500">Assign one or more categories for archive and discovery pages.</p>
+              <div className="mt-3 space-y-2">
+                {categories.map((category) => (
+                  <label key={category.id} className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={form.categoryIds.includes(category.id)}
+                      onChange={() =>
+                        setForm((currentForm) => ({
+                          ...currentForm,
+                          categoryIds: toggleSelection(currentForm.categoryIds, category.id),
+                        }))
+                      }
+                    />
+                    <span>{category.name}</span>
+                  </label>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h3 className="text-sm font-semibold text-gray-900">Tags</h3>
+              <p className="mt-1 text-xs text-gray-500">Tags help connect related posts and improve search browse paths.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {tags.map((tag) => (
+                  <label key={tag.id} className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={form.tagIds.includes(tag.id)}
+                      onChange={() =>
+                        setForm((currentForm) => ({
+                          ...currentForm,
+                          tagIds: toggleSelection(currentForm.tagIds, tag.id),
+                        }))
+                      }
+                    />
+                    <span>#{tag.name}</span>
+                  </label>
+                ))}
+              </div>
+            </section>
+
             <EditorPreview
               title={form.title}
               excerpt={form.excerpt}
@@ -493,6 +567,13 @@ export default function AdminPostsPage() {
                           <div>
                             <p className="font-medium text-gray-900">{post.title}</p>
                             <p className="text-xs text-gray-500">/blog/{post.slug}</p>
+                            {(post.categories.length > 0 || post.tags.length > 0) && (
+                              <p className="mt-1 text-xs text-gray-500">
+                                {post.categories.map((category) => category.name).join(', ')}
+                                {post.categories.length > 0 && post.tags.length > 0 ? ' • ' : ''}
+                                {post.tags.map((tag) => `#${tag.name}`).join(' ')}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </td>
