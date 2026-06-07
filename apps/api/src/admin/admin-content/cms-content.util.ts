@@ -15,15 +15,11 @@ export function sanitizeCmsHtml(content: string) {
   // Keep the allowlist intentionally small so authored CMS HTML can retain basic formatting without storing unsafe markup.
   return sanitizeHtml(content, {
     // Allow both semantic and presentational inline tags so pasted editor content keeps expected bold/italic formatting.
-    allowedTags: ['p', 'h2', 'h3', 'blockquote', 'ul', 'ol', 'li', 'strong', 'b', 'em', 'i', 'a', 'br', 'hr', 'img'],
+    allowedTags: ['p', 'h2', 'h3', 'blockquote', 'ul', 'ol', 'li', 'strong', 'b', 'em', 'i', 'a', 'br', 'hr'],
     allowedAttributes: {
       a: ['href', 'target', 'rel'],
-      img: ['src', 'alt', 'title'],
     },
     allowedSchemes: ['http', 'https', 'mailto'],
-    allowedSchemesByTag: {
-      img: ['http', 'https'],
-    },
     transformTags: {
       a: (_tagName, attribs) => {
         const nextAttribs = { ...attribs };
