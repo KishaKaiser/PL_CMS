@@ -1,4 +1,5 @@
 const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
+const CMS_REVALIDATE_SECONDS = 60;
 
 export interface PublicPage {
   id: string;
@@ -20,32 +21,55 @@ export interface PublicPost {
   author: { id: string; name: string };
 }
 
+function logCmsFetchError(path: string, status?: number) {
+  console.error(`[public-cms] Failed request to ${path}${status ? ` (status ${status})` : ''}`);
+}
+
+export function toPlainText(content: string): string {
+  return content.replace(/<[^>]*>/g, '');
+}
+
 export async function getPublishedPage(slug: string): Promise<PublicPage | null> {
+  const path = `/public/pages/${encodeURIComponent(slug)}`;
   try {
-    const res = await fetch(`${API_BASE}/public/pages/${encodeURIComponent(slug)}`, { cache: 'no-store' });
-    if (!res.ok) return null;
+    const res = await fetch(`${API_BASE}${path}`, { next: { revalidate: CMS_REVALIDATE_SECONDS } });
+    if (!res.ok) {
+      logCmsFetchError(path, res.status);
+      return null;
+    }
     return res.json() as Promise<PublicPage>;
   } catch {
+    logCmsFetchError(path);
     return null;
   }
 }
 
 export async function getPublishedPosts(): Promise<PublicPost[]> {
+  const path = '/public/posts';
   try {
-    const res = await fetch(`${API_BASE}/public/posts`, { cache: 'no-store' });
-    if (!res.ok) return [];
+    const res = await fetch(`${API_BASE}${path}`, { next: { revalidate: CMS_REVALIDATE_SECONDS } });
+    if (!res.ok) {
+      logCmsFetchError(path, res.status);
+      return [];
+    }
     return res.json() as Promise<PublicPost[]>;
   } catch {
+    logCmsFetchError(path);
     return [];
   }
 }
 
 export async function getPublishedPost(slug: string): Promise<PublicPost | null> {
+  const path = `/public/posts/${encodeURIComponent(slug)}`;
   try {
-    const res = await fetch(`${API_BASE}/public/posts/${encodeURIComponent(slug)}`, { cache: 'no-store' });
-    if (!res.ok) return null;
+    const res = await fetch(`${API_BASE}${path}`, { next: { revalidate: CMS_REVALIDATE_SECONDS } });
+    if (!res.ok) {
+      logCmsFetchError(path, res.status);
+      return null;
+    }
     return res.json() as Promise<PublicPost>;
   } catch {
+    logCmsFetchError(path);
     return null;
   }
 }

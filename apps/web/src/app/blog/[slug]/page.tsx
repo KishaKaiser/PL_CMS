@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getPublishedPost } from '../../../lib/public-cms';
+import { getPublishedPost, toPlainText } from '../../../lib/public-cms';
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -23,9 +23,9 @@ export default async function BlogPostPage({ params }: Props) {
         {new Date(post.publishedAt).toLocaleDateString()} • {post.author.name}
       </p>
 
-      {post.excerpt && <p className="mt-6 text-lg text-gray-600">{post.excerpt}</p>}
+      {post.excerpt && <p className="mt-6 text-lg text-gray-600">{toPlainText(post.excerpt)}</p>}
 
-      <article className="mt-6 whitespace-pre-wrap text-gray-800">{post.content}</article>
+      <article className="mt-6 whitespace-pre-wrap text-gray-800">{toPlainText(post.content)}</article>
     </main>
   );
 }

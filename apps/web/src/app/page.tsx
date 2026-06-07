@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import { getPublishedPage, getPublishedPosts } from '../lib/public-cms';
+import { getPublishedPage, getPublishedPosts, toPlainText } from '../lib/public-cms';
+
+const HOMEPAGE_EXCERPT_LENGTH = 120;
 
 export default async function HomePage() {
   const [homePage, posts] = await Promise.all([getPublishedPage('home'), getPublishedPosts()]);
@@ -10,7 +12,7 @@ export default async function HomePage() {
       <header className="rounded-lg border bg-white p-6 shadow-sm">
         <h1 className="text-4xl font-bold text-indigo-700">{homePage?.title ?? 'Psychic Link CMS'}</h1>
         <p className="mt-3 whitespace-pre-wrap text-gray-700">
-          {homePage?.content ?? 'Welcome to the public site. Read our latest posts or browse CMS pages.'}
+          {toPlainText(homePage?.content ?? 'Welcome to the public site. Read our latest posts or browse CMS pages.')}
         </p>
       </header>
 
@@ -38,7 +40,10 @@ export default async function HomePage() {
           <p className="text-gray-500">No published posts yet.</p>
         ) : (
           <div className="grid gap-4 md:grid-cols-3">
-            {featuredPosts.map((post) => (
+            {featuredPosts.map((post) => {
+              const preview = toPlainText(post.excerpt || post.content);
+
+              return (
               <article key={post.id} className="rounded-lg border bg-white p-4 shadow-sm">
                 <h3 className="text-lg font-semibold">
                   <Link href={`/blog/${post.slug}`} className="hover:underline">
@@ -47,10 +52,11 @@ export default async function HomePage() {
                 </h3>
                 <p className="mt-1 text-xs text-gray-500">{new Date(post.publishedAt).toLocaleDateString()}</p>
                 <p className="mt-2 text-sm text-gray-700">
-                  {post.excerpt || `${post.content.slice(0, 120)}${post.content.length > 120 ? '…' : ''}`}
+                  {preview.slice(0, HOMEPAGE_EXCERPT_LENGTH)}{preview.length > HOMEPAGE_EXCERPT_LENGTH ? '…' : ''}
                 </p>
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
