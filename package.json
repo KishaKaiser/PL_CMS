@@ -8,6 +8,7 @@
     "pnpm": ">=9.0.0"
   },
   "scripts": {
+    "setup": "node scripts/setup.mjs",
     "dev:api": "pnpm --filter @pl-cms/api dev",
     "dev:web": "pnpm --filter @pl-cms/web dev",
     "build": "pnpm -r build",
