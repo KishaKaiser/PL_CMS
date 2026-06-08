@@ -419,7 +419,7 @@ export default function AdminSettingsPage() {
       <div className="space-y-8">
         <section className="rounded-xl border bg-white p-6 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-lg font-semibold">Homepage &amp; blog route</h2>
+            <h2 className="text-lg font-semibold">Homepage & blog route</h2>
             <p className="text-sm text-gray-500">
               Choose how the public homepage behaves and which route acts as the main blog listing.
             </p>

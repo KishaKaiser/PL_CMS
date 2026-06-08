@@ -524,7 +524,18 @@ export class PublicContentService {
 
   private normalizeThemeSettings(value: string | undefined, postsPath: string): SiteThemeSettings {
     const parsed = this.parseJsonSetting<Partial<SiteThemeSettings>>(value);
-    const homepageSections = parsed?.homepageSections;
+    const homepageSections =
+      parsed?.homepageSections && typeof parsed.homepageSections === 'object'
+        ? parsed.homepageSections
+        : null;
+    const pageSection =
+      homepageSections?.pages && typeof homepageSections.pages === 'object'
+        ? homepageSections.pages
+        : null;
+    const postSection =
+      homepageSections?.posts && typeof homepageSections.posts === 'object'
+        ? homepageSections.posts
+        : null;
 
     return {
       primaryColor: this.getString(parsed?.primaryColor, DEFAULT_SITE_THEME.primaryColor),
@@ -537,12 +548,12 @@ export class PublicContentService {
       heroSecondaryHref: this.getString(parsed?.heroSecondaryHref, DEFAULT_SITE_THEME.heroSecondaryHref),
       homepageSections: {
         pages: {
-          enabled: this.getBoolean(homepageSections?.pages?.enabled, DEFAULT_SITE_THEME.homepageSections.pages.enabled),
-          title: this.getString(homepageSections?.pages?.title, DEFAULT_SITE_THEME.homepageSections.pages.title),
+          enabled: this.getBoolean(pageSection?.enabled, DEFAULT_SITE_THEME.homepageSections.pages.enabled),
+          title: this.getString(pageSection?.title, DEFAULT_SITE_THEME.homepageSections.pages.title),
         },
         posts: {
-          enabled: this.getBoolean(homepageSections?.posts?.enabled, DEFAULT_SITE_THEME.homepageSections.posts.enabled),
-          title: this.getString(homepageSections?.posts?.title, DEFAULT_SITE_THEME.homepageSections.posts.title),
+          enabled: this.getBoolean(postSection?.enabled, DEFAULT_SITE_THEME.homepageSections.posts.enabled),
+          title: this.getString(postSection?.title, DEFAULT_SITE_THEME.homepageSections.posts.title),
         },
       },
     };

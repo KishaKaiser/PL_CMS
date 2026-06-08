@@ -30,7 +30,7 @@ export async function PublicSiteShell({ children, siteConfig }: Props) {
 
           <nav className="flex flex-wrap items-center gap-3 text-sm">
             {config.menus.header.map((item, index) => (
-              <Link key={`${item.label}-${item.href}-${index}`} href={item.href} className="rounded px-3 py-2 hover:bg-gray-100">
+              <Link key={index} href={item.href} className="rounded px-3 py-2 hover:bg-gray-100">
                 {item.label}
               </Link>
             ))}
@@ -48,7 +48,7 @@ export async function PublicSiteShell({ children, siteConfig }: Props) {
           <p>{config.identity.footerText}</p>
           <div className="flex flex-wrap gap-4">
             {config.menus.footer.map((item, index) => (
-              <Link key={`${item.label}-${item.href}-${index}`} href={item.href} className="hover:underline" style={{ color: config.theme.primaryColor }}>
+              <Link key={index} href={item.href} className="hover:underline" style={{ color: config.theme.primaryColor }}>
                 {item.label}
               </Link>
             ))}
