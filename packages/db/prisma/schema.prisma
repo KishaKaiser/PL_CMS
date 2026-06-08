@@ -18,6 +18,7 @@ datasource db {
 enum Role {
   ADMIN
   ADVISOR
+  EDITOR
   CLIENT
 }
 
@@ -88,6 +89,7 @@ model User {
   receivedMessages  Message[]          @relation("ReceivedMessages")
   broadcastMessages BroadcastMessage[]
   auditLogs         AuditLog[]
+  contentRevisions  ContentRevision[]
   posts             Post[]
   orders            Order[]
   walletTransactions WalletTransaction[]
@@ -347,6 +349,23 @@ model SlugRedirect {
   @@unique([contentType, sourceSlug])
   @@index([contentType, targetSlug])
   @@map("slug_redirects")
+}
+
+model ContentRevision {
+  id          String   @id @default(cuid())
+  entityType  String
+  entityId    String
+  title       String
+  content     String
+  snapshot    Json
+  isAutosave  Boolean  @default(false)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  createdBy User @relation(fields: [createdById], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("content_revisions")
 }
 
 // ──────────────────────────────────────────────

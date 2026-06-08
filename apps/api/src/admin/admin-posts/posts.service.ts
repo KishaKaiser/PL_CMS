@@ -1,8 +1,13 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreatePostDto, UpdatePostDto } from './posts.dto';
+import {
+  MEDIA_ASSET_SELECT,
+  buildMediaAssetUrl,
+  serializeMediaAsset,
+} from '../admin-media/media.util';
 import { normalizeSlug, sanitizeCmsHtml } from '../admin-content/cms-content.util';
-import { MEDIA_ASSET_SELECT, buildMediaAssetUrl, serializeMediaAsset } from '../admin-media/media.util';
+import { BulkActionDto, CreatePostDto, UpdatePostDto } from './posts.dto';
 
 const POST_INCLUDE = {
   author: { select: { id: true, name: true, email: true } },
@@ -15,8 +20,16 @@ const POST_INCLUDE = {
 export class PostsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll() {
+  async findAll(status?: string) {
+    const now = new Date();
+    let where: Prisma.PostWhereInput = {};
+
+    if (status === 'published') where = { publishedAt: { lte: now, not: null } };
+    else if (status === 'draft') where = { publishedAt: null };
+    else if (status === 'scheduled') where = { publishedAt: { gt: now } };
+
     const posts = await this.prisma.post.findMany({
+      where,
       orderBy: { updatedAt: 'desc' },
       include: POST_INCLUDE,
     });
@@ -36,23 +49,30 @@ export class PostsService {
     const slug = normalizeSlug(dto.slug);
     const existing = await this.prisma.post.findUnique({ where: { slug } });
     if (existing) throw new ConflictException(`Slug "${slug}" already exists`);
-    const featuredMedia = await this.resolveFeaturedMedia(dto.featuredMediaId, dto.featuredImageUrl);
-    return this.prisma.post.create({
-      data: {
-        slug,
-        title: dto.title,
-        metaTitle: this.normalizeMetadataField(dto.metaTitle),
-        metaDescription: this.normalizeMetadataField(dto.metaDescription),
-        excerpt: dto.excerpt ?? null,
-        content: sanitizeCmsHtml(dto.content),
-        ...featuredMedia,
-        publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : null,
-        authorId: dto.authorId,
-        categories: dto.categoryIds ? { connect: dto.categoryIds.map((id) => ({ id })) } : undefined,
-        tags: dto.tagIds ? { connect: dto.tagIds.map((id) => ({ id })) } : undefined,
-      },
-      include: POST_INCLUDE,
-    }).then((post) => this.serializePost(post));
+    const featuredMedia = await this.resolveFeaturedMedia(
+      dto.featuredMediaId,
+      dto.featuredImageUrl,
+    );
+    return this.prisma.post
+      .create({
+        data: {
+          slug,
+          title: dto.title,
+          metaTitle: this.normalizeMetadataField(dto.metaTitle),
+          metaDescription: this.normalizeMetadataField(dto.metaDescription),
+          excerpt: dto.excerpt ?? null,
+          content: sanitizeCmsHtml(dto.content),
+          ...featuredMedia,
+          publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : null,
+          authorId: dto.authorId,
+          categories: dto.categoryIds
+            ? { connect: dto.categoryIds.map((id) => ({ id })) }
+            : undefined,
+          tags: dto.tagIds ? { connect: dto.tagIds.map((id) => ({ id })) } : undefined,
+        },
+        include: POST_INCLUDE,
+      })
+      .then((post) => this.serializePost(post));
   }
 
   async update(id: string, dto: UpdatePostDto) {
@@ -64,7 +84,8 @@ export class PostsService {
     const slug = dto.slug ? normalizeSlug(dto.slug) : undefined;
     if (slug) {
       const existing = await this.prisma.post.findUnique({ where: { slug } });
-      if (existing && existing.id !== id) throw new ConflictException(`Slug "${slug}" already exists`);
+      if (existing && existing.id !== id)
+        throw new ConflictException(`Slug "${slug}" already exists`);
     }
 
     const featuredMedia =
@@ -89,16 +110,26 @@ export class PostsService {
         data: {
           slug,
           title: dto.title,
-          metaTitle: dto.metaTitle === undefined ? undefined : this.normalizeMetadataField(dto.metaTitle),
+          metaTitle:
+            dto.metaTitle === undefined ? undefined : this.normalizeMetadataField(dto.metaTitle),
           metaDescription:
-            dto.metaDescription === undefined ? undefined : this.normalizeMetadataField(dto.metaDescription),
+            dto.metaDescription === undefined
+              ? undefined
+              : this.normalizeMetadataField(dto.metaDescription),
           excerpt: dto.excerpt === undefined ? undefined : dto.excerpt,
           content: dto.content === undefined ? undefined : sanitizeCmsHtml(dto.content),
           ...featuredMedia,
-          publishedAt: dto.publishedAt === null ? null : dto.publishedAt ? new Date(dto.publishedAt) : undefined,
+          publishedAt:
+            dto.publishedAt === null
+              ? null
+              : dto.publishedAt
+                ? new Date(dto.publishedAt)
+                : undefined,
           authorId: dto.authorId,
-          categories: dto.categoryIds ? { set: dto.categoryIds.map((id) => ({ id })) } : undefined,
-          tags: dto.tagIds ? { set: dto.tagIds.map((id) => ({ id })) } : undefined,
+          categories: dto.categoryIds
+            ? { set: dto.categoryIds.map((categoryId) => ({ id: categoryId })) }
+            : undefined,
+          tags: dto.tagIds ? { set: dto.tagIds.map((tagId) => ({ id: tagId })) } : undefined,
         },
         include: POST_INCLUDE,
       });
@@ -139,20 +170,48 @@ export class PostsService {
 
   async publish(id: string) {
     await this.findOne(id);
-    return this.prisma.post.update({
-      where: { id },
-      data: { publishedAt: new Date() },
-      include: POST_INCLUDE,
-    }).then((post) => this.serializePost(post));
+    return this.prisma.post
+      .update({
+        where: { id },
+        data: { publishedAt: new Date() },
+        include: POST_INCLUDE,
+      })
+      .then((post) => this.serializePost(post));
   }
 
   async unpublish(id: string) {
     await this.findOne(id);
-    return this.prisma.post.update({
-      where: { id },
-      data: { publishedAt: null },
-      include: POST_INCLUDE,
-    }).then((post) => this.serializePost(post));
+    return this.prisma.post
+      .update({
+        where: { id },
+        data: { publishedAt: null },
+        include: POST_INCLUDE,
+      })
+      .then((post) => this.serializePost(post));
+  }
+
+  async bulkAction(dto: BulkActionDto, _actorId: string) {
+    const { action, ids } = dto;
+    if (ids.length === 0) return { affected: 0 };
+
+    if (action === 'publish') {
+      const result = await this.prisma.post.updateMany({
+        where: { id: { in: ids } },
+        data: { publishedAt: new Date() },
+      });
+      return { affected: result.count };
+    }
+
+    if (action === 'unpublish') {
+      const result = await this.prisma.post.updateMany({
+        where: { id: { in: ids } },
+        data: { publishedAt: null },
+      });
+      return { affected: result.count };
+    }
+
+    const result = await this.prisma.post.deleteMany({ where: { id: { in: ids } } });
+    return { affected: result.count };
   }
 
   async remove(id: string) {
@@ -160,7 +219,10 @@ export class PostsService {
     return this.prisma.post.delete({ where: { id } });
   }
 
-  private async resolveFeaturedMedia(featuredMediaId?: string | null, featuredImageUrl?: string | null) {
+  private async resolveFeaturedMedia(
+    featuredMediaId?: string | null,
+    featuredImageUrl?: string | null,
+  ) {
     if (featuredMediaId) {
       const media = await this.prisma.mediaAsset.findUnique({ where: { id: featuredMediaId } });
       if (!media) throw new NotFoundException(`Media asset ${featuredMediaId} not found`);
@@ -176,18 +238,20 @@ export class PostsService {
     };
   }
 
-  private serializePost(post: {
-    featuredMedia: {
-      id: string;
-      originalName: string;
-      title: string;
-      altText: string | null;
-      mimeType: string;
-      sizeBytes: number;
-      createdAt: Date;
-      updatedAt: Date;
-    } | null;
-  } & Record<string, unknown>) {
+  private serializePost(
+    post: {
+      featuredMedia: {
+        id: string;
+        originalName: string;
+        title: string;
+        altText: string | null;
+        mimeType: string;
+        sizeBytes: number;
+        createdAt: Date;
+        updatedAt: Date;
+      } | null;
+    } & Record<string, unknown>,
+  ) {
     return {
       ...post,
       featuredMedia: post.featuredMedia ? serializeMediaAsset(post.featuredMedia) : null,

@@ -44,7 +44,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (payload.role !== 'ADMIN') {
+  if (payload.role !== 'ADMIN' && payload.role !== 'EDITOR') {
     return NextResponse.redirect(new URL('/', req.url));
   }
 

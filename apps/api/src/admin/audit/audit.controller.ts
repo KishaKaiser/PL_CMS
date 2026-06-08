@@ -1,7 +1,7 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { RolesGuard, Roles } from '../../auth/roles.guard';
 import { Role } from '@pl-cms/shared';
+import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { AuditService } from './audit.service';
 
 @Controller('audit')
@@ -10,5 +10,13 @@ import { AuditService } from './audit.service';
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
-  @Get() findAll() { return this.auditService.findAll(); }
+  @Get()
+  findAll(
+    @Query('entity') entity?: string,
+    @Query('actorId') actorId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.auditService.findAll({ entity, actorId, from, to });
+  }
 }

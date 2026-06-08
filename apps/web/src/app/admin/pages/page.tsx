@@ -1,8 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RevisionsPanel } from '../../../components/admin/revisions-panel';
 import { EditorPreview } from '../../../components/admin/editor-preview';
-import { MediaLibrary, type MediaAsset, buildMediaEmbedHtml } from '../../../components/admin/media-library';
+import {
+  MediaLibrary,
+  type MediaAsset,
+  buildMediaEmbedHtml,
+} from '../../../components/admin/media-library';
 import { RichTextEditor } from '../../../components/admin/rich-text-editor';
 import {
   type EditorialStatus,
@@ -42,8 +47,18 @@ interface PageForm {
   currentPublishedAt: string | null;
 }
 
-// Minimum 1 minute lead time keeps minute-level scheduling from slipping into the past during save.
+type StatusFilter = 'all' | 'published' | 'scheduled' | 'draft';
+type AutosaveState = 'idle' | 'unsaved' | 'saving' | 'saved';
+
+const FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'published', label: 'Published' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'draft', label: 'Draft' },
+];
+
 const SCHEDULE_MIN_LEAD_MS = 60_000;
+const AUTOSAVE_DELAY_MS = 30_000;
 
 const emptyForm: PageForm = {
   slug: '',
@@ -75,6 +90,32 @@ function getPrimaryAction(status: EditorialStatus) {
   }
 }
 
+function getAutosaveBadgeClass(state: AutosaveState) {
+  switch (state) {
+    case 'saving':
+      return 'bg-blue-100 text-blue-700';
+    case 'saved':
+      return 'bg-green-100 text-green-700';
+    case 'unsaved':
+      return 'bg-amber-100 text-amber-700';
+    default:
+      return 'bg-gray-100 text-gray-600';
+  }
+}
+
+function getAutosaveLabel(state: AutosaveState) {
+  switch (state) {
+    case 'saving':
+      return 'Saving…';
+    case 'saved':
+      return 'Saved';
+    case 'unsaved':
+      return 'Unsaved changes';
+    default:
+      return 'Autosave ready';
+  }
+}
+
 export default function AdminPagesPage() {
   const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,16 +123,26 @@ export default function AdminPagesPage() {
   const [form, setForm] = useState<PageForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
   const [featuredMedia, setFeaturedMedia] = useState<MediaAsset | null>(null);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  const [showRevisions, setShowRevisions] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [autosaveState, setAutosaveState] = useState<AutosaveState>('idle');
+  const [revisionRefreshKey, setRevisionRefreshKey] = useState(0);
+  const suppressAutosaveRef = useRef(true);
 
-  const fetchPages = useCallback(async () => {
+  const fetchPages = useCallback(async (nextStatus: StatusFilter) => {
     setLoading(true);
+    setError('');
     try {
-      const res = await fetch('/api/proxy/pages');
+      const query = nextStatus === 'all' ? '' : `?status=${nextStatus}`;
+      const res = await fetch(`/api/proxy/pages${query}`);
       if (!res.ok) throw new Error('Failed to load pages');
       setPages((await res.json()) as Page[]);
+      setSelectedIds([]);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -100,8 +151,8 @@ export default function AdminPagesPage() {
   }, []);
 
   useEffect(() => {
-    void fetchPages();
-  }, [fetchPages]);
+    void fetchPages(statusFilter);
+  }, [fetchPages, statusFilter]);
 
   const slugError = useMemo(() => {
     if (!form.slug) return 'Slug is required.';
@@ -119,6 +170,85 @@ export default function AdminPagesPage() {
     }
     return new Date().toISOString();
   }, [form.currentPublishedAt, form.editorialStatus, form.scheduledAt]);
+
+  useEffect(() => {
+    if (!editingId) return;
+    if (suppressAutosaveRef.current) {
+      suppressAutosaveRef.current = false;
+      return;
+    }
+
+    setAutosaveState('unsaved');
+    const timer = window.setTimeout(async () => {
+      setAutosaveState('saving');
+      try {
+        const res = await fetch(`/api/proxy/pages/${editingId}/autosave`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildAutosavePayload(form, previewPublishedAt)),
+        });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { message?: string };
+          throw new Error(data.message ?? 'Autosave failed');
+        }
+        setAutosaveState('saved');
+        setRevisionRefreshKey((currentValue) => currentValue + 1);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Autosave failed');
+        setAutosaveState('unsaved');
+      }
+    }, AUTOSAVE_DELAY_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [editingId, form, previewPublishedAt]);
+
+  function buildAutosavePayload(currentForm: PageForm, currentPublishedAt: string | null) {
+    return {
+      slug: currentForm.slug,
+      title: currentForm.title,
+      metaTitle: currentForm.metaTitle || null,
+      metaDescription: currentForm.metaDescription || null,
+      content: currentForm.content,
+      featuredMediaId: currentForm.featuredMediaId,
+      featuredImageUrl: currentForm.featuredMediaId ? null : currentForm.featuredImageUrl || null,
+      publishedAt: currentPublishedAt,
+    };
+  }
+
+  function applyPageToForm(page: Page) {
+    suppressAutosaveRef.current = true;
+    const editorialStatus = getEditorialStatus(page.publishedAt);
+    setEditingId(page.id);
+    setForm({
+      slug: page.slug,
+      title: page.title,
+      metaTitle: page.metaTitle ?? '',
+      metaDescription: page.metaDescription ?? '',
+      content: page.content,
+      featuredImageUrl: page.featuredImageUrl ?? '',
+      featuredMediaId: page.featuredMedia?.id ?? null,
+      editorialStatus,
+      scheduledAt: editorialStatus === 'scheduled' ? toDatetimeLocalValue(page.publishedAt) : '',
+      currentPublishedAt: page.publishedAt,
+    });
+    setFeaturedMedia(page.featuredMedia);
+    setShowMediaLibrary(false);
+    setSlugTouched(true);
+    setAutosaveState('saved');
+  }
+
+  function updateForm(updater: (currentForm: PageForm) => PageForm) {
+    setForm((currentForm) => updater(currentForm));
+    if (editingId) setAutosaveState('unsaved');
+  }
+
+  async function refreshEditedPage(id: string) {
+    const res = await fetch(`/api/proxy/pages/${id}`);
+    if (!res.ok) throw new Error('Failed to refresh page');
+    const page = (await res.json()) as Page;
+    applyPageToForm(page);
+    await fetchPages(statusFilter);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -162,20 +292,13 @@ export default function AdminPagesPage() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const d = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(d.message ?? 'Save failed');
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? 'Save failed');
       }
-      const saved = (await res.json()) as Page;
-      if (editingId) {
-        setPages((currentPages) => currentPages.map((page) => (page.id === editingId ? saved : page)));
-      } else {
-        setPages((currentPages) => [saved, ...currentPages]);
-      }
-      setForm(emptyForm);
-      setFeaturedMedia(null);
-      setEditingId(null);
-      setShowMediaLibrary(false);
-      setSlugTouched(false);
+
+      await res.json();
+      resetForm();
+      await fetchPages(statusFilter);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -188,7 +311,8 @@ export default function AdminPagesPage() {
     try {
       const res = await fetch(`/api/proxy/pages/${id}`, { method: 'DELETE' });
       if (!res.ok && res.status !== 204) throw new Error('Delete failed');
-      setPages((currentPages) => currentPages.filter((page) => page.id !== id));
+      if (editingId === id) resetForm();
+      await fetchPages(statusFilter);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error');
     }
@@ -201,45 +325,60 @@ export default function AdminPagesPage() {
     try {
       const res = await fetch(`/api/proxy/pages/${page.id}/${action}`, { method: 'PATCH' });
       if (!res.ok) throw new Error('Action failed');
-      const updated = (await res.json()) as Page;
-      setPages((currentPages) => currentPages.map((entry) => (entry.id === page.id ? updated : entry)));
+      await fetchPages(statusFilter);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error');
     }
   }
 
+  async function handleBulkAction(action: 'publish' | 'unpublish' | 'delete') {
+    if (selectedIds.length === 0) return;
+    if (action === 'delete' && !confirm('Delete all selected pages?')) return;
+
+    setBulkAction(action);
+    setError('');
+    try {
+      const res = await fetch('/api/proxy/pages/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ids: selectedIds }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? 'Bulk action failed');
+      }
+      await fetchPages(statusFilter);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setBulkAction(null);
+    }
+  }
+
   function startEdit(page: Page) {
-    const editorialStatus = getEditorialStatus(page.publishedAt);
-    setEditingId(page.id);
-    setForm({
-      slug: page.slug,
-      title: page.title,
-      metaTitle: page.metaTitle ?? '',
-      metaDescription: page.metaDescription ?? '',
-      content: page.content,
-      featuredImageUrl: page.featuredImageUrl ?? '',
-      featuredMediaId: page.featuredMedia?.id ?? null,
-      editorialStatus,
-      scheduledAt: editorialStatus === 'scheduled' ? toDatetimeLocalValue(page.publishedAt) : '',
-      currentPublishedAt: page.publishedAt,
-    });
-    setFeaturedMedia(page.featuredMedia);
-    setShowMediaLibrary(false);
-    setSlugTouched(true);
+    applyPageToForm(page);
+    setShowRevisions(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function resetForm() {
+    suppressAutosaveRef.current = true;
     setEditingId(null);
     setForm(emptyForm);
     setFeaturedMedia(null);
     setShowMediaLibrary(false);
     setSlugTouched(false);
     setError('');
+    setShowRevisions(false);
+    setAutosaveState('idle');
+  }
+
+  function toggleSelection(ids: string[], id: string) {
+    return ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id];
   }
 
   function insertMediaIntoContent(asset: MediaAsset) {
-    setForm((currentForm) => ({
+    updateForm((currentForm) => ({
       ...currentForm,
       content: `${currentForm.content}${currentForm.content ? '\n' : ''}${buildMediaEmbedHtml(asset)}`,
     }));
@@ -251,7 +390,7 @@ export default function AdminPagesPage() {
         <div>
           <h1 className="text-3xl font-bold">Pages</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Create draft, scheduled, and published pages with richer editing tools.
+            Create draft, scheduled, and published pages with autosave and revision history.
           </p>
         </div>
         {editingId && (
@@ -266,17 +405,41 @@ export default function AdminPagesPage() {
       </div>
 
       <section className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">{editingId ? 'Edit Page' : 'Create Page'}</h2>
-            <p className="text-sm text-gray-500">Use the visual editor and publishing sidebar for a smoother workflow.</p>
+            <p className="text-sm text-gray-500">
+              Use the visual editor and publishing sidebar for a smoother workflow.
+            </p>
           </div>
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ${getEditorialStatusBadgeClass(form.editorialStatus)}`}>
-            {getEditorialStatusLabel(form.editorialStatus)}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {editingId && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowRevisions((currentValue) => !currentValue)}
+                  className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  {showRevisions ? 'Hide revisions' : 'Revisions'}
+                </button>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-medium ${getAutosaveBadgeClass(autosaveState)}`}
+                >
+                  {getAutosaveLabel(autosaveState)}
+                </span>
+              </>
+            )}
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-medium ${getEditorialStatusBadgeClass(form.editorialStatus)}`}
+            >
+              {getEditorialStatusLabel(form.editorialStatus)}
+            </span>
+          </div>
         </div>
 
-        {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
+        {error && (
+          <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
+        )}
 
         <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-5">
@@ -287,7 +450,7 @@ export default function AdminPagesPage() {
                 value={form.title}
                 onChange={(event) => {
                   const title = event.target.value;
-                  setForm((currentForm) => ({
+                  updateForm((currentForm) => ({
                     ...currentForm,
                     title,
                     slug: slugTouched ? currentForm.slug : slugify(title),
@@ -305,7 +468,10 @@ export default function AdminPagesPage() {
                   type="button"
                   onClick={() => {
                     setSlugTouched(true);
-                    setForm((currentForm) => ({ ...currentForm, slug: slugify(currentForm.title || currentForm.slug) }));
+                    updateForm((currentForm) => ({
+                      ...currentForm,
+                      slug: slugify(currentForm.title || currentForm.slug),
+                    }));
                   }}
                   className="text-xs font-medium text-indigo-600 hover:underline"
                 >
@@ -317,7 +483,10 @@ export default function AdminPagesPage() {
                 value={form.slug}
                 onChange={(event) => {
                   setSlugTouched(true);
-                  setForm((currentForm) => ({ ...currentForm, slug: slugify(event.target.value) }));
+                  updateForm((currentForm) => ({
+                    ...currentForm,
+                    slug: slugify(event.target.value),
+                  }));
                 }}
                 className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-3 font-mono text-sm"
                 placeholder="about-psychic-link"
@@ -332,25 +501,38 @@ export default function AdminPagesPage() {
 
             <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
               <h3 className="text-sm font-semibold text-gray-900">SEO</h3>
-              <p className="mt-1 text-xs text-gray-500">Optional fields for search results and social previews. Open Graph falls back to these values automatically.</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Optional fields for search results and social previews. Open Graph falls back to
+                these values automatically.
+              </p>
 
               <div className="mt-4 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Meta title</label>
                   <input
                     value={form.metaTitle}
-                    onChange={(event) => setForm((currentForm) => ({ ...currentForm, metaTitle: event.target.value }))}
+                    onChange={(event) =>
+                      updateForm((currentForm) => ({
+                        ...currentForm,
+                        metaTitle: event.target.value,
+                      }))
+                    }
                     className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm"
                     placeholder="About Psychic Link | Psychic Link CMS"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Meta description</label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Meta description
+                  </label>
                   <textarea
                     value={form.metaDescription}
                     onChange={(event) =>
-                      setForm((currentForm) => ({ ...currentForm, metaDescription: event.target.value }))
+                      updateForm((currentForm) => ({
+                        ...currentForm,
+                        metaDescription: event.target.value,
+                      }))
                     }
                     rows={3}
                     className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm"
@@ -362,7 +544,10 @@ export default function AdminPagesPage() {
 
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">Page Content *</label>
-              <RichTextEditor value={form.content} onChange={(content) => setForm((currentForm) => ({ ...currentForm, content }))} />
+              <RichTextEditor
+                value={form.content}
+                onChange={(content) => updateForm((currentForm) => ({ ...currentForm, content }))}
+              />
             </div>
           </div>
 
@@ -375,12 +560,13 @@ export default function AdminPagesPage() {
                   <select
                     value={form.editorialStatus}
                     onChange={(event) =>
-                      setForm((currentForm) => ({
+                      updateForm((currentForm) => ({
                         ...currentForm,
                         editorialStatus: event.target.value as EditorialStatus,
                         scheduledAt:
                           event.target.value === 'scheduled'
-                            ? currentForm.scheduledAt || toDatetimeLocalValue(currentForm.currentPublishedAt)
+                            ? currentForm.scheduledAt ||
+                              toDatetimeLocalValue(currentForm.currentPublishedAt)
                             : currentForm.scheduledAt,
                       }))
                     }
@@ -398,7 +584,12 @@ export default function AdminPagesPage() {
                     <input
                       type="datetime-local"
                       value={form.scheduledAt}
-                      onChange={(event) => setForm((currentForm) => ({ ...currentForm, scheduledAt: event.target.value }))}
+                      onChange={(event) =>
+                        updateForm((currentForm) => ({
+                          ...currentForm,
+                          scheduledAt: event.target.value,
+                        }))
+                      }
                       className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                     />
                   </div>
@@ -410,7 +601,9 @@ export default function AdminPagesPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900">Featured Image</h3>
-                  <p className="mt-1 text-xs text-gray-500">Choose a library asset for reuse or paste an external image URL.</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Choose a library asset for reuse or paste an external image URL.
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -423,7 +616,8 @@ export default function AdminPagesPage() {
 
               {featuredMedia && (
                 <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-                  Selected from media library: <span className="font-medium">{featuredMedia.title}</span>
+                  Selected from media library:{' '}
+                  <span className="font-medium">{featuredMedia.title}</span>
                 </div>
               )}
 
@@ -432,7 +626,7 @@ export default function AdminPagesPage() {
                 value={form.featuredMediaId ? '' : form.featuredImageUrl}
                 onChange={(event) => {
                   setFeaturedMedia(null);
-                  setForm((currentForm) => ({
+                  updateForm((currentForm) => ({
                     ...currentForm,
                     featuredMediaId: null,
                     featuredImageUrl: event.target.value,
@@ -448,7 +642,7 @@ export default function AdminPagesPage() {
                     type="button"
                     onClick={() => {
                       setFeaturedMedia(null);
-                      setForm((currentForm) => ({
+                      updateForm((currentForm) => ({
                         ...currentForm,
                         featuredMediaId: null,
                         featuredImageUrl: '',
@@ -478,7 +672,7 @@ export default function AdminPagesPage() {
                     onlyImages
                     onSelect={(asset) => {
                       setFeaturedMedia(asset);
-                      setForm((currentForm) => ({
+                      updateForm((currentForm) => ({
                         ...currentForm,
                         featuredMediaId: asset.id,
                         featuredImageUrl: asset.url,
@@ -489,6 +683,15 @@ export default function AdminPagesPage() {
                 </div>
               )}
             </section>
+
+            {editingId && (
+              <RevisionsPanel
+                endpointBase={`/api/proxy/pages/${editingId}`}
+                open={showRevisions}
+                refreshKey={revisionRefreshKey}
+                onRestored={() => refreshEditedPage(editingId)}
+              />
+            )}
 
             <EditorPreview
               title={form.title}
@@ -507,7 +710,13 @@ export default function AdminPagesPage() {
               >
                 {saving ? 'Saving…' : editingId ? 'Update Page' : 'Create Page'}
               </button>
-              {(editingId || form.title || form.slug || form.metaTitle || form.metaDescription || form.content || form.featuredImageUrl) && (
+              {(editingId ||
+                form.title ||
+                form.slug ||
+                form.metaTitle ||
+                form.metaDescription ||
+                form.content ||
+                form.featuredImageUrl) && (
                 <button
                   type="button"
                   onClick={resetForm}
@@ -522,19 +731,82 @@ export default function AdminPagesPage() {
       </section>
 
       <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">All Pages</h2>
-          <p className="text-sm text-gray-500">{pages.length} total</p>
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">All Pages</h2>
+            <p className="text-sm text-gray-500">{pages.length} matching pages</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setStatusFilter(option.value)}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                  statusFilter === option.value
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
-        {loading ? <p className="text-gray-500">Loading…</p> : pages.length === 0 ? (
-          <p className="text-gray-500">No pages yet.</p>
+
+        {selectedIds.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3">
+            <p className="text-sm font-medium text-indigo-900">{selectedIds.length} selected</p>
+            <button
+              type="button"
+              onClick={() => void handleBulkAction('publish')}
+              disabled={bulkAction !== null}
+              className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              {bulkAction === 'publish' ? 'Publishing…' : 'Publish'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkAction('unpublish')}
+              disabled={bulkAction !== null}
+              className="rounded bg-yellow-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-yellow-600 disabled:opacity-50"
+            >
+              {bulkAction === 'unpublish' ? 'Updating…' : 'Unpublish'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkAction('delete')}
+              disabled={bulkAction !== null}
+              className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {bulkAction === 'delete' ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="text-gray-500">Loading…</p>
+        ) : pages.length === 0 ? (
+          <p className="text-gray-500">No pages found for this filter.</p>
         ) : (
           <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={pages.length > 0 && selectedIds.length === pages.length}
+                      onChange={(event) =>
+                        setSelectedIds(event.target.checked ? pages.map((page) => page.id) : [])
+                      }
+                    />
+                  </th>
                   {['Title', 'Slug', 'Status', 'Updated', ''].map((heading) => (
-                    <th key={heading} className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                    <th
+                      key={heading}
+                      className="px-4 py-3 text-left text-xs font-semibold text-gray-600"
+                    >
                       {heading}
                     </th>
                   ))}
@@ -548,42 +820,64 @@ export default function AdminPagesPage() {
                   return (
                     <tr key={page.id} className="border-t align-top hover:bg-gray-50">
                       <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(page.id)}
+                          onChange={() => setSelectedIds((ids) => toggleSelection(ids, page.id))}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex items-start gap-3">
                           {page.featuredImageUrl && (
-                            <img src={page.featuredImageUrl} alt={page.title} className="h-12 w-12 rounded object-cover" />
+                            <img
+                              src={page.featuredImageUrl}
+                              alt={page.title}
+                              className="h-12 w-12 rounded object-cover"
+                            />
                           )}
                           <div>
                             <p className="font-medium text-gray-900">{page.title}</p>
-                            <p className="text-xs text-gray-500">Created {new Date(page.createdAt).toLocaleDateString()}</p>
+                            <p className="text-xs text-gray-500">
+                              Created {new Date(page.createdAt).toLocaleDateString()}
+                            </p>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">/{page.slug}</td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${getEditorialStatusBadgeClass(status)}`}>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${getEditorialStatusBadgeClass(status)}`}
+                        >
                           {getEditorialStatusLabel(status)}
                         </span>
                         {page.publishedAt && (
-                          <p className="mt-2 text-xs text-gray-500">{new Date(page.publishedAt).toLocaleString()}</p>
+                          <p className="mt-2 text-xs text-gray-500">
+                            {new Date(page.publishedAt).toLocaleString()}
+                          </p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{new Date(page.updatedAt).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">
+                        {new Date(page.updatedAt).toLocaleString()}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">
                           <button
+                            type="button"
                             onClick={() => startEdit(page)}
                             className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
                           >
                             Edit
                           </button>
                           <button
-                            onClick={() => handlePrimaryAction(page)}
+                            type="button"
+                            onClick={() => void handlePrimaryAction(page)}
                             className={`rounded px-2 py-1 text-xs ${primaryAction.className}`}
                           >
                             {primaryAction.label}
                           </button>
                           <button
-                            onClick={() => handleDelete(page.id)}
+                            type="button"
+                            onClick={() => void handleDelete(page.id)}
                             className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200"
                           >
                             Delete

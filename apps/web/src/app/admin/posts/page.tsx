@@ -1,8 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RevisionsPanel } from '../../../components/admin/revisions-panel';
 import { EditorPreview } from '../../../components/admin/editor-preview';
-import { MediaLibrary, type MediaAsset, buildMediaEmbedHtml } from '../../../components/admin/media-library';
+import {
+  MediaLibrary,
+  type MediaAsset,
+  buildMediaEmbedHtml,
+} from '../../../components/admin/media-library';
 import { RichTextEditor } from '../../../components/admin/rich-text-editor';
 import {
   type EditorialStatus,
@@ -63,8 +68,18 @@ interface TaxonomyItem {
   name: string;
 }
 
-// Minimum 1 minute lead time keeps minute-level scheduling from slipping into the past during save.
+type StatusFilter = 'all' | 'published' | 'scheduled' | 'draft';
+type AutosaveState = 'idle' | 'unsaved' | 'saving' | 'saved';
+
+const FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'published', label: 'Published' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'draft', label: 'Draft' },
+];
+
 const SCHEDULE_MIN_LEAD_MS = 60_000;
+const AUTOSAVE_DELAY_MS = 30_000;
 
 const emptyForm: PostForm = {
   slug: '',
@@ -100,6 +115,32 @@ function getPrimaryAction(status: EditorialStatus) {
   }
 }
 
+function getAutosaveBadgeClass(state: AutosaveState) {
+  switch (state) {
+    case 'saving':
+      return 'bg-blue-100 text-blue-700';
+    case 'saved':
+      return 'bg-green-100 text-green-700';
+    case 'unsaved':
+      return 'bg-amber-100 text-amber-700';
+    default:
+      return 'bg-gray-100 text-gray-600';
+  }
+}
+
+function getAutosaveLabel(state: AutosaveState) {
+  switch (state) {
+    case 'saving':
+      return 'Saving…';
+    case 'saved':
+      return 'Saved';
+    case 'unsaved':
+      return 'Unsaved changes';
+    default:
+      return 'Autosave ready';
+  }
+}
+
 export default function AdminPostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [authors, setAuthors] = useState<User[]>([]);
@@ -110,15 +151,24 @@ export default function AdminPostsPage() {
   const [form, setForm] = useState<PostForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
   const [featuredMedia, setFeaturedMedia] = useState<MediaAsset | null>(null);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  const [showRevisions, setShowRevisions] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [autosaveState, setAutosaveState] = useState<AutosaveState>('idle');
+  const [revisionRefreshKey, setRevisionRefreshKey] = useState(0);
+  const suppressAutosaveRef = useRef(true);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (nextStatus: StatusFilter) => {
     setLoading(true);
+    setError('');
     try {
+      const statusQuery = nextStatus === 'all' ? '' : `?status=${nextStatus}`;
       const [postsRes, usersRes, categoriesRes, tagsRes] = await Promise.all([
-        fetch('/api/proxy/posts'),
+        fetch(`/api/proxy/posts${statusQuery}`),
         fetch('/api/proxy/users'),
         fetch('/api/proxy/admin/categories'),
         fetch('/api/proxy/admin/tags'),
@@ -136,6 +186,7 @@ export default function AdminPostsPage() {
       setAuthors(nextAuthors);
       setCategories(nextCategories);
       setTags(nextTags);
+      setSelectedIds([]);
       setForm((currentForm) => ({
         ...currentForm,
         authorId: currentForm.authorId || nextAuthors[0]?.id || '',
@@ -148,8 +199,8 @@ export default function AdminPostsPage() {
   }, []);
 
   useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
+    void fetchData(statusFilter);
+  }, [fetchData, statusFilter]);
 
   const selectedAuthor = useMemo(
     () => authors.find((author) => author.id === form.authorId) ?? null,
@@ -172,6 +223,93 @@ export default function AdminPostsPage() {
     }
     return new Date().toISOString();
   }, [form.currentPublishedAt, form.editorialStatus, form.scheduledAt]);
+
+  useEffect(() => {
+    if (!editingId) return;
+    if (suppressAutosaveRef.current) {
+      suppressAutosaveRef.current = false;
+      return;
+    }
+
+    setAutosaveState('unsaved');
+    const timer = window.setTimeout(async () => {
+      setAutosaveState('saving');
+      try {
+        const res = await fetch(`/api/proxy/posts/${editingId}/autosave`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildAutosavePayload(form, previewPublishedAt)),
+        });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { message?: string };
+          throw new Error(data.message ?? 'Autosave failed');
+        }
+        setAutosaveState('saved');
+        setRevisionRefreshKey((currentValue) => currentValue + 1);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Autosave failed');
+        setAutosaveState('unsaved');
+      }
+    }, AUTOSAVE_DELAY_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [editingId, form, previewPublishedAt]);
+
+  function buildAutosavePayload(currentForm: PostForm, currentPublishedAt: string | null) {
+    return {
+      slug: currentForm.slug,
+      title: currentForm.title,
+      metaTitle: currentForm.metaTitle || null,
+      metaDescription: currentForm.metaDescription || null,
+      excerpt: currentForm.excerpt || null,
+      content: currentForm.content,
+      featuredMediaId: currentForm.featuredMediaId,
+      featuredImageUrl: currentForm.featuredMediaId ? null : currentForm.featuredImageUrl || null,
+      authorId: currentForm.authorId,
+      publishedAt: currentPublishedAt,
+      categoryIds: currentForm.categoryIds,
+      tagIds: currentForm.tagIds,
+    };
+  }
+
+  function applyPostToForm(post: Post) {
+    suppressAutosaveRef.current = true;
+    const editorialStatus = getEditorialStatus(post.publishedAt);
+    setEditingId(post.id);
+    setForm({
+      slug: post.slug,
+      title: post.title,
+      metaTitle: post.metaTitle ?? '',
+      metaDescription: post.metaDescription ?? '',
+      excerpt: post.excerpt ?? '',
+      content: post.content,
+      featuredImageUrl: post.featuredImageUrl ?? '',
+      featuredMediaId: post.featuredMedia?.id ?? null,
+      authorId: post.author.id,
+      editorialStatus,
+      scheduledAt: editorialStatus === 'scheduled' ? toDatetimeLocalValue(post.publishedAt) : '',
+      currentPublishedAt: post.publishedAt,
+      categoryIds: post.categories.map((category) => category.id),
+      tagIds: post.tags.map((tag) => tag.id),
+    });
+    setFeaturedMedia(post.featuredMedia);
+    setShowMediaLibrary(false);
+    setSlugTouched(true);
+    setAutosaveState('saved');
+  }
+
+  function updateForm(updater: (currentForm: PostForm) => PostForm) {
+    setForm((currentForm) => updater(currentForm));
+    if (editingId) setAutosaveState('unsaved');
+  }
+
+  async function refreshEditedPost(id: string) {
+    const res = await fetch(`/api/proxy/posts/${id}`);
+    if (!res.ok) throw new Error('Failed to refresh post');
+    const post = (await res.json()) as Post;
+    applyPostToForm(post);
+    await fetchData(statusFilter);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -220,20 +358,13 @@ export default function AdminPostsPage() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const d = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(d.message ?? 'Save failed');
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? 'Save failed');
       }
-      const saved = (await res.json()) as Post;
-      if (editingId) {
-        setPosts((currentPosts) => currentPosts.map((post) => (post.id === editingId ? saved : post)));
-      } else {
-        setPosts((currentPosts) => [saved, ...currentPosts]);
-      }
-      setForm({ ...emptyForm, authorId: authors[0]?.id ?? '' });
-      setFeaturedMedia(null);
-      setEditingId(null);
-      setShowMediaLibrary(false);
-      setSlugTouched(false);
+
+      await res.json();
+      resetForm();
+      await fetchData(statusFilter);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -246,7 +377,8 @@ export default function AdminPostsPage() {
     try {
       const res = await fetch(`/api/proxy/posts/${id}`, { method: 'DELETE' });
       if (!res.ok && res.status !== 204) throw new Error('Delete failed');
-      setPosts((currentPosts) => currentPosts.filter((post) => post.id !== id));
+      if (editingId === id) resetForm();
+      await fetchData(statusFilter);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error');
     }
@@ -259,45 +391,52 @@ export default function AdminPostsPage() {
     try {
       const res = await fetch(`/api/proxy/posts/${post.id}/${action}`, { method: 'PATCH' });
       if (!res.ok) throw new Error('Action failed');
-      const updated = (await res.json()) as Post;
-      setPosts((currentPosts) => currentPosts.map((entry) => (entry.id === post.id ? updated : entry)));
+      await fetchData(statusFilter);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error');
     }
   }
 
+  async function handleBulkAction(action: 'publish' | 'unpublish' | 'delete') {
+    if (selectedIds.length === 0) return;
+    if (action === 'delete' && !confirm('Delete all selected posts?')) return;
+
+    setBulkAction(action);
+    setError('');
+    try {
+      const res = await fetch('/api/proxy/posts/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ids: selectedIds }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? 'Bulk action failed');
+      }
+      await fetchData(statusFilter);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setBulkAction(null);
+    }
+  }
+
   function startEdit(post: Post) {
-    const editorialStatus = getEditorialStatus(post.publishedAt);
-    setEditingId(post.id);
-    setForm({
-      slug: post.slug,
-      title: post.title,
-      metaTitle: post.metaTitle ?? '',
-      metaDescription: post.metaDescription ?? '',
-      excerpt: post.excerpt ?? '',
-      content: post.content,
-      featuredImageUrl: post.featuredImageUrl ?? '',
-      featuredMediaId: post.featuredMedia?.id ?? null,
-      authorId: post.author.id,
-      editorialStatus,
-      scheduledAt: editorialStatus === 'scheduled' ? toDatetimeLocalValue(post.publishedAt) : '',
-      currentPublishedAt: post.publishedAt,
-      categoryIds: post.categories.map((category) => category.id),
-      tagIds: post.tags.map((tag) => tag.id),
-    });
-    setFeaturedMedia(post.featuredMedia);
-    setShowMediaLibrary(false);
-    setSlugTouched(true);
+    applyPostToForm(post);
+    setShowRevisions(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function resetForm() {
+    suppressAutosaveRef.current = true;
     setEditingId(null);
     setForm({ ...emptyForm, authorId: authors[0]?.id ?? '' });
     setFeaturedMedia(null);
     setShowMediaLibrary(false);
     setSlugTouched(false);
     setError('');
+    setShowRevisions(false);
+    setAutosaveState('idle');
   }
 
   function toggleSelection(ids: string[], id: string) {
@@ -305,7 +444,7 @@ export default function AdminPostsPage() {
   }
 
   function insertMediaIntoContent(asset: MediaAsset) {
-    setForm((currentForm) => ({
+    updateForm((currentForm) => ({
       ...currentForm,
       content: `${currentForm.content}${currentForm.content ? '\n' : ''}${buildMediaEmbedHtml(asset)}`,
     }));
@@ -317,7 +456,7 @@ export default function AdminPostsPage() {
         <div>
           <h1 className="text-3xl font-bold">Posts</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Draft, schedule, preview, and publish posts with richer authoring tools.
+            Draft, schedule, preview, autosave, and publish posts with richer authoring tools.
           </p>
         </div>
         {editingId && (
@@ -332,17 +471,41 @@ export default function AdminPostsPage() {
       </div>
 
       <section className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">{editingId ? 'Edit Post' : 'Create Post'}</h2>
-            <p className="text-sm text-gray-500">Choose an author, refine the slug, and preview the post before publishing.</p>
+            <p className="text-sm text-gray-500">
+              Choose an author, refine the slug, and preview the post before publishing.
+            </p>
           </div>
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ${getEditorialStatusBadgeClass(form.editorialStatus)}`}>
-            {getEditorialStatusLabel(form.editorialStatus)}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {editingId && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowRevisions((currentValue) => !currentValue)}
+                  className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  {showRevisions ? 'Hide revisions' : 'Revisions'}
+                </button>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-medium ${getAutosaveBadgeClass(autosaveState)}`}
+                >
+                  {getAutosaveLabel(autosaveState)}
+                </span>
+              </>
+            )}
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-medium ${getEditorialStatusBadgeClass(form.editorialStatus)}`}
+            >
+              {getEditorialStatusLabel(form.editorialStatus)}
+            </span>
+          </div>
         </div>
 
-        {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
+        {error && (
+          <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
+        )}
 
         <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-5">
@@ -353,7 +516,7 @@ export default function AdminPostsPage() {
                 value={form.title}
                 onChange={(event) => {
                   const title = event.target.value;
-                  setForm((currentForm) => ({
+                  updateForm((currentForm) => ({
                     ...currentForm,
                     title,
                     slug: slugTouched ? currentForm.slug : slugify(title),
@@ -371,7 +534,10 @@ export default function AdminPostsPage() {
                   type="button"
                   onClick={() => {
                     setSlugTouched(true);
-                    setForm((currentForm) => ({ ...currentForm, slug: slugify(currentForm.title || currentForm.slug) }));
+                    updateForm((currentForm) => ({
+                      ...currentForm,
+                      slug: slugify(currentForm.title || currentForm.slug),
+                    }));
                   }}
                   className="text-xs font-medium text-indigo-600 hover:underline"
                 >
@@ -383,7 +549,10 @@ export default function AdminPostsPage() {
                 value={form.slug}
                 onChange={(event) => {
                   setSlugTouched(true);
-                  setForm((currentForm) => ({ ...currentForm, slug: slugify(event.target.value) }));
+                  updateForm((currentForm) => ({
+                    ...currentForm,
+                    slug: slugify(event.target.value),
+                  }));
                 }}
                 className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-3 font-mono text-sm"
                 placeholder="june-astrology-forecast"
@@ -398,25 +567,37 @@ export default function AdminPostsPage() {
 
             <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
               <h3 className="text-sm font-semibold text-gray-900">SEO</h3>
-              <p className="mt-1 text-xs text-gray-500">Optional metadata for search results, canonical previews, and Open Graph cards.</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Optional metadata for search results, canonical previews, and Open Graph cards.
+              </p>
 
               <div className="mt-4 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Meta title</label>
                   <input
                     value={form.metaTitle}
-                    onChange={(event) => setForm((currentForm) => ({ ...currentForm, metaTitle: event.target.value }))}
+                    onChange={(event) =>
+                      updateForm((currentForm) => ({
+                        ...currentForm,
+                        metaTitle: event.target.value,
+                      }))
+                    }
                     className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm"
                     placeholder="June astrology forecast | Psychic Link CMS"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Meta description</label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Meta description
+                  </label>
                   <textarea
                     value={form.metaDescription}
                     onChange={(event) =>
-                      setForm((currentForm) => ({ ...currentForm, metaDescription: event.target.value }))
+                      updateForm((currentForm) => ({
+                        ...currentForm,
+                        metaDescription: event.target.value,
+                      }))
                     }
                     rows={3}
                     className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm"
@@ -430,7 +611,9 @@ export default function AdminPostsPage() {
               <label className="block text-sm font-medium text-gray-700">Excerpt</label>
               <textarea
                 value={form.excerpt}
-                onChange={(event) => setForm((currentForm) => ({ ...currentForm, excerpt: event.target.value }))}
+                onChange={(event) =>
+                  updateForm((currentForm) => ({ ...currentForm, excerpt: event.target.value }))
+                }
                 rows={3}
                 className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm"
                 placeholder="Add a short summary for cards and blog listings."
@@ -439,7 +622,10 @@ export default function AdminPostsPage() {
 
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">Post Content *</label>
-              <RichTextEditor value={form.content} onChange={(content) => setForm((currentForm) => ({ ...currentForm, content }))} />
+              <RichTextEditor
+                value={form.content}
+                onChange={(content) => updateForm((currentForm) => ({ ...currentForm, content }))}
+              />
             </div>
           </div>
 
@@ -451,7 +637,12 @@ export default function AdminPostsPage() {
                   <label className="block text-sm font-medium text-gray-700">Author</label>
                   <select
                     value={form.authorId}
-                    onChange={(event) => setForm((currentForm) => ({ ...currentForm, authorId: event.target.value }))}
+                    onChange={(event) =>
+                      updateForm((currentForm) => ({
+                        ...currentForm,
+                        authorId: event.target.value,
+                      }))
+                    }
                     className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                   >
                     {authors.map((author) => (
@@ -467,12 +658,13 @@ export default function AdminPostsPage() {
                   <select
                     value={form.editorialStatus}
                     onChange={(event) =>
-                      setForm((currentForm) => ({
+                      updateForm((currentForm) => ({
                         ...currentForm,
                         editorialStatus: event.target.value as EditorialStatus,
                         scheduledAt:
                           event.target.value === 'scheduled'
-                            ? currentForm.scheduledAt || toDatetimeLocalValue(currentForm.currentPublishedAt)
+                            ? currentForm.scheduledAt ||
+                              toDatetimeLocalValue(currentForm.currentPublishedAt)
                             : currentForm.scheduledAt,
                       }))
                     }
@@ -490,7 +682,12 @@ export default function AdminPostsPage() {
                     <input
                       type="datetime-local"
                       value={form.scheduledAt}
-                      onChange={(event) => setForm((currentForm) => ({ ...currentForm, scheduledAt: event.target.value }))}
+                      onChange={(event) =>
+                        updateForm((currentForm) => ({
+                          ...currentForm,
+                          scheduledAt: event.target.value,
+                        }))
+                      }
                       className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                     />
                   </div>
@@ -517,7 +714,8 @@ export default function AdminPostsPage() {
 
               {featuredMedia && (
                 <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-                  Selected from media library: <span className="font-medium">{featuredMedia.title}</span>
+                  Selected from media library:{' '}
+                  <span className="font-medium">{featuredMedia.title}</span>
                 </div>
               )}
 
@@ -526,7 +724,7 @@ export default function AdminPostsPage() {
                 value={form.featuredMediaId ? '' : form.featuredImageUrl}
                 onChange={(event) => {
                   setFeaturedMedia(null);
-                  setForm((currentForm) => ({
+                  updateForm((currentForm) => ({
                     ...currentForm,
                     featuredMediaId: null,
                     featuredImageUrl: event.target.value,
@@ -542,7 +740,7 @@ export default function AdminPostsPage() {
                     type="button"
                     onClick={() => {
                       setFeaturedMedia(null);
-                      setForm((currentForm) => ({
+                      updateForm((currentForm) => ({
                         ...currentForm,
                         featuredMediaId: null,
                         featuredImageUrl: '',
@@ -572,7 +770,7 @@ export default function AdminPostsPage() {
                     onlyImages
                     onSelect={(asset) => {
                       setFeaturedMedia(asset);
-                      setForm((currentForm) => ({
+                      updateForm((currentForm) => ({
                         ...currentForm,
                         featuredMediaId: asset.id,
                         featuredImageUrl: asset.url,
@@ -586,15 +784,20 @@ export default function AdminPostsPage() {
 
             <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
               <h3 className="text-sm font-semibold text-gray-900">Categories</h3>
-              <p className="mt-1 text-xs text-gray-500">Assign one or more categories for archive and discovery pages.</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Assign one or more categories for archive and discovery pages.
+              </p>
               <div className="mt-3 space-y-2">
                 {categories.map((category) => (
-                  <label key={category.id} className="flex items-center gap-2 text-sm text-gray-700">
+                  <label
+                    key={category.id}
+                    className="flex items-center gap-2 text-sm text-gray-700"
+                  >
                     <input
                       type="checkbox"
                       checked={form.categoryIds.includes(category.id)}
                       onChange={() =>
-                        setForm((currentForm) => ({
+                        updateForm((currentForm) => ({
                           ...currentForm,
                           categoryIds: toggleSelection(currentForm.categoryIds, category.id),
                         }))
@@ -608,15 +811,20 @@ export default function AdminPostsPage() {
 
             <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
               <h3 className="text-sm font-semibold text-gray-900">Tags</h3>
-              <p className="mt-1 text-xs text-gray-500">Tags help connect related posts and improve search browse paths.</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Tags help connect related posts and improve search browse paths.
+              </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {tags.map((tag) => (
-                  <label key={tag.id} className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
+                  <label
+                    key={tag.id}
+                    className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700"
+                  >
                     <input
                       type="checkbox"
                       checked={form.tagIds.includes(tag.id)}
                       onChange={() =>
-                        setForm((currentForm) => ({
+                        updateForm((currentForm) => ({
                           ...currentForm,
                           tagIds: toggleSelection(currentForm.tagIds, tag.id),
                         }))
@@ -627,6 +835,15 @@ export default function AdminPostsPage() {
                 ))}
               </div>
             </section>
+
+            {editingId && (
+              <RevisionsPanel
+                endpointBase={`/api/proxy/posts/${editingId}`}
+                open={showRevisions}
+                refreshKey={revisionRefreshKey}
+                onRestored={() => refreshEditedPost(editingId)}
+              />
+            )}
 
             <EditorPreview
               title={form.title}
@@ -647,7 +864,14 @@ export default function AdminPostsPage() {
               >
                 {saving ? 'Saving…' : editingId ? 'Update Post' : 'Create Post'}
               </button>
-              {(editingId || form.title || form.slug || form.metaTitle || form.metaDescription || form.excerpt || form.content || form.featuredImageUrl) && (
+              {(editingId ||
+                form.title ||
+                form.slug ||
+                form.metaTitle ||
+                form.metaDescription ||
+                form.excerpt ||
+                form.content ||
+                form.featuredImageUrl) && (
                 <button
                   type="button"
                   onClick={resetForm}
@@ -662,19 +886,82 @@ export default function AdminPostsPage() {
       </section>
 
       <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">All Posts</h2>
-          <p className="text-sm text-gray-500">{posts.length} total</p>
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">All Posts</h2>
+            <p className="text-sm text-gray-500">{posts.length} matching posts</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setStatusFilter(option.value)}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                  statusFilter === option.value
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
-        {loading ? <p className="text-gray-500">Loading…</p> : posts.length === 0 ? (
-          <p className="text-gray-500">No posts yet.</p>
+
+        {selectedIds.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3">
+            <p className="text-sm font-medium text-indigo-900">{selectedIds.length} selected</p>
+            <button
+              type="button"
+              onClick={() => void handleBulkAction('publish')}
+              disabled={bulkAction !== null}
+              className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              {bulkAction === 'publish' ? 'Publishing…' : 'Publish'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkAction('unpublish')}
+              disabled={bulkAction !== null}
+              className="rounded bg-yellow-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-yellow-600 disabled:opacity-50"
+            >
+              {bulkAction === 'unpublish' ? 'Updating…' : 'Unpublish'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkAction('delete')}
+              disabled={bulkAction !== null}
+              className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {bulkAction === 'delete' ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="text-gray-500">Loading…</p>
+        ) : posts.length === 0 ? (
+          <p className="text-gray-500">No posts found for this filter.</p>
         ) : (
           <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={posts.length > 0 && selectedIds.length === posts.length}
+                      onChange={(event) =>
+                        setSelectedIds(event.target.checked ? posts.map((post) => post.id) : [])
+                      }
+                    />
+                  </th>
                   {['Title', 'Author', 'Status', 'Updated', ''].map((heading) => (
-                    <th key={heading} className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
+                    <th
+                      key={heading}
+                      className="px-4 py-3 text-left text-xs font-semibold text-gray-600"
+                    >
                       {heading}
                     </th>
                   ))}
@@ -688,9 +975,20 @@ export default function AdminPostsPage() {
                   return (
                     <tr key={post.id} className="border-t align-top hover:bg-gray-50">
                       <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(post.id)}
+                          onChange={() => setSelectedIds((ids) => toggleSelection(ids, post.id))}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex items-start gap-3">
                           {post.featuredImageUrl && (
-                            <img src={post.featuredImageUrl} alt={post.title} className="h-12 w-12 rounded object-cover" />
+                            <img
+                              src={post.featuredImageUrl}
+                              alt={post.title}
+                              className="h-12 w-12 rounded object-cover"
+                            />
                           )}
                           <div>
                             <p className="font-medium text-gray-900">{post.title}</p>
@@ -710,30 +1008,39 @@ export default function AdminPostsPage() {
                         <p>{post.author.email}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${getEditorialStatusBadgeClass(status)}`}>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${getEditorialStatusBadgeClass(status)}`}
+                        >
                           {getEditorialStatusLabel(status)}
                         </span>
                         {post.publishedAt && (
-                          <p className="mt-2 text-xs text-gray-500">{new Date(post.publishedAt).toLocaleString()}</p>
+                          <p className="mt-2 text-xs text-gray-500">
+                            {new Date(post.publishedAt).toLocaleString()}
+                          </p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{new Date(post.updatedAt).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">
+                        {new Date(post.updatedAt).toLocaleString()}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">
                           <button
+                            type="button"
                             onClick={() => startEdit(post)}
                             className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
                           >
                             Edit
                           </button>
                           <button
-                            onClick={() => handlePrimaryAction(post)}
+                            type="button"
+                            onClick={() => void handlePrimaryAction(post)}
                             className={`rounded px-2 py-1 text-xs ${primaryAction.className}`}
                           >
                             {primaryAction.label}
                           </button>
                           <button
-                            onClick={() => handleDelete(post.id)}
+                            type="button"
+                            onClick={() => void handleDelete(post.id)}
                             className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200"
                           >
                             Delete
