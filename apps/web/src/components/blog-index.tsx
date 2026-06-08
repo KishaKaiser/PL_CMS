@@ -6,6 +6,7 @@ import {
   getCategories,
   getPublishedPosts,
   getPublicSiteConfig,
+  getSafeImageSrc,
   getTags,
   type PublicSiteConfig,
   toPlainText,
@@ -109,11 +110,12 @@ export async function BlogIndex({
             <div className="space-y-6">
               {posts.map((post) => {
                 const preview = toPlainText(post.excerpt || post.content);
+                const featuredImageSrc = getSafeImageSrc(post.featuredImageUrl);
 
                 return (
                   <article key={post.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
-                    {post.featuredImageUrl && (
-                      <img src={post.featuredImageUrl} alt={post.title} className="h-56 w-full object-cover" />
+                    {featuredImageSrc && (
+                      <img src={featuredImageSrc} alt={post.title} className="h-56 w-full object-cover" />
                     )}
                     <div className="p-6">
                       <h2 className="text-xl font-semibold">

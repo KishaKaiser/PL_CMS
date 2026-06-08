@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {
+  getSafeImageSrc,
   getPublicSiteConfig,
   type PublicSiteConfig,
 } from '../lib/public-cms';
@@ -11,7 +12,7 @@ type Props = {
 
 export async function PublicSiteShell({ children, siteConfig }: Props) {
   const config = siteConfig ?? (await getPublicSiteConfig());
-  const logo = config.identity.logoUrl.trim();
+  const logo = getSafeImageSrc(config.identity.logoUrl);
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900">

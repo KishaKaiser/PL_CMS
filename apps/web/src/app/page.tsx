@@ -7,6 +7,7 @@ import {
   getPublishedPages,
   getPublishedPosts,
   getPublicSiteConfig,
+  getSafeImageSrc,
   toPlainText,
 } from '../lib/public-cms';
 
@@ -44,14 +45,15 @@ export default async function HomePage({ searchParams }: Props) {
     .filter((page) => page.slug !== siteConfig.postsPage.pageSlug)
     .slice(0, MAX_FEATURED_PAGES);
   const featuredPosts = posts.slice(0, MAX_FEATURED_POSTS);
+  const homePageImageSrc = getSafeImageSrc(homePage?.featuredImageUrl);
 
   if (managedHomepageSlug && homePage) {
     return (
       <PublicSiteShell siteConfig={siteConfig}>
         <main className="mx-auto max-w-3xl p-8">
           <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
-            {homePage.featuredImageUrl && (
-              <img src={homePage.featuredImageUrl} alt={homePage.title} className="h-72 w-full object-cover" />
+            {homePageImageSrc && (
+              <img src={homePageImageSrc} alt={homePage.title} className="h-72 w-full object-cover" />
             )}
             <div className="p-8">
               <h1 className="mb-4 text-3xl font-bold" style={{ color: siteConfig.theme.primaryColor }}>
@@ -69,8 +71,8 @@ export default async function HomePage({ searchParams }: Props) {
     <PublicSiteShell siteConfig={siteConfig}>
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 p-8">
         <header className="overflow-hidden rounded-lg border bg-white shadow-sm">
-          {homePage?.featuredImageUrl && (
-            <img src={homePage.featuredImageUrl} alt={homePage.title} className="h-64 w-full object-cover" />
+          {homePageImageSrc && (
+            <img src={homePageImageSrc} alt={homePage?.title ?? siteConfig.identity.title} className="h-64 w-full object-cover" />
           )}
           <div className="p-6">
             <h1 className="text-4xl font-bold" style={{ color: siteConfig.theme.primaryColor }}>
@@ -115,11 +117,12 @@ export default async function HomePage({ searchParams }: Props) {
               <div className="grid gap-4 md:grid-cols-3">
                 {featuredPages.map((page) => {
                   const preview = toPlainText(page.content);
+                  const featuredImageSrc = getSafeImageSrc(page.featuredImageUrl);
 
                   return (
                     <article key={page.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
-                      {page.featuredImageUrl && (
-                        <img src={page.featuredImageUrl} alt={page.title} className="h-40 w-full object-cover" />
+                      {featuredImageSrc && (
+                        <img src={featuredImageSrc} alt={page.title} className="h-40 w-full object-cover" />
                       )}
                       <div className="p-4">
                         <h3 className="text-lg font-semibold">
@@ -155,11 +158,12 @@ export default async function HomePage({ searchParams }: Props) {
               <div className="grid gap-4 md:grid-cols-3">
                 {featuredPosts.map((post) => {
                   const preview = toPlainText(post.excerpt || post.content);
+                  const featuredImageSrc = getSafeImageSrc(post.featuredImageUrl);
 
                   return (
                     <article key={post.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
-                      {post.featuredImageUrl && (
-                        <img src={post.featuredImageUrl} alt={post.title} className="h-40 w-full object-cover" />
+                      {featuredImageSrc && (
+                        <img src={featuredImageSrc} alt={post.title} className="h-40 w-full object-cover" />
                       )}
                       <div className="p-4">
                         <h3 className="text-lg font-semibold">

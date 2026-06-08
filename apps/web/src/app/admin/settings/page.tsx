@@ -15,6 +15,7 @@ interface PageSummary {
 }
 
 interface MenuItem {
+  id: string;
   label: string;
   href: string;
 }
@@ -107,12 +108,12 @@ const defaultThemeForm: SiteThemeForm = {
 
 const defaultMenusForm: SiteMenusForm = {
   header: [
-    { label: 'Home', href: '/' },
-    { label: 'Blog', href: '/blog' },
+    { id: 'header-home', label: 'Home', href: '/' },
+    { id: 'header-blog', label: 'Blog', href: '/blog' },
   ],
   footer: [
-    { label: 'Home', href: '/' },
-    { label: 'Blog', href: '/blog' },
+    { id: 'footer-home', label: 'Home', href: '/' },
+    { id: 'footer-blog', label: 'Blog', href: '/blog' },
   ],
 };
 
@@ -146,11 +147,11 @@ function normalizeMenuItems(value: unknown, fallback: MenuItem[]) {
       if (!isRecord(item)) return null;
 
       const label = readString(item.label).trim();
-      // Support older saved menu payloads that used `url` before `href` became the canonical field.
+      // Support previously stored menu payloads that still use `url` instead of `href`.
       const href = readString(item.href ?? item.url).trim();
 
       if (!label || !href) return null;
-      return { label, href };
+      return { id: crypto.randomUUID(), label, href };
     })
     .filter((item): item is MenuItem => item !== null);
 
@@ -170,12 +171,12 @@ function MenuEditor({
   items: MenuItem[];
   onChange: (items: MenuItem[]) => void;
 }) {
-  function updateItem(index: number, field: keyof MenuItem, value: string) {
-    onChange(items.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
+  function updateItem(id: string, field: 'label' | 'href', value: string) {
+    onChange(items.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
   }
 
-  function removeItem(index: number) {
-    onChange(items.filter((_, itemIndex) => itemIndex !== index));
+  function removeItem(id: string) {
+    onChange(items.filter((item) => item.id !== id));
   }
 
   return (
@@ -184,7 +185,7 @@ function MenuEditor({
         <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
         <button
           type="button"
-          onClick={() => onChange([...items, { label: '', href: '' }])}
+          onClick={() => onChange([...items, { id: crypto.randomUUID(), label: '', href: '' }])}
           className="rounded border border-gray-200 px-3 py-1 text-xs font-medium hover:bg-gray-50"
         >
           Add item
@@ -192,23 +193,23 @@ function MenuEditor({
       </div>
 
       <div className="space-y-3">
-        {items.map((item, index) => (
-          <div key={`${title}-${index}`} className="grid gap-3 rounded-lg border border-dashed border-gray-200 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+        {items.map((item) => (
+          <div key={item.id} className="grid gap-3 rounded-lg border border-dashed border-gray-200 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
             <input
               value={item.label}
-              onChange={(event) => updateItem(index, 'label', event.target.value)}
+              onChange={(event) => updateItem(item.id, 'label', event.target.value)}
               placeholder="Label"
               className="rounded border px-3 py-2 text-sm"
             />
             <input
               value={item.href}
-              onChange={(event) => updateItem(index, 'href', event.target.value)}
+              onChange={(event) => updateItem(item.id, 'href', event.target.value)}
               placeholder="/path or https://example.com"
               className="rounded border px-3 py-2 text-sm"
             />
             <button
               type="button"
-              onClick={() => removeItem(index)}
+              onClick={() => removeItem(item.id)}
               className="rounded border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
             >
               Remove
@@ -586,7 +587,12 @@ export default function AdminSettingsPage() {
           <div className="mt-4 flex justify-end">
             <button
               type="button"
-              onClick={() => void saveManagedSetting(SITE_MENUS_KEY, menusForm)}
+              onClick={() =>
+                void saveManagedSetting(SITE_MENUS_KEY, {
+                  header: menusForm.header.map(({ label, href }) => ({ label, href })),
+                  footer: menusForm.footer.map(({ label, href }) => ({ label, href })),
+                })
+              }
               disabled={saving[SITE_MENUS_KEY] || loading}
               className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
             >

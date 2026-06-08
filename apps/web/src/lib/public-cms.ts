@@ -162,6 +162,19 @@ function logCmsFetchError(path: string, status?: number) {
 
 export { toPlainText } from './cms';
 
+export function getSafeImageSrc(value?: string | null) {
+  const src = value?.trim();
+  if (!src) return null;
+  if (src.startsWith('/')) return src;
+
+  try {
+    const parsed = new URL(src);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? src : null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchCmsJson<T>(path: string, fallback: T): Promise<T> {
   try {
     const res = await fetch(`${API_BASE}${path}`, { next: { revalidate: CMS_REVALIDATE_SECONDS } });

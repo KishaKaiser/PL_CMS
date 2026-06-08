@@ -450,6 +450,8 @@ export class PublicContentService {
         this.logger.warn(
           `Configured homepage page "${pageSlug}" is unavailable; falling back to landing mode.`,
         );
+      } else {
+        this.logger.warn('Homepage mode is set to "page" without a configured page slug; falling back to landing mode.');
       }
 
       return {
@@ -554,7 +556,7 @@ export class PublicContentService {
         if (!item || typeof item !== 'object') return null;
         const label = this.getString((item as { label?: unknown }).label, '');
         const href = this.getString(
-          // Support older saved menu payloads that used `url` before `href` became the canonical field.
+          // Support previously stored menu payloads that still use `url` instead of `href`.
           (item as { href?: unknown; url?: unknown }).href ?? (item as { url?: unknown }).url,
           '',
         );
