@@ -1,26 +1,28 @@
+import {
+  DEFAULT_HOMEPAGE_SETTINGS,
+  DEFAULT_POSTS_PAGE_SETTINGS,
+  DEFAULT_SITE_EXTENSION_POINTS,
+  DEFAULT_SITE_IDENTITY,
+  DEFAULT_SITE_MENUS,
+  DEFAULT_SITE_THEME,
+  buildDefaultHomepageBlocks,
+  type HomepageSettings,
+  type SiteExtensionPoints,
+  type SiteHomepageBlock,
+  type SiteIdentitySettings,
+  type SiteMenuItem,
+  type SiteThemeSettings,
+} from '@pl-cms/shared';
+
 const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
 const CMS_REVALIDATE_SECONDS = 60;
 
-export interface SiteMenuItem {
-  label: string;
-  href: string;
-}
-
 export interface PublicSiteConfig {
-  identity: {
-    title: string;
-    tagline: string;
-    logoUrl: string;
-    footerText: string;
-  };
-  homepage: {
-    mode: 'landing' | 'latest_posts' | 'page';
-    pageSlug: string;
+  identity: SiteIdentitySettings;
+  homepage: HomepageSettings & {
     selectedPage: { slug: string; title: string } | null;
   };
-  postsPage: {
-    type: 'default' | 'page';
-    pageSlug: string;
+  postsPage: typeof DEFAULT_POSTS_PAGE_SETTINGS & {
     path: string;
     title: string;
   };
@@ -28,76 +30,26 @@ export interface PublicSiteConfig {
     header: SiteMenuItem[];
     footer: SiteMenuItem[];
   };
-  theme: {
-    primaryColor: string;
-    accentColor: string;
-    heroTitle: string;
-    heroBody: string;
-    heroPrimaryLabel: string;
-    heroPrimaryHref: string;
-    heroSecondaryLabel: string;
-    heroSecondaryHref: string;
-    homepageSections: {
-      pages: {
-        enabled: boolean;
-        title: string;
-      };
-      posts: {
-        enabled: boolean;
-        title: string;
-      };
-    };
-  };
+  theme: SiteThemeSettings;
+  homepageBlocks: SiteHomepageBlock[];
+  extensionPoints: SiteExtensionPoints;
 }
 
 const DEFAULT_PUBLIC_SITE_CONFIG: PublicSiteConfig = {
-  identity: {
-    title: 'Psychic Link CMS',
-    tagline: 'Public CMS frontend powered by published content.',
-    logoUrl: '',
-    footerText: 'Browse published pages and blog posts managed in the CMS.',
-  },
+  identity: DEFAULT_SITE_IDENTITY,
   homepage: {
-    mode: 'landing',
-    pageSlug: '',
+    ...DEFAULT_HOMEPAGE_SETTINGS,
     selectedPage: null,
   },
   postsPage: {
-    type: 'default',
-    pageSlug: '',
+    ...DEFAULT_POSTS_PAGE_SETTINGS,
     path: '/blog',
     title: 'Blog',
   },
-  menus: {
-    header: [
-      { label: 'Home', href: '/' },
-      { label: 'Blog', href: '/blog' },
-    ],
-    footer: [
-      { label: 'Home', href: '/' },
-      { label: 'Blog', href: '/blog' },
-    ],
-  },
-  theme: {
-    primaryColor: '#4f46e5',
-    accentColor: '#7c3aed',
-    heroTitle: 'Psychic Link CMS',
-    heroBody: 'Welcome to the public site. Read our latest posts or browse CMS pages.',
-    heroPrimaryLabel: 'Visit Blog',
-    heroPrimaryHref: '/blog',
-    heroSecondaryLabel: 'Admin',
-    heroSecondaryHref: '/admin',
-    homepageSections: {
-      pages: {
-        enabled: true,
-        title: 'Browse Pages',
-      },
-      posts: {
-        enabled: true,
-        title: 'Latest Posts',
-      },
-    },
-  },
+  menus: DEFAULT_SITE_MENUS,
+  theme: { ...DEFAULT_SITE_THEME, heroPrimaryHref: '/blog' },
+  homepageBlocks: buildDefaultHomepageBlocks('/blog'),
+  extensionPoints: DEFAULT_SITE_EXTENSION_POINTS,
 };
 
 export interface PublicPage {

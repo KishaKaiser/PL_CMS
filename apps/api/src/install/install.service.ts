@@ -7,6 +7,16 @@ import {
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as bcrypt from 'bcryptjs';
+import {
+  DEFAULT_HOMEPAGE_SETTINGS,
+  DEFAULT_POSTS_PAGE_SETTINGS,
+  DEFAULT_SITE_EXTENSION_POINTS,
+  DEFAULT_SITE_IDENTITY,
+  DEFAULT_SITE_MENUS,
+  DEFAULT_SITE_THEME,
+  SITE_SETTING_KEYS,
+  buildDefaultHomepageBlocks,
+} from '@pl-cms/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RunInstallDto } from './install.dto';
 
@@ -132,60 +142,35 @@ export class InstallService {
 
   private async seedDefaultData(): Promise<void> {
     const settings: { key: string; value: string }[] = [
-      { key: 'site_name', value: 'Psychic Link CMS' },
+      { key: SITE_SETTING_KEYS.SITE_NAME, value: DEFAULT_SITE_IDENTITY.title },
       { key: 'site_currency', value: 'USD' },
       {
-        key: 'site_identity',
-        value: JSON.stringify({
-          title: 'Psychic Link CMS',
-          tagline: 'Public CMS frontend powered by published content.',
-          logoUrl: '',
-          footerText: 'Browse published pages and blog posts managed in the CMS.',
-        }),
+        key: SITE_SETTING_KEYS.SITE_IDENTITY,
+        value: JSON.stringify(DEFAULT_SITE_IDENTITY),
       },
       {
-        key: 'site_homepage',
-        value: JSON.stringify({
-          mode: 'landing',
-          pageSlug: '',
-        }),
+        key: SITE_SETTING_KEYS.SITE_HOMEPAGE,
+        value: JSON.stringify(DEFAULT_HOMEPAGE_SETTINGS),
       },
       {
-        key: 'site_posts_page',
-        value: JSON.stringify({
-          type: 'default',
-          pageSlug: '',
-        }),
+        key: SITE_SETTING_KEYS.SITE_POSTS_PAGE,
+        value: JSON.stringify(DEFAULT_POSTS_PAGE_SETTINGS),
       },
       {
-        key: 'site_menus',
-        value: JSON.stringify({
-          header: [
-            { label: 'Home', href: '/' },
-            { label: 'Blog', href: '/blog' },
-          ],
-          footer: [
-            { label: 'Home', href: '/' },
-            { label: 'Blog', href: '/blog' },
-          ],
-        }),
+        key: SITE_SETTING_KEYS.SITE_MENUS,
+        value: JSON.stringify(DEFAULT_SITE_MENUS),
       },
       {
-        key: 'site_theme',
-        value: JSON.stringify({
-          primaryColor: '#4f46e5',
-          accentColor: '#7c3aed',
-          heroTitle: 'Psychic Link CMS',
-          heroBody: 'Welcome to the public site. Read our latest posts or browse CMS pages.',
-          heroPrimaryLabel: 'Visit Blog',
-          heroPrimaryHref: '',
-          heroSecondaryLabel: 'Admin',
-          heroSecondaryHref: '/admin',
-          homepageSections: {
-            pages: { enabled: true, title: 'Browse Pages' },
-            posts: { enabled: true, title: 'Latest Posts' },
-          },
-        }),
+        key: SITE_SETTING_KEYS.SITE_THEME,
+        value: JSON.stringify(DEFAULT_SITE_THEME),
+      },
+      {
+        key: SITE_SETTING_KEYS.SITE_HOMEPAGE_BLOCKS,
+        value: JSON.stringify(buildDefaultHomepageBlocks('/blog')),
+      },
+      {
+        key: SITE_SETTING_KEYS.SITE_EXTENSION_POINTS,
+        value: JSON.stringify(DEFAULT_SITE_EXTENSION_POINTS),
       },
     ];
 
