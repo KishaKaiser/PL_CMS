@@ -71,11 +71,6 @@ const DEFAULT_HOMEPAGE_SETTINGS: HomepageSettings = {
   pageSlug: '',
 };
 
-const DEFAULT_POSTS_PAGE_SETTINGS: PostsPageSettings = {
-  type: 'default',
-  pageSlug: '',
-};
-
 const DEFAULT_SITE_THEME: SiteThemeSettings = {
   primaryColor: '#4f46e5',
   accentColor: '#7c3aed',
