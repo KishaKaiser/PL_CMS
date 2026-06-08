@@ -1,8 +1,10 @@
 import { randomUUID } from 'crypto';
 import { extname, resolve } from 'path';
+import { BadRequestException } from '@nestjs/common';
 
 const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
 const DOCUMENT_MIME_TYPES = ['application/pdf'] as const;
+const STORAGE_KEY_PATTERN = /^[0-9a-f-]{36}(?:\.[a-z0-9]+)?$/i;
 
 export const ALLOWED_MEDIA_MIME_TYPES = new Set<string>([...IMAGE_MIME_TYPES, ...DOCUMENT_MIME_TYPES]);
 export const MAX_MEDIA_FILE_SIZE = 8 * 1024 * 1024;
@@ -42,7 +44,15 @@ export function deriveMediaTitle(originalName: string) {
 }
 
 export function sanitizeDownloadName(originalName: string) {
-  return originalName.replace(/[^\w.\- ]+/g, '').trim() || 'download';
+  return originalName.replace(/[^\w.\- ]+/g, '').trim().replace(/\s+/g, '-') || 'download';
+}
+
+export function resolveMediaStoragePath(storageKey: string) {
+  if (!STORAGE_KEY_PATTERN.test(storageKey)) {
+    throw new BadRequestException('Invalid media storage key.');
+  }
+
+  return resolve(getMediaUploadDirectory(), storageKey);
 }
 
 export function serializeMediaAsset<

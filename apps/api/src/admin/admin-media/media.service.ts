@@ -1,13 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { createReadStream, existsSync, mkdirSync } from 'fs';
 import { unlink } from 'fs/promises';
-import { join } from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ListMediaDto, UploadMediaDto } from './media.dto';
 import {
   ALLOWED_MEDIA_MIME_TYPES,
   deriveMediaTitle,
   getMediaUploadDirectory,
+  resolveMediaStoragePath,
   serializeMediaAsset,
 } from './media.util';
 
@@ -43,7 +43,7 @@ export class MediaService {
     if (!file) throw new BadRequestException('Choose a media file to upload.');
 
     if (!ALLOWED_MEDIA_MIME_TYPES.has(file.mimetype)) {
-      await unlink(join(getMediaUploadDirectory(), file.filename)).catch(() => undefined);
+      await unlink(resolveMediaStoragePath(file.filename)).catch(() => undefined);
       throw new BadRequestException('Only JPG, PNG, GIF, WEBP, and PDF uploads are supported.');
     }
 
@@ -65,7 +65,7 @@ export class MediaService {
 
   async openFileStream(id: string) {
     const asset = await this.findOne(id);
-    const filePath = join(getMediaUploadDirectory(), asset.storageKey);
+    const filePath = resolveMediaStoragePath(asset.storageKey);
     if (!existsSync(filePath)) throw new NotFoundException(`Media file for ${id} not found`);
     return {
       asset,
