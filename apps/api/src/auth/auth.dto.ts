@@ -1,10 +1,9 @@
 import { Transform } from 'class-transformer';
 import { IsEmail, IsString, MinLength } from 'class-validator';
+import { normalizeEmailInput } from '../common/input-normalization.util';
 
 export class LoginDto {
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim().toLowerCase() : value,
-  )
+  @Transform(({ value }: { value: unknown }) => normalizeEmailInput(value))
   @IsEmail()
   email!: string;
 

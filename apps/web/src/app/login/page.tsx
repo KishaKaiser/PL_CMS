@@ -4,10 +4,20 @@ import { useState, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
+const SAFE_REDIRECT_ORIGIN = 'https://placeholder.local';
+
 function getSafeNextPath(nextPath: string | null) {
   if (!nextPath) return '/admin';
-  if (!nextPath.startsWith('/') || nextPath.startsWith('//')) return '/admin';
-  return nextPath;
+  if (nextPath.includes('\\')) return '/admin';
+
+  try {
+    const parsed = new URL(nextPath, SAFE_REDIRECT_ORIGIN);
+    if (parsed.origin !== SAFE_REDIRECT_ORIGIN) return '/admin';
+    const safePath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    return safePath.startsWith('/') ? safePath : '/admin';
+  } catch {
+    return '/admin';
+  }
 }
 
 async function readErrorMessage(res: Response, fallback: string) {

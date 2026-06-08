@@ -12,16 +12,16 @@ interface StatusResponse {
   db: { connected: boolean };
 }
 
-const REQUEST_TIMEOUT_MS = 7000;
+const REQUEST_TIMEOUT_MS = 5000;
 
 async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
     return await fetch(input, { ...init, signal: controller.signal });
   } finally {
-    window.clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
   }
 }
 

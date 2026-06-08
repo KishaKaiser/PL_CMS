@@ -18,6 +18,10 @@ import {
   buildDefaultHomepageBlocks,
 } from '@pl-cms/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  normalizeEmailInput,
+  normalizeOptionalStringInput,
+} from '../common/input-normalization.util';
 import { RunInstallDto } from './install.dto';
 
 @Injectable()
@@ -62,8 +66,9 @@ export class InstallService {
     this.isRunning = true;
 
     try {
-      const email = dto.email.trim().toLowerCase();
-      const name = dto.name?.trim() || 'Admin';
+      const email = normalizeEmailInput(dto.email);
+      const normalizedName = normalizeOptionalStringInput(dto.name);
+      const name = typeof normalizedName === 'string' && normalizedName ? normalizedName : 'Admin';
 
       // 1. Verify DB connectivity
       try {
