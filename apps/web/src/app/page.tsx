@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BlogIndex } from '../components/blog-index';
 import { PublicSiteShell } from '../components/public-site-shell';
@@ -10,6 +11,7 @@ import {
   getSafeImageSrc,
   toPlainText,
 } from '../lib/public-cms';
+import { buildSeoMetadata, getSeoDescription, getSeoTitle } from '../lib/seo';
 
 const HOMEPAGE_EXCERPT_LENGTH = 120;
 const MAX_FEATURED_PAGES = 3;
@@ -18,6 +20,31 @@ export const dynamic = 'force-dynamic';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type Props = { searchParams?: Promise<SearchParams> };
+
+export async function generateMetadata(): Promise<Metadata> {
+  const siteConfig = await getPublicSiteConfig();
+
+  if (siteConfig.homepage.mode === 'latest_posts') {
+    return buildSeoMetadata({
+      title: getSeoTitle(siteConfig.postsPage.title),
+      description: getSeoDescription(siteConfig.theme.heroBody, siteConfig.identity.tagline),
+      path: '/',
+      siteName: siteConfig.identity.title,
+    });
+  }
+
+  const homePage = await getPublishedPage(siteConfig.homepage.selectedPage?.slug || 'home');
+
+  return buildSeoMetadata({
+    title: homePage ? getSeoTitle(homePage.title, homePage.metaTitle) : siteConfig.identity.title,
+    description: homePage
+      ? getSeoDescription(homePage.metaDescription, homePage.content, siteConfig.identity.tagline)
+      : getSeoDescription(siteConfig.theme.heroBody, siteConfig.identity.tagline),
+    path: '/',
+    imageUrl: homePage?.featuredImageUrl ?? siteConfig.identity.logoUrl,
+    siteName: siteConfig.identity.title,
+  });
+}
 
 export default async function HomePage({ searchParams }: Props) {
   const params = (await searchParams) ?? {};

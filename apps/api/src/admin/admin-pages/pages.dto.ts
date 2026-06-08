@@ -25,6 +25,14 @@ export class CreatePageDto {
   @IsNotEmpty()
   title!: string;
 
+  @IsOptional()
+  @IsString()
+  metaTitle?: string | null;
+
+  @IsOptional()
+  @IsString()
+  metaDescription?: string | null;
+
   @IsString()
   @IsNotEmpty()
   content!: string;
@@ -56,6 +64,14 @@ export class UpdatePageDto {
   @IsString()
   @IsNotEmpty()
   title?: string;
+
+  @IsOptional()
+  @IsString()
+  metaTitle?: string | null;
+
+  @IsOptional()
+  @IsString()
+  metaDescription?: string | null;
 
   @IsOptional()
   @IsString()

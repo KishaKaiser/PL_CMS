@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import '../styles/globals.css';
+import { getSiteUrl } from '../lib/seo';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(getSiteUrl()),
   title: 'Psychic Link CMS',
   description: 'Platform for advisors and clients',
 };

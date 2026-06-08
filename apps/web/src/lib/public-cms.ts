@@ -104,6 +104,8 @@ export interface PublicPage {
   id: string;
   slug: string;
   title: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
   content: string;
   featuredImageUrl: string | null;
   publishedAt: string;
@@ -130,6 +132,8 @@ export interface PublicPost {
   id: string;
   slug: string;
   title: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
   excerpt: string | null;
   content: string;
   featuredImageUrl: string | null;
@@ -145,6 +149,10 @@ export interface ArchiveSummary {
   year: number;
   month: number;
   count: number;
+}
+
+interface RedirectLookup {
+  redirectTo: string | null;
 }
 
 interface GetPostsFilters {
@@ -222,6 +230,18 @@ export async function getPublishedPosts(filters: GetPostsFilters = {}): Promise<
 export async function getPublishedPost(slug: string): Promise<PublicPost | null> {
   const path = `/public/posts/${encodeURIComponent(slug)}`;
   return fetchCmsJson(path, null);
+}
+
+export async function resolvePageRedirect(slug: string): Promise<string | null> {
+  const path = `/public/pages/${encodeURIComponent(slug)}/redirect`;
+  const result = await fetchCmsJson<RedirectLookup>(path, { redirectTo: null });
+  return result.redirectTo;
+}
+
+export async function resolvePostRedirect(slug: string): Promise<string | null> {
+  const path = `/public/posts/${encodeURIComponent(slug)}/redirect`;
+  const result = await fetchCmsJson<RedirectLookup>(path, { redirectTo: null });
+  return result.redirectTo;
 }
 
 export async function getRelatedPosts(slug: string): Promise<PublicPost[]> {

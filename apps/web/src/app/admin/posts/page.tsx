@@ -19,6 +19,8 @@ interface Post {
   id: string;
   slug: string;
   title: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
   excerpt: string | null;
   content: string;
   featuredImageUrl: string | null;
@@ -41,6 +43,8 @@ interface User {
 interface PostForm {
   slug: string;
   title: string;
+  metaTitle: string;
+  metaDescription: string;
   excerpt: string;
   content: string;
   featuredImageUrl: string;
@@ -65,6 +69,8 @@ const SCHEDULE_MIN_LEAD_MS = 60_000;
 const emptyForm: PostForm = {
   slug: '',
   title: '',
+  metaTitle: '',
+  metaDescription: '',
   excerpt: '',
   content: '',
   featuredImageUrl: '',
@@ -194,6 +200,8 @@ export default function AdminPostsPage() {
       const payload = {
         slug: form.slug,
         title: form.title,
+        metaTitle: form.metaTitle || null,
+        metaDescription: form.metaDescription || null,
         excerpt: form.excerpt || null,
         content: form.content,
         featuredMediaId: form.featuredMediaId,
@@ -264,6 +272,8 @@ export default function AdminPostsPage() {
     setForm({
       slug: post.slug,
       title: post.title,
+      metaTitle: post.metaTitle ?? '',
+      metaDescription: post.metaDescription ?? '',
       excerpt: post.excerpt ?? '',
       content: post.content,
       featuredImageUrl: post.featuredImageUrl ?? '',
@@ -385,6 +395,36 @@ export default function AdminPostsPage() {
                 <span className="text-gray-500">Permalink: /blog/{form.slug || 'your-post'}</span>
               </div>
             </div>
+
+            <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h3 className="text-sm font-semibold text-gray-900">SEO</h3>
+              <p className="mt-1 text-xs text-gray-500">Optional metadata for search results, canonical previews, and Open Graph cards.</p>
+
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Meta title</label>
+                  <input
+                    value={form.metaTitle}
+                    onChange={(event) => setForm((currentForm) => ({ ...currentForm, metaTitle: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm"
+                    placeholder="June astrology forecast | Psychic Link CMS"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Meta description</label>
+                  <textarea
+                    value={form.metaDescription}
+                    onChange={(event) =>
+                      setForm((currentForm) => ({ ...currentForm, metaDescription: event.target.value }))
+                    }
+                    rows={3}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm"
+                    placeholder="Summarize the post for search engines and social sharing."
+                  />
+                </div>
+              </div>
+            </section>
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Excerpt</label>
@@ -607,7 +647,7 @@ export default function AdminPostsPage() {
               >
                 {saving ? 'Saving…' : editingId ? 'Update Post' : 'Create Post'}
               </button>
-              {(editingId || form.title || form.slug || form.excerpt || form.content || form.featuredImageUrl) && (
+              {(editingId || form.title || form.slug || form.metaTitle || form.metaDescription || form.excerpt || form.content || form.featuredImageUrl) && (
                 <button
                   type="button"
                   onClick={resetForm}

@@ -97,6 +97,8 @@ const POST_SELECT = {
   id: true,
   slug: true,
   title: true,
+  metaTitle: true,
+  metaDescription: true,
   excerpt: true,
   content: true,
   featuredImageUrl: true,
@@ -111,6 +113,7 @@ const POST_SELECT = {
 const MIN_ARCHIVE_YEAR = 1970;
 // A small future buffer supports scheduled content while rejecting malformed far-future years.
 const MAX_ARCHIVE_YEARS_AHEAD = 20;
+const MAX_REDIRECT_DEPTH = 5;
 
 @Injectable()
 export class PublicContentService {
@@ -174,6 +177,8 @@ export class PublicContentService {
         id: true,
         slug: true,
         title: true,
+        metaTitle: true,
+        metaDescription: true,
         content: true,
         featuredImageUrl: true,
         publishedAt: true,
@@ -193,6 +198,8 @@ export class PublicContentService {
         id: true,
         slug: true,
         title: true,
+        metaTitle: true,
+        metaDescription: true,
         content: true,
         featuredImageUrl: true,
         publishedAt: true,
@@ -202,6 +209,12 @@ export class PublicContentService {
 
     if (!page) throw new NotFoundException(`Page ${slug} not found`);
     return page;
+  }
+
+  async findPageRedirectBySlug(slug: string) {
+    return {
+      redirectTo: await this.findPublishedRedirectTarget('PAGE', slug),
+    };
   }
 
   findPublishedPosts(query: PostQuery = {}) {
@@ -224,6 +237,12 @@ export class PublicContentService {
 
     if (!post) throw new NotFoundException(`Post ${slug} not found`);
     return post;
+  }
+
+  async findPostRedirectBySlug(slug: string) {
+    return {
+      redirectTo: await this.findPublishedRedirectTarget('POST', slug),
+    };
   }
 
   async findCategories() {
@@ -642,5 +661,58 @@ export class PublicContentService {
       lt: to,
       lte: now,
     };
+  }
+
+  private async findPublishedRedirectTarget(contentType: 'PAGE' | 'POST', slug: string) {
+    const visited = new Set([slug]);
+    let currentSlug = slug;
+
+    for (let depth = 0; depth < MAX_REDIRECT_DEPTH; depth += 1) {
+      const redirect = await this.prisma.slugRedirect.findUnique({
+        where: {
+          contentType_sourceSlug: {
+            contentType,
+            sourceSlug: currentSlug,
+          },
+        },
+        select: {
+          targetSlug: true,
+        },
+      });
+
+      if (!redirect || visited.has(redirect.targetSlug)) return null;
+
+      const publishedPath = await this.findPublishedContentPath(contentType, redirect.targetSlug);
+      if (publishedPath) return publishedPath;
+
+      visited.add(redirect.targetSlug);
+      currentSlug = redirect.targetSlug;
+    }
+
+    return null;
+  }
+
+  private async findPublishedContentPath(contentType: 'PAGE' | 'POST', slug: string) {
+    const now = new Date();
+
+    if (contentType === 'PAGE') {
+      const page = await this.prisma.page.findFirst({
+        where: {
+          slug,
+          publishedAt: { not: null, lte: now },
+        },
+        select: { slug: true },
+      });
+      return page ? `/${page.slug}` : null;
+    }
+
+    const post = await this.prisma.post.findFirst({
+      where: {
+        slug,
+        publishedAt: { not: null, lte: now },
+      },
+      select: { slug: true },
+    });
+    return post ? `/blog/${post.slug}` : null;
   }
 }

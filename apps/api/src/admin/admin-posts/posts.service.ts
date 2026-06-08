@@ -41,6 +41,8 @@ export class PostsService {
       data: {
         slug,
         title: dto.title,
+        metaTitle: this.normalizeMetadataField(dto.metaTitle),
+        metaDescription: this.normalizeMetadataField(dto.metaDescription),
         excerpt: dto.excerpt ?? null,
         content: sanitizeCmsHtml(dto.content),
         ...featuredMedia,
@@ -54,7 +56,11 @@ export class PostsService {
   }
 
   async update(id: string, dto: UpdatePostDto) {
-    await this.findOne(id);
+    const existingPost = await this.prisma.post.findUnique({
+      where: { id },
+      select: { id: true, slug: true },
+    });
+    if (!existingPost) throw new NotFoundException(`Post ${id} not found`);
     const slug = dto.slug ? normalizeSlug(dto.slug) : undefined;
     if (slug) {
       const existing = await this.prisma.post.findUnique({ where: { slug } });
@@ -66,21 +72,69 @@ export class PostsService {
         ? await this.resolveFeaturedMedia(dto.featuredMediaId, dto.featuredImageUrl)
         : undefined;
 
-    return this.prisma.post.update({
-      where: { id },
-      data: {
-        slug,
-        title: dto.title,
-        excerpt: dto.excerpt === undefined ? undefined : dto.excerpt,
-        content: dto.content === undefined ? undefined : sanitizeCmsHtml(dto.content),
-        ...featuredMedia,
-        publishedAt: dto.publishedAt === null ? null : dto.publishedAt ? new Date(dto.publishedAt) : undefined,
-        authorId: dto.authorId,
-        categories: dto.categoryIds ? { set: dto.categoryIds.map((id) => ({ id })) } : undefined,
-        tags: dto.tagIds ? { set: dto.tagIds.map((id) => ({ id })) } : undefined,
-      },
-      include: POST_INCLUDE,
-    }).then((post) => this.serializePost(post));
+    const nextSlug = slug ?? existingPost.slug;
+
+    return this.prisma.$transaction(async (tx) => {
+      if (nextSlug !== existingPost.slug) {
+        await tx.slugRedirect.deleteMany({
+          where: {
+            contentType: 'POST',
+            sourceSlug: nextSlug,
+          },
+        });
+      }
+
+      const post = await tx.post.update({
+        where: { id },
+        data: {
+          slug,
+          title: dto.title,
+          metaTitle: dto.metaTitle === undefined ? undefined : this.normalizeMetadataField(dto.metaTitle),
+          metaDescription:
+            dto.metaDescription === undefined ? undefined : this.normalizeMetadataField(dto.metaDescription),
+          excerpt: dto.excerpt === undefined ? undefined : dto.excerpt,
+          content: dto.content === undefined ? undefined : sanitizeCmsHtml(dto.content),
+          ...featuredMedia,
+          publishedAt: dto.publishedAt === null ? null : dto.publishedAt ? new Date(dto.publishedAt) : undefined,
+          authorId: dto.authorId,
+          categories: dto.categoryIds ? { set: dto.categoryIds.map((id) => ({ id })) } : undefined,
+          tags: dto.tagIds ? { set: dto.tagIds.map((id) => ({ id })) } : undefined,
+        },
+        include: POST_INCLUDE,
+      });
+
+      if (nextSlug !== existingPost.slug) {
+        await tx.slugRedirect.upsert({
+          where: {
+            contentType_sourceSlug: {
+              contentType: 'POST',
+              sourceSlug: existingPost.slug,
+            },
+          },
+          update: {
+            targetSlug: nextSlug,
+          },
+          create: {
+            contentType: 'POST',
+            sourceSlug: existingPost.slug,
+            targetSlug: nextSlug,
+          },
+        });
+
+        await tx.slugRedirect.updateMany({
+          where: {
+            contentType: 'POST',
+            targetSlug: existingPost.slug,
+            sourceSlug: { not: existingPost.slug },
+          },
+          data: {
+            targetSlug: nextSlug,
+          },
+        });
+      }
+
+      return this.serializePost(post);
+    });
   }
 
   async publish(id: string) {
@@ -138,5 +192,11 @@ export class PostsService {
       ...post,
       featuredMedia: post.featuredMedia ? serializeMediaAsset(post.featuredMedia) : null,
     };
+  }
+
+  private normalizeMetadataField(value?: string | null) {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim();
+    return normalized || null;
   }
 }

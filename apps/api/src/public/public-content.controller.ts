@@ -20,6 +20,11 @@ export class PublicContentController {
     return this.publicContentService.findPublishedPageBySlug(slug);
   }
 
+  @Get('pages/:slug/redirect')
+  findPageRedirectBySlug(@Param('slug') slug: string) {
+    return this.publicContentService.findPageRedirectBySlug(slug);
+  }
+
   @Get('posts')
   findPosts(
     @Query('search') search?: string,
@@ -47,6 +52,11 @@ export class PublicContentController {
   @Get('posts/:slug')
   findPostBySlug(@Param('slug') slug: string) {
     return this.publicContentService.findPublishedPostBySlug(slug);
+  }
+
+  @Get('posts/:slug/redirect')
+  findPostRedirectBySlug(@Param('slug') slug: string) {
+    return this.publicContentService.findPostRedirectBySlug(slug);
   }
 
   @Get('categories')

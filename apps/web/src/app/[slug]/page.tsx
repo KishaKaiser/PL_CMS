@@ -1,14 +1,41 @@
-import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { BlogIndex } from '../../components/blog-index';
 import { PublicSiteShell } from '../../components/public-site-shell';
 import { RichContent } from '../../components/cms/rich-content';
-import { getPublishedPage, getPublicSiteConfig, getSafeImageSrc } from '../../lib/public-cms';
+import { getPublishedPage, getPublicSiteConfig, getSafeImageSrc, resolvePageRedirect } from '../../lib/public-cms';
+import { buildSeoMetadata, getSeoDescription, getSeoTitle } from '../../lib/seo';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type Props = {
   params: Promise<{ slug: string }>;
   searchParams?: Promise<SearchParams>;
 };
+
+export async function generateMetadata({ params }: Pick<Props, 'params'>): Promise<Metadata> {
+  const { slug } = await params;
+  const siteConfig = await getPublicSiteConfig();
+
+  if (siteConfig.postsPage.pageSlug && slug === siteConfig.postsPage.pageSlug) {
+    return buildSeoMetadata({
+      title: getSeoTitle(siteConfig.postsPage.title),
+      description: getSeoDescription(siteConfig.theme.heroBody, siteConfig.identity.tagline),
+      path: siteConfig.postsPage.path,
+      siteName: siteConfig.identity.title,
+    });
+  }
+
+  const page = await getPublishedPage(slug);
+  if (!page) return {};
+
+  return buildSeoMetadata({
+    title: getSeoTitle(page.title, page.metaTitle),
+    description: getSeoDescription(page.metaDescription, page.content, siteConfig.identity.tagline),
+    path: `/${page.slug}`,
+    imageUrl: page.featuredImageUrl ?? siteConfig.identity.logoUrl,
+    siteName: siteConfig.identity.title,
+  });
+}
 
 export default async function CmsPage({ params, searchParams }: Props) {
   const { slug } = await params;
@@ -20,7 +47,11 @@ export default async function CmsPage({ params, searchParams }: Props) {
 
   const page = await getPublishedPage(slug);
 
-  if (!page) notFound();
+  if (!page) {
+    const redirectTarget = await resolvePageRedirect(slug);
+    if (redirectTarget) permanentRedirect(redirectTarget);
+    notFound();
+  }
 
   const featuredImageSrc = getSafeImageSrc(page.featuredImageUrl);
 
