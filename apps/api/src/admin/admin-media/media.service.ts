@@ -11,14 +11,6 @@ import {
   serializeMediaAsset,
 } from './media.util';
 
-type UploadedMediaFile = {
-  filename: string;
-  originalname: string;
-  mimetype: string;
-  path: string;
-  size: number;
-};
-
 @Injectable()
 export class MediaService {
   constructor(private readonly prisma: PrismaService) {}
@@ -47,11 +39,11 @@ export class MediaService {
     return asset;
   }
 
-  async create(file: UploadedMediaFile | undefined, dto: UploadMediaDto) {
+  async create(file: Express.Multer.File | undefined, dto: UploadMediaDto) {
     if (!file) throw new BadRequestException('Choose a media file to upload.');
 
     if (!ALLOWED_MEDIA_MIME_TYPES.has(file.mimetype)) {
-      await unlink(file.path).catch(() => undefined);
+      await unlink(join(getMediaUploadDirectory(), file.filename)).catch(() => undefined);
       throw new BadRequestException('Only JPG, PNG, GIF, WEBP, and PDF uploads are supported.');
     }
 

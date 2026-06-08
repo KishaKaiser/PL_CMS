@@ -26,8 +26,9 @@ export function getMediaUploadDirectory() {
 }
 
 export function generateMediaStorageKey(originalName: string) {
-  const extension = extname(originalName).toLowerCase().replace(/[^.\w-]/g, '');
-  return `${randomUUID()}${extension}`;
+  const extension = extname(originalName).toLowerCase();
+  const safeExtension = /^\.[a-z0-9]+$/i.test(extension) ? extension : '';
+  return `${randomUUID()}${safeExtension}`;
 }
 
 export function buildMediaAssetUrl(id: string) {

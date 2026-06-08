@@ -1,17 +1,4 @@
-import {
-  BadRequestException,
-  Controller,
-  Get,
-  Param,
-  Post,
-  Query,
-  Res,
-  StreamableFile,
-  UploadedFile,
-  UseGuards,
-  UseInterceptors,
-  Body,
-} from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors, Body } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -64,8 +51,8 @@ export class MediaController {
       },
     }),
   )
-  upload(@UploadedFile() file: unknown, @Body() dto: UploadMediaDto) {
-    return this.mediaService.create(file as Parameters<MediaService['create']>[0], dto);
+  upload(@UploadedFile() file: Express.Multer.File | undefined, @Body() dto: UploadMediaDto) {
+    return this.mediaService.create(file, dto);
   }
 
   @Get(':id/file')
@@ -73,8 +60,6 @@ export class MediaController {
     const { asset, stream } = await this.mediaService.openFileStream(id);
     const disposition = isImageMimeType(asset.mimeType) ? 'inline' : 'attachment';
     const filename = sanitizeDownloadName(asset.originalName);
-
-    if (!filename) throw new BadRequestException('Invalid media filename.');
 
     res.setHeader('Content-Type', asset.mimeType);
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
