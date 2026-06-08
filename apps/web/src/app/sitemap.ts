@@ -34,7 +34,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   addEntry('/', { changeFrequency: 'daily', priority: 1 });
   addEntry(siteConfig.postsPage.path, { changeFrequency: 'daily', priority: 0.9 });
-  addEntry('/feed.xml', { changeFrequency: 'hourly', priority: 0.4 });
   addEntry('/blog/archive', { changeFrequency: 'weekly', priority: 0.5 });
 
   for (const page of pages) {

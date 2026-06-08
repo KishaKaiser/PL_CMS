@@ -113,6 +113,7 @@ const POST_SELECT = {
 const MIN_ARCHIVE_YEAR = 1970;
 // A small future buffer supports scheduled content while rejecting malformed far-future years.
 const MAX_ARCHIVE_YEARS_AHEAD = 20;
+const MAX_REDIRECT_DEPTH = 5;
 
 @Injectable()
 export class PublicContentService {
@@ -663,25 +664,41 @@ export class PublicContentService {
   }
 
   private async findPublishedRedirectTarget(contentType: 'PAGE' | 'POST', slug: string) {
-    const redirect = await this.prisma.slugRedirect.findUnique({
-      where: {
-        contentType_sourceSlug: {
-          contentType,
-          sourceSlug: slug,
+    const visited = new Set([slug]);
+    let currentSlug = slug;
+
+    for (let depth = 0; depth < MAX_REDIRECT_DEPTH; depth += 1) {
+      const redirect = await this.prisma.slugRedirect.findUnique({
+        where: {
+          contentType_sourceSlug: {
+            contentType,
+            sourceSlug: currentSlug,
+          },
         },
-      },
-      select: {
-        targetSlug: true,
-      },
-    });
+        select: {
+          targetSlug: true,
+        },
+      });
 
-    if (!redirect || redirect.targetSlug === slug) return null;
+      if (!redirect || visited.has(redirect.targetSlug)) return null;
 
+      const publishedPath = await this.findPublishedContentPath(contentType, redirect.targetSlug);
+      if (publishedPath) return publishedPath;
+
+      visited.add(redirect.targetSlug);
+      currentSlug = redirect.targetSlug;
+    }
+
+    return null;
+  }
+
+  private async findPublishedContentPath(contentType: 'PAGE' | 'POST', slug: string) {
     const now = new Date();
+
     if (contentType === 'PAGE') {
       const page = await this.prisma.page.findFirst({
         where: {
-          slug: redirect.targetSlug,
+          slug,
           publishedAt: { not: null, lte: now },
         },
         select: { slug: true },
@@ -691,7 +708,7 @@ export class PublicContentService {
 
     const post = await this.prisma.post.findFirst({
       where: {
-        slug: redirect.targetSlug,
+        slug,
         publishedAt: { not: null, lte: now },
       },
       select: { slug: true },

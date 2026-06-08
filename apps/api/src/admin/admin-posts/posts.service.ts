@@ -97,8 +97,8 @@ export class PostsService {
           ...featuredMedia,
           publishedAt: dto.publishedAt === null ? null : dto.publishedAt ? new Date(dto.publishedAt) : undefined,
           authorId: dto.authorId,
-          categories: dto.categoryIds ? { set: dto.categoryIds.map((entryId) => ({ id: entryId })) } : undefined,
-          tags: dto.tagIds ? { set: dto.tagIds.map((entryId) => ({ id: entryId })) } : undefined,
+          categories: dto.categoryIds ? { set: dto.categoryIds.map((id) => ({ id })) } : undefined,
+          tags: dto.tagIds ? { set: dto.tagIds.map((id) => ({ id })) } : undefined,
         },
         include: POST_INCLUDE,
       });
