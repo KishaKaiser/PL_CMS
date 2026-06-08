@@ -4,6 +4,7 @@ import { BadRequestException } from '@nestjs/common';
 
 const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
 const DOCUMENT_MIME_TYPES = ['application/pdf'] as const;
+// UUID storage keys are generated server-side with an optional safe lowercase extension suffix.
 const STORAGE_KEY_PATTERN = /^[0-9a-f-]{36}(?:\.[a-z0-9]+)?$/i;
 
 export const ALLOWED_MEDIA_MIME_TYPES = new Set<string>([...IMAGE_MIME_TYPES, ...DOCUMENT_MIME_TYPES]);

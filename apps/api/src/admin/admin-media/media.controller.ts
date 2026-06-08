@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Query, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors, Body } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Res, StreamableFile, UploadedFile, UnsupportedMediaTypeException, UseGuards, UseInterceptors } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -8,6 +8,7 @@ import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { ListMediaDto, UploadMediaDto } from './media.dto';
 import {
+  ALLOWED_MEDIA_MIME_TYPES,
   MAX_MEDIA_FILE_SIZE,
   generateMediaStorageKey,
   getMediaUploadDirectory,
@@ -46,6 +47,13 @@ export class MediaController {
           callback(null, generateMediaStorageKey(file.originalname));
         },
       }),
+      fileFilter: (_req, file, callback) => {
+        if (!ALLOWED_MEDIA_MIME_TYPES.has(file.mimetype)) {
+          callback(new UnsupportedMediaTypeException('Only JPG, PNG, GIF, WEBP, and PDF uploads are supported.'), false);
+          return;
+        }
+        callback(null, true);
+      },
       limits: {
         fileSize: MAX_MEDIA_FILE_SIZE,
       },

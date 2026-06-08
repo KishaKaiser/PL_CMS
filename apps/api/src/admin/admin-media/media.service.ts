@@ -1,12 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { createReadStream, existsSync, mkdirSync } from 'fs';
-import { unlink } from 'fs/promises';
+import { createReadStream, existsSync } from 'fs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ListMediaDto, UploadMediaDto } from './media.dto';
 import {
-  ALLOWED_MEDIA_MIME_TYPES,
   deriveMediaTitle,
-  getMediaUploadDirectory,
   resolveMediaStoragePath,
   serializeMediaAsset,
 } from './media.util';
@@ -41,13 +38,6 @@ export class MediaService {
 
   async create(file: Express.Multer.File | undefined, dto: UploadMediaDto) {
     if (!file) throw new BadRequestException('Choose a media file to upload.');
-
-    if (!ALLOWED_MEDIA_MIME_TYPES.has(file.mimetype)) {
-      await unlink(resolveMediaStoragePath(file.filename)).catch(() => undefined);
-      throw new BadRequestException('Only JPG, PNG, GIF, WEBP, and PDF uploads are supported.');
-    }
-
-    mkdirSync(getMediaUploadDirectory(), { recursive: true });
 
     const asset = await this.prisma.mediaAsset.create({
       data: {
