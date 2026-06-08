@@ -11,6 +11,8 @@ import { AuditController } from './audit/audit.controller';
 import { AuditService } from './audit/audit.service';
 import { TaxonomiesController } from './admin-taxonomies/taxonomies.controller';
 import { TaxonomiesService } from './admin-taxonomies/taxonomies.service';
+import { MediaController } from './admin-media/media.controller';
+import { MediaService } from './admin-media/media.service';
 
 @Module({
   controllers: [
@@ -20,8 +22,9 @@ import { TaxonomiesService } from './admin-taxonomies/taxonomies.service';
     SettingsController,
     AuditController,
     TaxonomiesController,
+    MediaController,
   ],
-  providers: [PagesService, PostsService, AdminUsersService, SettingsService, AuditService, TaxonomiesService],
+  providers: [PagesService, PostsService, AdminUsersService, SettingsService, AuditService, TaxonomiesService, MediaService],
   exports: [AuditService],
 })
 export class AdminModule {}

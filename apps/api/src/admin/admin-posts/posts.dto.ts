@@ -39,6 +39,11 @@ export class CreatePostDto {
   featuredImageUrl?: string | null;
 
   @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  featuredMediaId?: string | null;
+
+  @IsOptional()
   @IsDateString()
   publishedAt?: string | null;
 
@@ -83,6 +88,11 @@ export class UpdatePostDto {
   @IsOptional()
   @IsUrl(FEATURED_IMAGE_OPTIONS, { message: 'Featured image must be a valid URL' })
   featuredImageUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  featuredMediaId?: string | null;
 
   @IsOptional()
   @IsDateString()

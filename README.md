@@ -212,6 +212,7 @@ Prisma schema with the following models:
 | `BroadcastMessage` / `BroadcastTarget` | Admin broadcasts |
 | `Page` | CMS static pages |
 | `Post` | Blog/news posts |
+| `MediaAsset` | Uploaded media library assets reused across CMS workflows |
 | `Setting` | Key-value platform settings |
 | `Module` | Pluggable feature modules |
 | `Product` | Purchasable products (minute packs, etc.) |
