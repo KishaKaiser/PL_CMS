@@ -134,6 +134,59 @@ export class InstallService {
     const settings: { key: string; value: string }[] = [
       { key: 'site_name', value: 'Psychic Link CMS' },
       { key: 'site_currency', value: 'USD' },
+      {
+        key: 'site_identity',
+        value: JSON.stringify({
+          title: 'Psychic Link CMS',
+          tagline: 'Public CMS frontend powered by published content.',
+          logoUrl: '',
+          footerText: 'Browse published pages and blog posts managed in the CMS.',
+        }),
+      },
+      {
+        key: 'site_homepage',
+        value: JSON.stringify({
+          mode: 'landing',
+          pageSlug: '',
+        }),
+      },
+      {
+        key: 'site_posts_page',
+        value: JSON.stringify({
+          type: 'default',
+          pageSlug: '',
+        }),
+      },
+      {
+        key: 'site_menus',
+        value: JSON.stringify({
+          header: [
+            { label: 'Home', href: '/' },
+            { label: 'Blog', href: '/blog' },
+          ],
+          footer: [
+            { label: 'Home', href: '/' },
+            { label: 'Blog', href: '/blog' },
+          ],
+        }),
+      },
+      {
+        key: 'site_theme',
+        value: JSON.stringify({
+          primaryColor: '#4f46e5',
+          accentColor: '#7c3aed',
+          heroTitle: 'Psychic Link CMS',
+          heroBody: 'Welcome to the public site. Read our latest posts or browse CMS pages.',
+          heroPrimaryLabel: 'Visit Blog',
+          heroPrimaryHref: '',
+          heroSecondaryLabel: 'Admin',
+          heroSecondaryHref: '/admin',
+          homepageSections: {
+            pages: { enabled: true, title: 'Browse Pages' },
+            posts: { enabled: true, title: 'Latest Posts' },
+          },
+        }),
+      },
     ];
 
     for (const s of settings) {
