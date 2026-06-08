@@ -448,10 +448,10 @@ export class PublicContentService {
     if (mode === 'page' && !selectedPage) {
       if (pageSlug) {
         this.logger.warn(
-          `Configured homepage page "${pageSlug}" was not found among published pages (it may be unpublished, deleted, or missing); falling back to landing mode.`,
+          `Homepage page "${pageSlug}" not found in published pages; falling back to landing mode.`,
         );
       } else {
-        this.logger.warn('Homepage mode is set to "page" without a configured page slug; falling back to landing mode.');
+        this.logger.warn('Homepage mode set to "page" without configured slug; falling back to landing mode.');
       }
 
       return {

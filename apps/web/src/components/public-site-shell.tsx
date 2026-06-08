@@ -29,8 +29,8 @@ export async function PublicSiteShell({ children, siteConfig }: Props) {
           </div>
 
           <nav className="flex flex-wrap items-center gap-3 text-sm">
-            {config.menus.header.map((item) => (
-              <Link key={`${item.label}-${item.href}`} href={item.href} className="rounded px-3 py-2 hover:bg-gray-100">
+            {config.menus.header.map((item, index) => (
+              <Link key={`${item.label}-${item.href}-${index}`} href={item.href} className="rounded px-3 py-2 hover:bg-gray-100">
                 {item.label}
               </Link>
             ))}
@@ -47,8 +47,8 @@ export async function PublicSiteShell({ children, siteConfig }: Props) {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-6 py-6 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
           <p>{config.identity.footerText}</p>
           <div className="flex flex-wrap gap-4">
-            {config.menus.footer.map((item) => (
-              <Link key={`${item.label}-${item.href}`} href={item.href} className="hover:underline" style={{ color: config.theme.primaryColor }}>
+            {config.menus.footer.map((item, index) => (
+              <Link key={`${item.label}-${item.href}-${index}`} href={item.href} className="hover:underline" style={{ color: config.theme.primaryColor }}>
                 {item.label}
               </Link>
             ))}

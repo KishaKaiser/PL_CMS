@@ -217,6 +217,7 @@ function MenuEditor({
             <button
               type="button"
               onClick={() => removeItem(item.id)}
+              aria-label={`Remove ${item.label || 'menu item'}`}
               className="rounded border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
             >
               Remove
@@ -686,8 +687,9 @@ export default function AdminSettingsPage() {
 
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
             <div className="rounded-lg border border-gray-200 p-4">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <label htmlFor="show-homepage-pages-section" className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <input
+                  id="show-homepage-pages-section"
                   type="checkbox"
                   checked={themeForm.homepageSections.pages.enabled}
                   onChange={(event) =>
@@ -725,8 +727,9 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="rounded-lg border border-gray-200 p-4">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <label htmlFor="show-homepage-posts-section" className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <input
+                  id="show-homepage-posts-section"
                   type="checkbox"
                   checked={themeForm.homepageSections.posts.enabled}
                   onChange={(event) =>
