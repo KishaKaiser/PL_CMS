@@ -1,5 +1,11 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { PublicContentService } from './public-content.service';
+import {
+  PublicAuthorParamDto,
+  PublicPagesQueryDto,
+  PublicPostsQueryDto,
+  PublicSlugParamDto,
+} from './public-content.dto';
 
 @Controller('public')
 export class PublicContentController {
@@ -11,52 +17,45 @@ export class PublicContentController {
   }
 
   @Get('pages')
-  findPages(@Query('excludeSlug') excludeSlug?: string) {
-    return this.publicContentService.findPublishedPages(excludeSlug);
+  findPages(@Query() query: PublicPagesQueryDto) {
+    return this.publicContentService.findPublishedPages(query.excludeSlug);
   }
 
   @Get('pages/:slug')
-  findPageBySlug(@Param('slug') slug: string) {
-    return this.publicContentService.findPublishedPageBySlug(slug);
+  findPageBySlug(@Param() params: PublicSlugParamDto) {
+    return this.publicContentService.findPublishedPageBySlug(params.slug);
   }
 
   @Get('pages/:slug/redirect')
-  findPageRedirectBySlug(@Param('slug') slug: string) {
-    return this.publicContentService.findPageRedirectBySlug(slug);
+  findPageRedirectBySlug(@Param() params: PublicSlugParamDto) {
+    return this.publicContentService.findPageRedirectBySlug(params.slug);
   }
 
   @Get('posts')
-  findPosts(
-    @Query('search') search?: string,
-    @Query('category') categorySlug?: string,
-    @Query('tag') tagSlug?: string,
-    @Query('authorId') authorId?: string,
-    @Query('year') year?: string,
-    @Query('month') month?: string,
-  ) {
+  findPosts(@Query() query: PublicPostsQueryDto) {
     return this.publicContentService.findPublishedPosts({
-      search,
-      categorySlug,
-      tagSlug,
-      authorId,
-      year,
-      month,
+      search: query.search,
+      categorySlug: query.category,
+      tagSlug: query.tag,
+      authorId: query.authorId,
+      year: query.year?.toString(),
+      month: query.month?.toString(),
     });
   }
 
   @Get('posts/:slug/related')
-  findRelatedPosts(@Param('slug') slug: string) {
-    return this.publicContentService.findRelatedPosts(slug);
+  findRelatedPosts(@Param() params: PublicSlugParamDto) {
+    return this.publicContentService.findRelatedPosts(params.slug);
   }
 
   @Get('posts/:slug')
-  findPostBySlug(@Param('slug') slug: string) {
-    return this.publicContentService.findPublishedPostBySlug(slug);
+  findPostBySlug(@Param() params: PublicSlugParamDto) {
+    return this.publicContentService.findPublishedPostBySlug(params.slug);
   }
 
   @Get('posts/:slug/redirect')
-  findPostRedirectBySlug(@Param('slug') slug: string) {
-    return this.publicContentService.findPostRedirectBySlug(slug);
+  findPostRedirectBySlug(@Param() params: PublicSlugParamDto) {
+    return this.publicContentService.findPostRedirectBySlug(params.slug);
   }
 
   @Get('categories')
@@ -65,8 +64,8 @@ export class PublicContentController {
   }
 
   @Get('categories/:slug/posts')
-  findPostsByCategory(@Param('slug') slug: string) {
-    return this.publicContentService.findPostsByCategorySlug(slug);
+  findPostsByCategory(@Param() params: PublicSlugParamDto) {
+    return this.publicContentService.findPostsByCategorySlug(params.slug);
   }
 
   @Get('tags')
@@ -75,8 +74,8 @@ export class PublicContentController {
   }
 
   @Get('tags/:slug/posts')
-  findPostsByTag(@Param('slug') slug: string) {
-    return this.publicContentService.findPostsByTagSlug(slug);
+  findPostsByTag(@Param() params: PublicSlugParamDto) {
+    return this.publicContentService.findPostsByTagSlug(params.slug);
   }
 
   @Get('authors')
@@ -85,8 +84,8 @@ export class PublicContentController {
   }
 
   @Get('authors/:authorId/posts')
-  findPostsByAuthor(@Param('authorId') authorId: string) {
-    return this.publicContentService.findPostsByAuthorId(authorId);
+  findPostsByAuthor(@Param() params: PublicAuthorParamDto) {
+    return this.publicContentService.findPostsByAuthorId(params.authorId);
   }
 
   @Get('archives')

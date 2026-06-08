@@ -423,6 +423,8 @@ export default function AdminPagesPage() {
                   {showRevisions ? 'Hide revisions' : 'Revisions'}
                 </button>
                 <span
+                  role="status"
+                  aria-live="polite"
                   className={`rounded-full px-3 py-1 text-xs font-medium ${getAutosaveBadgeClass(autosaveState)}`}
                 >
                   {getAutosaveLabel(autosaveState)}
@@ -438,7 +440,9 @@ export default function AdminPagesPage() {
         </div>
 
         {error && (
-          <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
+          <p role="alert" aria-live="assertive" className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+            {error}
+          </p>
         )}
 
         <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">

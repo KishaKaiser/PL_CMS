@@ -4,6 +4,20 @@ import { useState, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
+function getSafeNextPath(nextPath: string | null) {
+  if (!nextPath) return '/admin';
+  if (!nextPath.startsWith('/') || nextPath.startsWith('//')) return '/admin';
+  return nextPath;
+}
+
+async function readErrorMessage(res: Response, fallback: string) {
+  const contentType = res.headers.get('content-type');
+  if (!contentType?.includes('application/json')) return fallback;
+
+  const data = (await res.json().catch(() => null)) as { message?: string } | null;
+  return data?.message ?? fallback;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -24,14 +38,12 @@ function LoginForm() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await res.json() as { ok?: boolean; message?: string };
-
       if (!res.ok) {
-        setError(data.message ?? 'Login failed');
+        setError(await readErrorMessage(res, 'Login failed'));
         return;
       }
 
-      const next = searchParams.get('next') ?? '/admin';
+      const next = getSafeNextPath(searchParams.get('next'));
       router.push(next);
     } catch {
       setError('Network error. Please try again.');
@@ -45,7 +57,11 @@ function LoginForm() {
       <div className="w-full max-w-sm rounded-lg border bg-white p-8 shadow-sm">
         <h1 className="mb-6 text-2xl font-bold">Sign In</h1>
         {error && (
-          <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+          >
             {error}
           </div>
         )}
@@ -60,6 +76,8 @@ function LoginForm() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              aria-invalid={Boolean(error)}
               className="w-full rounded border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               placeholder="you@example.com"
             />
@@ -74,6 +92,8 @@ function LoginForm() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              aria-invalid={Boolean(error)}
               className="w-full rounded border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>

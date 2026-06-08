@@ -323,6 +323,31 @@ Phase 8 adds lightweight public-site extension seams via settings keys:
 - `site_homepage_blocks` for reusable landing-page block layout (featured pages/posts/CTA)
 - `site_extension_points` for integration-friendly menu extension hooks
 
+Phase 9 (final hardening and launch readiness) adds pragmatic launch polish:
+- tighter API validation for public query/path inputs (slug format checks, bounded archive filters, capped search length)
+- stronger request validation defaults (`forbidNonWhitelisted`) and normalized auth/install email handling
+- safer login redirect behavior (`next` path must remain local)
+- resilient public/install fetch handling with timeout + graceful non-JSON fallback behavior
+- accessibility upgrades on login, installer, and admin page error/status announcements
+
+### Launch-readiness verification checklist
+
+Before shipping, run:
+
+```bash
+pnpm lint
+pnpm build
+```
+
+Manual smoke checks:
+1. `/install` blocks reruns after an admin exists and reports API/DB failures gracefully.
+2. `/login` redirects only to local in-app routes and reports auth errors accessibly.
+3. `/admin/pages` shows autosave/error state updates to assistive technology.
+4. Public content endpoints reject malformed slug/archive query input with validation errors.
+
+Known gaps to close after this phase:
+- The repository currently has no committed automated unit/integration test suite (`*.spec.ts` / `*.test.ts`), so launch verification is still primarily lint/build + manual smoke coverage.
+
 ### Authentication Architecture
 
 - Login submits to the Next.js API route `POST /api/auth/login` which calls the NestJS `/api/auth/login` endpoint and sets two **httpOnly, SameSite=Lax** cookies:

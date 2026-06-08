@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEnum, IsString, MinLength } from 'class-validator';
 import { Role } from '@pl-cms/shared';
 
 export class UpdateUserRoleDto {

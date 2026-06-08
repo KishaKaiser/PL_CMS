@@ -62,6 +62,9 @@ export class InstallService {
     this.isRunning = true;
 
     try {
+      const email = dto.email.trim().toLowerCase();
+      const name = dto.name?.trim() || 'Admin';
+
       // 1. Verify DB connectivity
       try {
         await this.prisma.$queryRaw`SELECT 1`;
@@ -87,9 +90,9 @@ export class InstallService {
       const passwordHash = await bcrypt.hash(dto.password, 12);
       const user = await this.prisma.user.create({
         data: {
-          email: dto.email,
+          email,
           passwordHash,
-          name: dto.name ?? 'Admin',
+          name,
           role: 'ADMIN',
         },
       });
