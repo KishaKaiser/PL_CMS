@@ -146,6 +146,7 @@ function normalizeMenuItems(value: unknown, fallback: MenuItem[]) {
       if (!isRecord(item)) return null;
 
       const label = readString(item.label).trim();
+      // Support older saved menu payloads that used `url` before `href` became the canonical field.
       const href = readString(item.href ?? item.url).trim();
 
       if (!label || !href) return null;
@@ -455,6 +456,9 @@ export default function AdminSettingsPage() {
                       </option>
                     ))}
                   </select>
+                  <p className="mt-2 text-xs text-gray-500">
+                    If the selected page is later unpublished or removed, the public homepage falls back to the landing layout.
+                  </p>
                 </div>
               )}
             </div>

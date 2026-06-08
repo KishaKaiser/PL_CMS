@@ -34,11 +34,9 @@ export default async function HomePage({ searchParams }: Props) {
     );
   }
 
-  const homePageSlug = siteConfig.homepage.mode === 'page'
-    ? siteConfig.homepage.pageSlug
-    : 'home';
+  const managedHomepageSlug = siteConfig.homepage.selectedPage?.slug;
   const [homePage, posts, pages] = await Promise.all([
-    getPublishedPage(homePageSlug),
+    getPublishedPage(managedHomepageSlug || 'home'),
     getPublishedPosts(),
     getPublishedPages('home'),
   ]);
@@ -47,7 +45,7 @@ export default async function HomePage({ searchParams }: Props) {
     .slice(0, MAX_FEATURED_PAGES);
   const featuredPosts = posts.slice(0, MAX_FEATURED_POSTS);
 
-  if (siteConfig.homepage.mode === 'page' && homePage) {
+  if (managedHomepageSlug && homePage) {
     return (
       <PublicSiteShell siteConfig={siteConfig}>
         <main className="mx-auto max-w-3xl p-8">

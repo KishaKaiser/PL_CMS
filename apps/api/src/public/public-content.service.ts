@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -114,6 +114,8 @@ const MAX_ARCHIVE_YEARS_AHEAD = 20;
 
 @Injectable()
 export class PublicContentService {
+  private readonly logger = new Logger(PublicContentService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async getSiteConfig() {
@@ -444,6 +446,12 @@ export class PublicContentService {
     const selectedPage = pageSlug ? publishedPageMap.get(pageSlug) : null;
 
     if (mode === 'page' && !selectedPage) {
+      if (pageSlug) {
+        this.logger.warn(
+          `Configured homepage page "${pageSlug}" is unavailable; falling back to landing mode.`,
+        );
+      }
+
       return {
         ...DEFAULT_HOMEPAGE_SETTINGS,
         selectedPage: null,
@@ -546,6 +554,7 @@ export class PublicContentService {
         if (!item || typeof item !== 'object') return null;
         const label = this.getString((item as { label?: unknown }).label, '');
         const href = this.getString(
+          // Support older saved menu payloads that used `url` before `href` became the canonical field.
           (item as { href?: unknown; url?: unknown }).href ?? (item as { url?: unknown }).url,
           '',
         );
