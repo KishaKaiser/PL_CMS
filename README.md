@@ -30,13 +30,13 @@ pl-cms/
 | Tool | Version |
 |------|---------|
 | Node.js | ≥ 20 LTS |
-| pnpm | ≥ 9 |
+| pnpm | ≥ 11 |
 | Docker + Compose | any recent |
 
 Install pnpm if needed:
 
 ```bash
-npm install -g pnpm@9
+npm install -g pnpm@11
 ```
 
 ---
@@ -57,7 +57,7 @@ That's it. The command will automatically:
 4. Generate the Prisma client
 5. Apply the initial database migration
 
-> **Prerequisites**: [Node.js ≥ 20](https://nodejs.org/), [pnpm ≥ 9](https://pnpm.io/installation), and [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker + Compose CLI) must be installed and Docker must be running before executing `pnpm setup`.
+> **Prerequisites**: [Node.js ≥ 20](https://nodejs.org/), [pnpm ≥ 11](https://pnpm.io/installation), and [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker + Compose CLI) must be installed and Docker must be running before executing `pnpm setup`.
 
 > **Secrets**: After setup completes, open `apps/api/.env` and fill in `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, and any optional integration keys (PayPal, ShipStation, SMTP) before starting the app.
 

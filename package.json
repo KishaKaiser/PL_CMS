@@ -5,7 +5,7 @@
   "description": "Psychic Link CMS \u2013 pnpm monorepo",
   "engines": {
     "node": ">=20.0.0",
-    "pnpm": ">=9.0.0"
+    "pnpm": ">=11.0.0"
   },
   "scripts": {
     "setup": "node scripts/setup.mjs",
@@ -21,8 +21,9 @@
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
-    "eslint": "^8.57.0",
-    "prettier": "^3.3.3",
-    "typescript": "^5.5.4"
-  }
+    "eslint": "^8.57.1",
+    "prettier": "^3.8.3",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@11.5.2"
 }
