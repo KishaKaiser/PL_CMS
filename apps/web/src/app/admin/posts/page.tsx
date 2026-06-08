@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EditorPreview } from '../../../components/admin/editor-preview';
+import { MediaLibrary, type MediaAsset, buildMediaEmbedHtml } from '../../../components/admin/media-library';
 import { RichTextEditor } from '../../../components/admin/rich-text-editor';
 import {
   type EditorialStatus,
@@ -21,6 +22,7 @@ interface Post {
   excerpt: string | null;
   content: string;
   featuredImageUrl: string | null;
+  featuredMedia: MediaAsset | null;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -42,6 +44,7 @@ interface PostForm {
   excerpt: string;
   content: string;
   featuredImageUrl: string;
+  featuredMediaId: string | null;
   authorId: string;
   editorialStatus: EditorialStatus;
   scheduledAt: string;
@@ -65,6 +68,7 @@ const emptyForm: PostForm = {
   excerpt: '',
   content: '',
   featuredImageUrl: '',
+  featuredMediaId: null,
   authorId: '',
   editorialStatus: 'draft',
   scheduledAt: '',
@@ -101,6 +105,8 @@ export default function AdminPostsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
+  const [featuredMedia, setFeaturedMedia] = useState<MediaAsset | null>(null);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -190,7 +196,8 @@ export default function AdminPostsPage() {
         title: form.title,
         excerpt: form.excerpt || null,
         content: form.content,
-        featuredImageUrl: form.featuredImageUrl || null,
+        featuredMediaId: form.featuredMediaId,
+        featuredImageUrl: form.featuredMediaId ? null : form.featuredImageUrl || null,
         authorId: form.authorId,
         publishedAt,
         categoryIds: form.categoryIds,
@@ -215,7 +222,9 @@ export default function AdminPostsPage() {
         setPosts((currentPosts) => [saved, ...currentPosts]);
       }
       setForm({ ...emptyForm, authorId: authors[0]?.id ?? '' });
+      setFeaturedMedia(null);
       setEditingId(null);
+      setShowMediaLibrary(false);
       setSlugTouched(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error');
@@ -258,6 +267,7 @@ export default function AdminPostsPage() {
       excerpt: post.excerpt ?? '',
       content: post.content,
       featuredImageUrl: post.featuredImageUrl ?? '',
+      featuredMediaId: post.featuredMedia?.id ?? null,
       authorId: post.author.id,
       editorialStatus,
       scheduledAt: editorialStatus === 'scheduled' ? toDatetimeLocalValue(post.publishedAt) : '',
@@ -265,6 +275,8 @@ export default function AdminPostsPage() {
       categoryIds: post.categories.map((category) => category.id),
       tagIds: post.tags.map((tag) => tag.id),
     });
+    setFeaturedMedia(post.featuredMedia);
+    setShowMediaLibrary(false);
     setSlugTouched(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -272,12 +284,21 @@ export default function AdminPostsPage() {
   function resetForm() {
     setEditingId(null);
     setForm({ ...emptyForm, authorId: authors[0]?.id ?? '' });
+    setFeaturedMedia(null);
+    setShowMediaLibrary(false);
     setSlugTouched(false);
     setError('');
   }
 
   function toggleSelection(ids: string[], id: string) {
     return ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id];
+  }
+
+  function insertMediaIntoContent(asset: MediaAsset) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      content: `${currentForm.content}${currentForm.content ? '\n' : ''}${buildMediaEmbedHtml(asset)}`,
+    }));
   }
 
   return (
@@ -438,21 +459,88 @@ export default function AdminPostsPage() {
             </section>
 
             <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <h3 className="text-sm font-semibold text-gray-900">Featured Image</h3>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Featured Image</h3>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Choose a reusable library image or paste an external image URL for this post.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowMediaLibrary((currentValue) => !currentValue)}
+                  className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  {showMediaLibrary ? 'Hide library' : 'Open library'}
+                </button>
+              </div>
+
+              {featuredMedia && (
+                <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+                  Selected from media library: <span className="font-medium">{featuredMedia.title}</span>
+                </div>
+              )}
+
               <input
                 type="url"
-                value={form.featuredImageUrl}
-                onChange={(event) => setForm((currentForm) => ({ ...currentForm, featuredImageUrl: event.target.value }))}
+                value={form.featuredMediaId ? '' : form.featuredImageUrl}
+                onChange={(event) => {
+                  setFeaturedMedia(null);
+                  setForm((currentForm) => ({
+                    ...currentForm,
+                    featuredMediaId: null,
+                    featuredImageUrl: event.target.value,
+                  }));
+                }}
                 className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                 placeholder="https://example.com/post-image.jpg"
               />
-              <p className="mt-2 text-xs text-gray-500">Paste an image URL to highlight the post in cards and detail pages.</p>
+
+              <div className="mt-2 flex flex-wrap gap-2">
+                {featuredMedia && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFeaturedMedia(null);
+                      setForm((currentForm) => ({
+                        ...currentForm,
+                        featuredMediaId: null,
+                        featuredImageUrl: '',
+                      }));
+                    }}
+                    className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Clear media selection
+                  </button>
+                )}
+              </div>
+
               {form.featuredImageUrl && (
                 <img
                   src={form.featuredImageUrl}
                   alt="Featured preview"
                   className="mt-3 h-36 w-full rounded-lg border border-gray-200 object-cover"
                 />
+              )}
+
+              {showMediaLibrary && (
+                <div className="mt-4">
+                  <MediaLibrary
+                    title="Select post media"
+                    description="Upload new assets, reuse shared images as the featured image, or insert media into the post body."
+                    selectedMediaId={form.featuredMediaId}
+                    onlyImages
+                    onSelect={(asset) => {
+                      setFeaturedMedia(asset);
+                      setForm((currentForm) => ({
+                        ...currentForm,
+                        featuredMediaId: asset.id,
+                        featuredImageUrl: asset.url,
+                      }));
+                    }}
+                    onInsert={insertMediaIntoContent}
+                  />
+                </div>
               )}
             </section>
 

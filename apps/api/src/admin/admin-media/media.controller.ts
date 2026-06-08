@@ -1,0 +1,86 @@
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+  Body,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { mkdirSync } from 'fs';
+import type { Response } from 'express';
+import { Role } from '@pl-cms/shared';
+import { Roles, RolesGuard } from '../../auth/roles.guard';
+import { ListMediaDto, UploadMediaDto } from './media.dto';
+import {
+  MAX_MEDIA_FILE_SIZE,
+  generateMediaStorageKey,
+  getMediaUploadDirectory,
+  isImageMimeType,
+  sanitizeDownloadName,
+} from './media.util';
+import { MediaService } from './media.service';
+
+@Controller('media')
+export class MediaController {
+  constructor(private readonly mediaService: MediaService) {}
+
+  @Get()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  findAll(@Query() dto: ListMediaDto) {
+    return this.mediaService.findAll(dto);
+  }
+
+  @Post()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (_req: unknown, _file: unknown, callback: (error: Error | null, destination: string) => void) => {
+          const uploadDirectory = getMediaUploadDirectory();
+          mkdirSync(uploadDirectory, { recursive: true });
+          callback(null, uploadDirectory);
+        },
+        filename: (
+          _req: unknown,
+          file: { originalname: string },
+          callback: (error: Error | null, filename: string) => void,
+        ) => {
+          callback(null, generateMediaStorageKey(file.originalname));
+        },
+      }),
+      limits: {
+        fileSize: MAX_MEDIA_FILE_SIZE,
+      },
+    }),
+  )
+  upload(@UploadedFile() file: unknown, @Body() dto: UploadMediaDto) {
+    return this.mediaService.create(file as Parameters<MediaService['create']>[0], dto);
+  }
+
+  @Get(':id/file')
+  async getFile(@Param('id') id: string, @Res({ passthrough: true }) res: Response) {
+    const { asset, stream } = await this.mediaService.openFileStream(id);
+    const disposition = isImageMimeType(asset.mimeType) ? 'inline' : 'attachment';
+    const filename = sanitizeDownloadName(asset.originalName);
+
+    if (!filename) throw new BadRequestException('Invalid media filename.');
+
+    res.setHeader('Content-Type', asset.mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    return new StreamableFile(stream);
+  }
+}
