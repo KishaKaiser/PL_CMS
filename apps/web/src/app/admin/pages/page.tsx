@@ -19,6 +19,8 @@ interface Page {
   id: string;
   slug: string;
   title: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
   content: string;
   featuredImageUrl: string | null;
   featuredMedia: MediaAsset | null;
@@ -30,6 +32,8 @@ interface Page {
 interface PageForm {
   slug: string;
   title: string;
+  metaTitle: string;
+  metaDescription: string;
   content: string;
   featuredImageUrl: string;
   featuredMediaId: string | null;
@@ -44,6 +48,8 @@ const SCHEDULE_MIN_LEAD_MS = 60_000;
 const emptyForm: PageForm = {
   slug: '',
   title: '',
+  metaTitle: '',
+  metaDescription: '',
   content: '',
   featuredImageUrl: '',
   featuredMediaId: null,
@@ -140,6 +146,8 @@ export default function AdminPagesPage() {
       const payload = {
         slug: form.slug,
         title: form.title,
+        metaTitle: form.metaTitle || null,
+        metaDescription: form.metaDescription || null,
         content: form.content,
         featuredMediaId: form.featuredMediaId,
         featuredImageUrl: form.featuredMediaId ? null : form.featuredImageUrl || null,
@@ -206,6 +214,8 @@ export default function AdminPagesPage() {
     setForm({
       slug: page.slug,
       title: page.title,
+      metaTitle: page.metaTitle ?? '',
+      metaDescription: page.metaDescription ?? '',
       content: page.content,
       featuredImageUrl: page.featuredImageUrl ?? '',
       featuredMediaId: page.featuredMedia?.id ?? null,
@@ -319,6 +329,36 @@ export default function AdminPagesPage() {
                 <span className="text-gray-500">Permalink: /{form.slug || 'your-page'}</span>
               </div>
             </div>
+
+            <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h3 className="text-sm font-semibold text-gray-900">SEO</h3>
+              <p className="mt-1 text-xs text-gray-500">Optional fields for search results and social previews. Open Graph falls back to these values automatically.</p>
+
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Meta title</label>
+                  <input
+                    value={form.metaTitle}
+                    onChange={(event) => setForm((currentForm) => ({ ...currentForm, metaTitle: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm"
+                    placeholder="About Psychic Link | Psychic Link CMS"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Meta description</label>
+                  <textarea
+                    value={form.metaDescription}
+                    onChange={(event) =>
+                      setForm((currentForm) => ({ ...currentForm, metaDescription: event.target.value }))
+                    }
+                    rows={3}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-4 py-3 text-sm"
+                    placeholder="A short description for search engines and social shares."
+                  />
+                </div>
+              </div>
+            </section>
 
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">Page Content *</label>
@@ -467,7 +507,7 @@ export default function AdminPagesPage() {
               >
                 {saving ? 'Saving…' : editingId ? 'Update Page' : 'Create Page'}
               </button>
-              {(editingId || form.title || form.slug || form.content || form.featuredImageUrl) && (
+              {(editingId || form.title || form.slug || form.metaTitle || form.metaDescription || form.content || form.featuredImageUrl) && (
                 <button
                   type="button"
                   onClick={resetForm}

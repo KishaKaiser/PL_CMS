@@ -28,6 +28,14 @@ export class CreatePostDto {
 
   @IsOptional()
   @IsString()
+  metaTitle?: string | null;
+
+  @IsOptional()
+  @IsString()
+  metaDescription?: string | null;
+
+  @IsOptional()
+  @IsString()
   excerpt?: string | null;
 
   @IsString()
@@ -75,6 +83,14 @@ export class UpdatePostDto {
   @IsString()
   @IsNotEmpty()
   title?: string;
+
+  @IsOptional()
+  @IsString()
+  metaTitle?: string | null;
+
+  @IsOptional()
+  @IsString()
+  metaDescription?: string | null;
 
   @IsOptional()
   @IsString()

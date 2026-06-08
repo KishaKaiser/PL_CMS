@@ -64,6 +64,11 @@ enum ProductType {
   MINUTE_PACK
 }
 
+enum RedirectContentType {
+  PAGE
+  POST
+}
+
 // ──────────────────────────────────────────────
 // User
 // ──────────────────────────────────────────────
@@ -251,6 +256,8 @@ model Page {
   id          String    @id @default(cuid())
   slug        String    @unique
   title       String
+  metaTitle   String?
+  metaDescription String?
   content          String
   featuredImageUrl String?
   featuredMediaId  String?
@@ -268,6 +275,8 @@ model Post {
   id          String    @id @default(cuid())
   slug        String    @unique
   title       String
+  metaTitle   String?
+  metaDescription String?
   excerpt     String?
   content          String
   featuredImageUrl String?
@@ -325,6 +334,19 @@ model Tag {
   posts Post[]
 
   @@map("tags")
+}
+
+model SlugRedirect {
+  id          String              @id @default(cuid())
+  contentType RedirectContentType
+  sourceSlug  String
+  targetSlug  String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([contentType, sourceSlug])
+  @@index([contentType, targetSlug])
+  @@map("slug_redirects")
 }
 
 // ──────────────────────────────────────────────

@@ -1,16 +1,37 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { PublicSiteShell } from '../../../components/public-site-shell';
 import { RichContent } from '../../../components/cms/rich-content';
-import { getPublishedPost, getRelatedPosts, toPlainText } from '../../../lib/public-cms';
+import { getPublishedPost, getPublicSiteConfig, getRelatedPosts, resolvePostRedirect, toPlainText } from '../../../lib/public-cms';
+import { buildSeoMetadata, getSeoDescription, getSeoTitle } from '../../../lib/seo';
 
 type Props = { params: Promise<{ slug: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const [post, siteConfig] = await Promise.all([getPublishedPost(slug), getPublicSiteConfig()]);
+  if (!post) return {};
+
+  return buildSeoMetadata({
+    title: getSeoTitle(post.title, post.metaTitle),
+    description: getSeoDescription(post.metaDescription, post.excerpt, post.content, siteConfig.identity.tagline),
+    path: `/blog/${post.slug}`,
+    imageUrl: post.featuredImageUrl,
+    siteName: siteConfig.identity.title,
+    type: 'article',
+  });
+}
 
 export default async function BlogPostPage({ params }: Props) {
   const { slug } = await params;
   const post = await getPublishedPost(slug);
 
-  if (!post) notFound();
+  if (!post) {
+    const redirectTarget = await resolvePostRedirect(slug);
+    if (redirectTarget) permanentRedirect(redirectTarget);
+    notFound();
+  }
 
   const relatedPosts = (await getRelatedPosts(slug)).filter((item) => item.id !== post.id).slice(0, 3);
 

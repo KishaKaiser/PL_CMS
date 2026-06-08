@@ -97,6 +97,8 @@ const POST_SELECT = {
   id: true,
   slug: true,
   title: true,
+  metaTitle: true,
+  metaDescription: true,
   excerpt: true,
   content: true,
   featuredImageUrl: true,
@@ -174,6 +176,8 @@ export class PublicContentService {
         id: true,
         slug: true,
         title: true,
+        metaTitle: true,
+        metaDescription: true,
         content: true,
         featuredImageUrl: true,
         publishedAt: true,
@@ -193,6 +197,8 @@ export class PublicContentService {
         id: true,
         slug: true,
         title: true,
+        metaTitle: true,
+        metaDescription: true,
         content: true,
         featuredImageUrl: true,
         publishedAt: true,
@@ -202,6 +208,12 @@ export class PublicContentService {
 
     if (!page) throw new NotFoundException(`Page ${slug} not found`);
     return page;
+  }
+
+  async findPageRedirectBySlug(slug: string) {
+    return {
+      redirectTo: await this.findPublishedRedirectTarget('PAGE', slug),
+    };
   }
 
   findPublishedPosts(query: PostQuery = {}) {
@@ -224,6 +236,12 @@ export class PublicContentService {
 
     if (!post) throw new NotFoundException(`Post ${slug} not found`);
     return post;
+  }
+
+  async findPostRedirectBySlug(slug: string) {
+    return {
+      redirectTo: await this.findPublishedRedirectTarget('POST', slug),
+    };
   }
 
   async findCategories() {
@@ -642,5 +660,42 @@ export class PublicContentService {
       lt: to,
       lte: now,
     };
+  }
+
+  private async findPublishedRedirectTarget(contentType: 'PAGE' | 'POST', slug: string) {
+    const redirect = await this.prisma.slugRedirect.findUnique({
+      where: {
+        contentType_sourceSlug: {
+          contentType,
+          sourceSlug: slug,
+        },
+      },
+      select: {
+        targetSlug: true,
+      },
+    });
+
+    if (!redirect || redirect.targetSlug === slug) return null;
+
+    const now = new Date();
+    if (contentType === 'PAGE') {
+      const page = await this.prisma.page.findFirst({
+        where: {
+          slug: redirect.targetSlug,
+          publishedAt: { not: null, lte: now },
+        },
+        select: { slug: true },
+      });
+      return page ? `/${page.slug}` : null;
+    }
+
+    const post = await this.prisma.post.findFirst({
+      where: {
+        slug: redirect.targetSlug,
+        publishedAt: { not: null, lte: now },
+      },
+      select: { slug: true },
+    });
+    return post ? `/blog/${post.slug}` : null;
   }
 }

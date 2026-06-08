@@ -40,6 +40,8 @@ export class PagesService {
       data: {
         slug,
         title: dto.title,
+        metaTitle: this.normalizeMetadataField(dto.metaTitle),
+        metaDescription: this.normalizeMetadataField(dto.metaDescription),
         content: sanitizeCmsHtml(dto.content),
         ...featuredMedia,
         publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : null,
@@ -83,7 +85,11 @@ export class PagesService {
   }
 
   async update(id: string, dto: UpdatePageDto) {
-    await this.findOne(id);
+    const existingPage = await this.prisma.page.findUnique({
+      where: { id },
+      select: { id: true, slug: true },
+    });
+    if (!existingPage) throw new NotFoundException(`Page ${id} not found`);
     const slug = dto.slug ? normalizeSlug(dto.slug) : undefined;
     if (slug) {
       const existing = await this.prisma.page.findUnique({ where: { slug } });
@@ -95,19 +101,65 @@ export class PagesService {
         ? await this.resolveFeaturedMedia(dto.featuredMediaId, dto.featuredImageUrl)
         : undefined;
 
-    return this.prisma.page
-      .update({
+    const nextSlug = slug ?? existingPage.slug;
+
+    return this.prisma.$transaction(async (tx) => {
+      if (nextSlug !== existingPage.slug) {
+        await tx.slugRedirect.deleteMany({
+          where: {
+            contentType: 'PAGE',
+            sourceSlug: nextSlug,
+          },
+        });
+      }
+
+      const page = await tx.page.update({
         where: { id },
         data: {
           slug,
           title: dto.title,
+          metaTitle: dto.metaTitle === undefined ? undefined : this.normalizeMetadataField(dto.metaTitle),
+          metaDescription:
+            dto.metaDescription === undefined ? undefined : this.normalizeMetadataField(dto.metaDescription),
           content: dto.content === undefined ? undefined : sanitizeCmsHtml(dto.content),
           ...featuredMedia,
           publishedAt: dto.publishedAt === null ? null : dto.publishedAt ? new Date(dto.publishedAt) : undefined,
         },
         include: PAGE_INCLUDE,
-      })
-      .then((page) => this.serializePage(page));
+      });
+
+      if (nextSlug !== existingPage.slug) {
+        await tx.slugRedirect.upsert({
+          where: {
+            contentType_sourceSlug: {
+              contentType: 'PAGE',
+              sourceSlug: existingPage.slug,
+            },
+          },
+          update: {
+            targetSlug: nextSlug,
+          },
+          create: {
+            contentType: 'PAGE',
+            sourceSlug: existingPage.slug,
+            targetSlug: nextSlug,
+          },
+        });
+
+        await tx.slugRedirect.updateMany({
+          where: {
+            contentType: 'PAGE',
+            targetSlug: existingPage.slug,
+            sourceSlug: { not: existingPage.slug },
+          },
+          data: {
+            targetSlug: nextSlug,
+          },
+        });
+      }
+
+      return this.serializePage(page);
+    });
   }
 
   async publish(id: string) {
@@ -135,5 +187,11 @@ export class PagesService {
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.page.delete({ where: { id } });
+  }
+
+  private normalizeMetadataField(value?: string | null) {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim();
+    return normalized || null;
   }
 }
