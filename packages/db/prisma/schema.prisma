@@ -272,9 +272,35 @@ model Post {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  author User @relation(fields: [authorId], references: [id])
+  author     User       @relation(fields: [authorId], references: [id])
+  categories Category[]
+  tags       Tag[]
 
   @@map("posts")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts Post[]
+
+  @@map("categories")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts Post[]
+
+  @@map("tags")
 }
 
 // ──────────────────────────────────────────────

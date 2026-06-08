@@ -9,10 +9,19 @@ import { SettingsController } from './admin-settings/settings.controller';
 import { SettingsService } from './admin-settings/settings.service';
 import { AuditController } from './audit/audit.controller';
 import { AuditService } from './audit/audit.service';
+import { TaxonomiesController } from './admin-taxonomies/taxonomies.controller';
+import { TaxonomiesService } from './admin-taxonomies/taxonomies.service';
 
 @Module({
-  controllers: [PagesController, PostsController, AdminUsersController, SettingsController, AuditController],
-  providers: [PagesService, PostsService, AdminUsersService, SettingsService, AuditService],
+  controllers: [
+    PagesController,
+    PostsController,
+    AdminUsersController,
+    SettingsController,
+    AuditController,
+    TaxonomiesController,
+  ],
+  providers: [PagesService, PostsService, AdminUsersService, SettingsService, AuditService, TaxonomiesService],
   exports: [AuditService],
 })
 export class AdminModule {}
