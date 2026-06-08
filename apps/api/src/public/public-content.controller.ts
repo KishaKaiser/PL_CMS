@@ -5,6 +5,11 @@ import { PublicContentService } from './public-content.service';
 export class PublicContentController {
   constructor(private readonly publicContentService: PublicContentService) {}
 
+  @Get('site-config')
+  getSiteConfig() {
+    return this.publicContentService.getSiteConfig();
+  }
+
   @Get('pages')
   findPages(@Query('excludeSlug') excludeSlug?: string) {
     return this.publicContentService.findPublishedPages(excludeSlug);
