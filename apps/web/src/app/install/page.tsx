@@ -12,6 +12,26 @@ interface StatusResponse {
   db: { connected: boolean };
 }
 
+const REQUEST_TIMEOUT_MS = 5000;
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function readResponseMessage(res: Response, fallback: string) {
+  const contentType = res.headers.get('content-type');
+  if (!contentType?.includes('application/json')) return fallback;
+  const data = (await res.json().catch(() => null)) as { message?: string } | null;
+  return data?.message ?? fallback;
+}
+
 export default function InstallPage() {
   const router = useRouter();
   const [status, setStatus] = useState<StatusResponse | null>(null);
@@ -23,15 +43,31 @@ export default function InstallPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/install/status`)
-      .then((r) => r.json())
+    let mounted = true;
+
+    fetchWithTimeout(`${API_BASE}/api/install/status`)
+      .then(async (r) => {
+        if (!r.ok) {
+          throw new Error(await readResponseMessage(r, 'Unable to check installation status.'));
+        }
+        return r.json() as Promise<StatusResponse>;
+      })
       .then((data: StatusResponse) => {
+        if (!mounted) return;
         setStatus(data);
         if (data.installed) {
           router.replace('/login');
         }
       })
-      .catch(() => setError('Unable to reach the API. Check your configuration.'));
+      .catch((err: unknown) => {
+        if (!mounted) return;
+        const message = err instanceof Error ? err.message : 'Unable to reach the API. Check your configuration.';
+        setError(message);
+      });
+
+    return () => {
+      mounted = false;
+    };
   }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -41,16 +77,14 @@ export default function InstallPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/api/install/run`, {
+      const res = await fetchWithTimeout(`${API_BASE}/api/install/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, name: name.trim() || undefined }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        setError(data?.message ?? 'Installation failed. See API logs.');
+        setError(await readResponseMessage(res, 'Installation failed. See API logs.'));
       } else {
         setMessage('Installation complete! Redirecting to login…');
         setTimeout(() => router.replace('/login'), 2000);
@@ -91,19 +125,19 @@ export default function InstallPage() {
         )}
 
         {error && (
-          <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
+          <p role="alert" aria-live="assertive" className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
             {error}
           </p>
         )}
 
         {message && (
-          <p className="mb-4 rounded bg-green-50 p-3 text-sm text-green-700">
+          <p role="status" aria-live="polite" className="mb-4 rounded bg-green-50 p-3 text-sm text-green-700">
             {message}
           </p>
         )}
 
         {!message && (
-          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+          <form className="flex flex-col gap-4" onSubmit={handleSubmit} aria-busy={loading}>
             <div>
               <label
                 className="mb-1 block text-sm font-medium"
@@ -116,6 +150,7 @@ export default function InstallPage() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                autoComplete="name"
                 className="w-full rounded border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Admin"
               />
@@ -133,6 +168,8 @@ export default function InstallPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                aria-invalid={Boolean(error)}
                 className="w-full rounded border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="admin@example.com"
               />
@@ -151,6 +188,8 @@ export default function InstallPage() {
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                aria-invalid={Boolean(error)}
                 className="w-full rounded border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Minimum 8 characters"
               />

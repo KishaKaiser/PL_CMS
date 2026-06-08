@@ -18,6 +18,10 @@ import {
   buildDefaultHomepageBlocks,
 } from '@pl-cms/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  normalizeEmailInput,
+  normalizeOptionalStringInput,
+} from '../common/input-normalization.util';
 import { RunInstallDto } from './install.dto';
 
 @Injectable()
@@ -62,6 +66,10 @@ export class InstallService {
     this.isRunning = true;
 
     try {
+      const email = normalizeEmailInput(dto.email);
+      const normalizedName = normalizeOptionalStringInput(dto.name);
+      const name = typeof normalizedName === 'string' && normalizedName ? normalizedName : 'Admin';
+
       // 1. Verify DB connectivity
       try {
         await this.prisma.$queryRaw`SELECT 1`;
@@ -87,9 +95,9 @@ export class InstallService {
       const passwordHash = await bcrypt.hash(dto.password, 12);
       const user = await this.prisma.user.create({
         data: {
-          email: dto.email,
+          email,
           passwordHash,
-          name: dto.name ?? 'Admin',
+          name,
           role: 'ADMIN',
         },
       });

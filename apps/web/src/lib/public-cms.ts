@@ -16,6 +16,7 @@ import {
 
 const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
 const CMS_REVALIDATE_SECONDS = 60;
+const CMS_REQUEST_TIMEOUT_MS = 5000;
 
 export interface PublicSiteConfig {
   identity: SiteIdentitySettings;
@@ -120,6 +121,14 @@ function logCmsFetchError(path: string, status?: number) {
   console.error(`[public-cms] Failed request to ${path}${status ? ` (status ${status})` : ''}`);
 }
 
+async function readJsonResponse<T>(res: Response, fallback: T): Promise<T> {
+  try {
+    return (await res.json()) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export { toPlainText } from './cms';
 
 export function getSafeImageSrc(value?: string | null) {
@@ -136,16 +145,24 @@ export function getSafeImageSrc(value?: string | null) {
 }
 
 async function fetchCmsJson<T>(path: string, fallback: T): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), CMS_REQUEST_TIMEOUT_MS);
+
   try {
-    const res = await fetch(`${API_BASE}${path}`, { next: { revalidate: CMS_REVALIDATE_SECONDS } });
+    const res = await fetch(`${API_BASE}${path}`, {
+      next: { revalidate: CMS_REVALIDATE_SECONDS },
+      signal: controller.signal,
+    });
     if (!res.ok) {
       logCmsFetchError(path, res.status);
       return fallback;
     }
-    return res.json() as Promise<T>;
+    return await readJsonResponse(res, fallback);
   } catch {
     logCmsFetchError(path);
     return fallback;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
