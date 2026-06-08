@@ -1,5 +1,7 @@
 import {
+  IsArray,
   IsDateString,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -90,4 +92,13 @@ export class UpdatePageDto {
   @IsOptional()
   @IsDateString()
   publishedAt?: string | null;
+}
+
+export class BulkActionDto {
+  @IsIn(['publish', 'unpublish', 'delete'])
+  action!: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  ids!: string[];
 }

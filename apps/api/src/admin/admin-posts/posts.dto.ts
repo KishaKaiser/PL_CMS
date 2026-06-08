@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsDateString,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -128,4 +129,13 @@ export class UpdatePostDto {
   @IsArray()
   @IsString({ each: true })
   tagIds?: string[];
+}
+
+export class BulkActionDto {
+  @IsIn(['publish', 'unpublish', 'delete'])
+  action!: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  ids!: string[];
 }

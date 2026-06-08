@@ -1,8 +1,13 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreatePageDto, UpdatePageDto } from './pages.dto';
+import {
+  MEDIA_ASSET_SELECT,
+  buildMediaAssetUrl,
+  serializeMediaAsset,
+} from '../admin-media/media.util';
 import { normalizeSlug, sanitizeCmsHtml } from '../admin-content/cms-content.util';
-import { MEDIA_ASSET_SELECT, buildMediaAssetUrl, serializeMediaAsset } from '../admin-media/media.util';
+import { BulkActionDto, CreatePageDto, UpdatePageDto } from './pages.dto';
 
 const PAGE_INCLUDE = {
   featuredMedia: {
@@ -14,8 +19,16 @@ const PAGE_INCLUDE = {
 export class PagesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll() {
+  async findAll(status?: string) {
+    const now = new Date();
+    let where: Prisma.PageWhereInput = {};
+
+    if (status === 'published') where = { publishedAt: { lte: now, not: null } };
+    else if (status === 'draft') where = { publishedAt: null };
+    else if (status === 'scheduled') where = { publishedAt: { gt: now } };
+
     const pages = await this.prisma.page.findMany({
+      where,
       orderBy: { updatedAt: 'desc' },
       include: PAGE_INCLUDE,
     });
@@ -35,53 +48,24 @@ export class PagesService {
     const slug = normalizeSlug(dto.slug);
     const existing = await this.prisma.page.findUnique({ where: { slug } });
     if (existing) throw new ConflictException(`Slug "${slug}" already exists`);
-    const featuredMedia = await this.resolveFeaturedMedia(dto.featuredMediaId, dto.featuredImageUrl);
-    return this.prisma.page.create({
-      data: {
-        slug,
-        title: dto.title,
-        metaTitle: this.normalizeMetadataField(dto.metaTitle),
-        metaDescription: this.normalizeMetadataField(dto.metaDescription),
-        content: sanitizeCmsHtml(dto.content),
-        ...featuredMedia,
-        publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : null,
-      },
-      include: PAGE_INCLUDE,
-    }).then((page) => this.serializePage(page));
-  }
-
-  private async resolveFeaturedMedia(featuredMediaId?: string | null, featuredImageUrl?: string | null) {
-    if (featuredMediaId) {
-      const media = await this.prisma.mediaAsset.findUnique({ where: { id: featuredMediaId } });
-      if (!media) throw new NotFoundException(`Media asset ${featuredMediaId} not found`);
-      return {
-        featuredMediaId: media.id,
-        featuredImageUrl: buildMediaAssetUrl(media.id),
-      };
-    }
-
-    return {
-      featuredMediaId: null,
-      featuredImageUrl: featuredImageUrl ?? null,
-    };
-  }
-
-  private serializePage(page: {
-    featuredMedia: {
-      id: string;
-      originalName: string;
-      title: string;
-      altText: string | null;
-      mimeType: string;
-      sizeBytes: number;
-      createdAt: Date;
-      updatedAt: Date;
-    } | null;
-  } & Record<string, unknown>) {
-    return {
-      ...page,
-      featuredMedia: page.featuredMedia ? serializeMediaAsset(page.featuredMedia) : null,
-    };
+    const featuredMedia = await this.resolveFeaturedMedia(
+      dto.featuredMediaId,
+      dto.featuredImageUrl,
+    );
+    return this.prisma.page
+      .create({
+        data: {
+          slug,
+          title: dto.title,
+          metaTitle: this.normalizeMetadataField(dto.metaTitle),
+          metaDescription: this.normalizeMetadataField(dto.metaDescription),
+          content: sanitizeCmsHtml(dto.content),
+          ...featuredMedia,
+          publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : null,
+        },
+        include: PAGE_INCLUDE,
+      })
+      .then((page) => this.serializePage(page));
   }
 
   async update(id: string, dto: UpdatePageDto) {
@@ -93,7 +77,8 @@ export class PagesService {
     const slug = dto.slug ? normalizeSlug(dto.slug) : undefined;
     if (slug) {
       const existing = await this.prisma.page.findUnique({ where: { slug } });
-      if (existing && existing.id !== id) throw new ConflictException(`Slug "${slug}" already exists`);
+      if (existing && existing.id !== id)
+        throw new ConflictException(`Slug "${slug}" already exists`);
     }
 
     const featuredMedia =
@@ -118,12 +103,20 @@ export class PagesService {
         data: {
           slug,
           title: dto.title,
-          metaTitle: dto.metaTitle === undefined ? undefined : this.normalizeMetadataField(dto.metaTitle),
+          metaTitle:
+            dto.metaTitle === undefined ? undefined : this.normalizeMetadataField(dto.metaTitle),
           metaDescription:
-            dto.metaDescription === undefined ? undefined : this.normalizeMetadataField(dto.metaDescription),
+            dto.metaDescription === undefined
+              ? undefined
+              : this.normalizeMetadataField(dto.metaDescription),
           content: dto.content === undefined ? undefined : sanitizeCmsHtml(dto.content),
           ...featuredMedia,
-          publishedAt: dto.publishedAt === null ? null : dto.publishedAt ? new Date(dto.publishedAt) : undefined,
+          publishedAt:
+            dto.publishedAt === null
+              ? null
+              : dto.publishedAt
+                ? new Date(dto.publishedAt)
+                : undefined,
         },
         include: PAGE_INCLUDE,
       });
@@ -184,9 +177,72 @@ export class PagesService {
       .then((page) => this.serializePage(page));
   }
 
+  async bulkAction(dto: BulkActionDto, _actorId: string) {
+    const { action, ids } = dto;
+    if (ids.length === 0) return { affected: 0 };
+
+    if (action === 'publish') {
+      const result = await this.prisma.page.updateMany({
+        where: { id: { in: ids } },
+        data: { publishedAt: new Date() },
+      });
+      return { affected: result.count };
+    }
+
+    if (action === 'unpublish') {
+      const result = await this.prisma.page.updateMany({
+        where: { id: { in: ids } },
+        data: { publishedAt: null },
+      });
+      return { affected: result.count };
+    }
+
+    const result = await this.prisma.page.deleteMany({ where: { id: { in: ids } } });
+    return { affected: result.count };
+  }
+
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.page.delete({ where: { id } });
+  }
+
+  private async resolveFeaturedMedia(
+    featuredMediaId?: string | null,
+    featuredImageUrl?: string | null,
+  ) {
+    if (featuredMediaId) {
+      const media = await this.prisma.mediaAsset.findUnique({ where: { id: featuredMediaId } });
+      if (!media) throw new NotFoundException(`Media asset ${featuredMediaId} not found`);
+      return {
+        featuredMediaId: media.id,
+        featuredImageUrl: buildMediaAssetUrl(media.id),
+      };
+    }
+
+    return {
+      featuredMediaId: null,
+      featuredImageUrl: featuredImageUrl ?? null,
+    };
+  }
+
+  private serializePage(
+    page: {
+      featuredMedia: {
+        id: string;
+        originalName: string;
+        title: string;
+        altText: string | null;
+        mimeType: string;
+        sizeBytes: number;
+        createdAt: Date;
+        updatedAt: Date;
+      } | null;
+    } & Record<string, unknown>,
+  ) {
+    return {
+      ...page,
+      featuredMedia: page.featuredMedia ? serializeMediaAsset(page.featuredMedia) : null,
+    };
   }
 
   private normalizeMetadataField(value?: string | null) {

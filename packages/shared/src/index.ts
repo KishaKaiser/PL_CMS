@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 export enum Role {
   ADMIN = 'ADMIN',
+  EDITOR = 'EDITOR',
   ADVISOR = 'ADVISOR',
   CLIENT = 'CLIENT',
 }
@@ -220,7 +221,6 @@ export interface OrderDto {
   currency: string;
   createdAt: string;
 }
-
 
 export interface CheckoutPaypalOrderDto {
   orderId: string;

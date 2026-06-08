@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server';
 
 const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
 
@@ -18,6 +18,7 @@ const ALLOWED_PATH_PREFIXES = [
   'settings',
   'audit',
   'admin',
+  'dashboard',
   'modules',
   'media',
 ];
@@ -43,15 +44,13 @@ async function proxy(req: NextRequest, { params }: Context) {
 
   const headers = new Headers();
 
-  // Forward Authorization header if explicitly set by the caller
   const auth = req.headers.get('authorization');
   if (auth) {
     headers.set('authorization', auth);
   } else {
-    // Auto-inject from httpOnly access_token cookie
     const cookieStore = await cookies();
     const token = cookieStore.get('access_token')?.value;
-    if (token) headers.set('authorization', `Bearer ${token}`);
+    if (token) headers.set('authorization', 'Bearer ' + token);
   }
 
   const cookie = req.headers.get('cookie');
@@ -60,10 +59,7 @@ async function proxy(req: NextRequest, { params }: Context) {
   const ct = req.headers.get('content-type');
   if (ct) headers.set('content-type', ct);
 
-  const body =
-    req.method !== 'GET' && req.method !== 'HEAD'
-      ? await req.arrayBuffer()
-      : undefined;
+  const body = req.method !== 'GET' && req.method !== 'HEAD' ? await req.arrayBuffer() : undefined;
 
   const upstream = await fetch(url, {
     method: req.method,
