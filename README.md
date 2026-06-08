@@ -314,10 +314,14 @@ If your session has not been set up yet, visit `/install` first to create the in
 | Posts | `/admin/posts` | Blog/news posts – create, edit, publish/unpublish, delete |
 | Media | `/admin/media` | Media library (placeholder) |
 | Users | `/admin/users` | List all users, change roles, reset passwords |
-| Settings | `/admin/settings` | Key-value platform settings |
+| Settings | `/admin/settings` | Structured public-site controls (homepage, menus, theme, reusable blocks) plus advanced key-value settings |
 | Audit Log | `/admin/audit` | Recent admin activity log |
 | Products | `/admin/products` | Product & variant management |
 | Orders | `/admin/orders` | Order management & fulfilment |
+
+Phase 8 adds lightweight public-site extension seams via settings keys:
+- `site_homepage_blocks` for reusable landing-page block layout (featured pages/posts/CTA)
+- `site_extension_points` for integration-friendly menu extension hooks
 
 ### Authentication Architecture
 

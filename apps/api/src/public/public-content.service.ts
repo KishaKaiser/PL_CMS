@@ -1,5 +1,20 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@pl-cms/db';
+import {
+  DEFAULT_HOMEPAGE_SETTINGS,
+  DEFAULT_SITE_EXTENSION_POINTS,
+  DEFAULT_SITE_IDENTITY,
+  DEFAULT_SITE_THEME,
+  PUBLIC_SITE_SETTING_KEYS,
+  SITE_SETTING_KEYS,
+  type HomepageSettings,
+  type PostsPageSettings,
+  type SiteExtensionPoints,
+  type SiteHomepageBlock,
+  type SiteIdentitySettings,
+  type SiteMenuItem,
+  type SiteThemeSettings,
+} from '@pl-cms/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 type PostQuery = {
@@ -11,86 +26,26 @@ type PostQuery = {
   month?: string;
 };
 
-type SiteMenuItem = {
-  label: string;
-  href: string;
-};
-
-type ThemeSectionSettings = {
-  enabled: boolean;
-  title: string;
-};
-
-type SiteThemeSettings = {
-  primaryColor: string;
-  accentColor: string;
-  heroTitle: string;
-  heroBody: string;
-  heroPrimaryLabel: string;
-  heroPrimaryHref: string;
-  heroSecondaryLabel: string;
-  heroSecondaryHref: string;
-  homepageSections: {
-    pages: ThemeSectionSettings;
-    posts: ThemeSectionSettings;
+type PublicSiteConfig = {
+  identity: SiteIdentitySettings;
+  homepage: {
+    mode: 'landing' | 'latest_posts' | 'page';
+    pageSlug: string;
+    selectedPage: { slug: string; title: string } | null;
   };
-};
-
-type SiteIdentitySettings = {
-  title: string;
-  tagline: string;
-  logoUrl: string;
-  footerText: string;
-};
-
-type HomepageSettings = {
-  mode: 'landing' | 'latest_posts' | 'page';
-  pageSlug: string;
-};
-
-type PostsPageSettings = {
-  type: 'default' | 'page';
-  pageSlug: string;
-};
-
-const PUBLIC_SITE_SETTING_KEYS = [
-  'site_name',
-  'site_identity',
-  'site_homepage',
-  'site_posts_page',
-  'site_menus',
-  'site_theme',
-] as const;
-
-const DEFAULT_SITE_TITLE = 'Psychic Link CMS';
-const DEFAULT_SITE_TAGLINE = 'Public CMS frontend powered by published content.';
-const DEFAULT_FOOTER_TEXT = 'Browse published pages and blog posts managed in the CMS.';
-
-const DEFAULT_HOMEPAGE_SETTINGS: HomepageSettings = {
-  mode: 'landing',
-  pageSlug: '',
-};
-
-const DEFAULT_SITE_THEME: SiteThemeSettings = {
-  primaryColor: '#4f46e5',
-  accentColor: '#7c3aed',
-  heroTitle: DEFAULT_SITE_TITLE,
-  heroBody: 'Welcome to the public site. Read our latest posts or browse CMS pages.',
-  heroPrimaryLabel: 'Visit Blog',
-  heroPrimaryHref: '',
-  heroSecondaryLabel: 'Admin',
-  heroSecondaryHref: '/admin',
-  homepageSections: {
-    pages: { enabled: true, title: 'Browse Pages' },
-    posts: { enabled: true, title: 'Latest Posts' },
-  },
-};
-
-const DEFAULT_SITE_IDENTITY: SiteIdentitySettings = {
-  title: DEFAULT_SITE_TITLE,
-  tagline: DEFAULT_SITE_TAGLINE,
-  logoUrl: '',
-  footerText: DEFAULT_FOOTER_TEXT,
+  postsPage: {
+    type: 'default' | 'page';
+    pageSlug: string;
+    path: string;
+    title: string;
+  };
+  menus: {
+    header: SiteMenuItem[];
+    footer: SiteMenuItem[];
+  };
+  theme: SiteThemeSettings;
+  homepageBlocks: SiteHomepageBlock[];
+  extensionPoints: SiteExtensionPoints;
 };
 
 const POST_SELECT = {
@@ -118,8 +73,13 @@ const MAX_REDIRECT_DEPTH = 5;
 @Injectable()
 export class PublicContentService {
   private readonly logger = new Logger(PublicContentService.name);
+  private readonly siteConfigTransformers: Array<(config: PublicSiteConfig) => PublicSiteConfig> = [];
 
   constructor(private readonly prisma: PrismaService) {}
+
+  registerSiteConfigTransformer(transformer: (config: PublicSiteConfig) => PublicSiteConfig) {
+    this.siteConfigTransformers.push(transformer);
+  }
 
   async getSiteConfig() {
     const now = new Date();
@@ -142,27 +102,40 @@ export class PublicContentService {
 
     const identity = this.normalizeIdentitySettings(settingMap);
     const homepage = this.normalizeHomepageSettings(
-      settingMap.get('site_homepage'),
+      settingMap.get(SITE_SETTING_KEYS.SITE_HOMEPAGE),
       publishedPageMap,
     );
     const postsPage = this.normalizePostsPageSettings(
-      settingMap.get('site_posts_page'),
+      settingMap.get(SITE_SETTING_KEYS.SITE_POSTS_PAGE),
       publishedPageMap,
     );
-    const theme = this.normalizeThemeSettings(settingMap.get('site_theme'), postsPage.path);
+    const theme = this.normalizeThemeSettings(settingMap.get(SITE_SETTING_KEYS.SITE_THEME), postsPage.path);
+    const extensionPoints = this.normalizeExtensionPoints(
+      settingMap.get(SITE_SETTING_KEYS.SITE_EXTENSION_POINTS),
+    );
     const menus = this.normalizeMenus(
-      settingMap.get('site_menus'),
+      settingMap.get(SITE_SETTING_KEYS.SITE_MENUS),
       publishedPages,
       postsPage,
+      extensionPoints,
+    );
+    const homepageBlocks = this.normalizeHomepageBlocks(
+      settingMap.get(SITE_SETTING_KEYS.SITE_HOMEPAGE_BLOCKS),
+      theme,
+      postsPage.path,
     );
 
-    return {
+    const config: PublicSiteConfig = {
       identity,
       homepage,
       postsPage,
       menus,
       theme,
+      homepageBlocks,
+      extensionPoints,
     };
+
+    return this.applySiteConfigTransformers(config);
   }
 
   findPublishedPages(excludeSlug?: string) {
@@ -444,8 +417,10 @@ export class PublicContentService {
   }
 
   private normalizeIdentitySettings(settingMap: Map<string, string>): SiteIdentitySettings {
-    const identityValue = this.parseJsonSetting<Partial<SiteIdentitySettings>>(settingMap.get('site_identity'));
-    const fallbackTitle = settingMap.get('site_name')?.trim() || DEFAULT_SITE_IDENTITY.title;
+    const identityValue = this.parseJsonSetting<Partial<SiteIdentitySettings>>(
+      settingMap.get(SITE_SETTING_KEYS.SITE_IDENTITY),
+    );
+    const fallbackTitle = settingMap.get(SITE_SETTING_KEYS.SITE_NAME)?.trim() || DEFAULT_SITE_IDENTITY.title;
 
     return {
       title: this.getString(identityValue?.title, fallbackTitle),
@@ -455,13 +430,27 @@ export class PublicContentService {
     };
   }
 
+  private applySiteConfigTransformers(config: PublicSiteConfig) {
+    return this.siteConfigTransformers.reduce((currentConfig, transformer) => {
+      try {
+        return transformer(currentConfig);
+      } catch (error) {
+        this.logger.warn(
+          `Ignored site-config transformer failure: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+        return currentConfig;
+      }
+    }, config);
+  }
+
   private normalizeHomepageSettings(
     value: string | undefined,
     publishedPageMap: Map<string, { slug: string; title: string }>,
   ) {
     const parsed = this.parseJsonSetting<Partial<HomepageSettings>>(value);
     const pageSlug = this.getString(parsed?.pageSlug, '');
-    const mode = parsed?.mode === 'page' || parsed?.mode === 'latest_posts' ? parsed.mode : 'landing';
+    const mode: HomepageSettings['mode'] =
+      parsed?.mode === 'page' || parsed?.mode === 'latest_posts' ? parsed.mode : 'landing';
     const selectedPage = pageSlug ? publishedPageMap.get(pageSlug) : null;
 
     if (mode === 'page' && !selectedPage) {
@@ -519,6 +508,7 @@ export class PublicContentService {
     value: string | undefined,
     publishedPages: { slug: string; title: string }[],
     postsPage: { pageSlug: string; path: string; title: string },
+    extensionPoints: SiteExtensionPoints,
   ) {
     const parsed = this.parseJsonSetting<{ header?: unknown; footer?: unknown }>(value);
     const reservedSlugs = new Set(['home']);
@@ -536,9 +526,98 @@ export class PublicContentService {
     const footer = this.normalizeMenuItems(parsed?.footer);
 
     return {
-      header: header.length > 0 ? header : defaultMenuItems,
-      footer: footer.length > 0 ? footer : defaultMenuItems,
+      header: this.mergeMenuItems(
+        header.length > 0 ? header : defaultMenuItems,
+        extensionPoints.menu.header,
+      ),
+      footer: this.mergeMenuItems(
+        footer.length > 0 ? footer : defaultMenuItems,
+        extensionPoints.menu.footer,
+      ),
     };
+  }
+
+  private normalizeExtensionPoints(value: string | undefined): SiteExtensionPoints {
+    const parsed = this.parseJsonSetting<{ menu?: { header?: unknown; footer?: unknown } }>(value);
+    const header = this.normalizeMenuItems(parsed?.menu?.header);
+    const footer = this.normalizeMenuItems(parsed?.menu?.footer);
+
+    return {
+      menu: {
+        header: header.length > 0 ? header : DEFAULT_SITE_EXTENSION_POINTS.menu.header,
+        footer: footer.length > 0 ? footer : DEFAULT_SITE_EXTENSION_POINTS.menu.footer,
+      },
+    };
+  }
+
+  private normalizeHomepageBlocks(
+    value: string | undefined,
+    theme: SiteThemeSettings,
+    postsPath: string,
+  ): SiteHomepageBlock[] {
+    const defaultBlocks: SiteHomepageBlock[] = [
+      {
+        id: 'featured_pages',
+        type: 'featured_pages',
+        enabled: theme.homepageSections.pages.enabled,
+        title: theme.homepageSections.pages.title,
+      },
+      {
+        id: 'latest_posts',
+        type: 'latest_posts',
+        enabled: theme.homepageSections.posts.enabled,
+        title: theme.homepageSections.posts.title,
+      },
+      {
+        id: 'cta_primary',
+        type: 'cta',
+        enabled: false,
+        title: theme.heroTitle,
+        body: theme.heroBody,
+        primaryLabel: theme.heroPrimaryLabel,
+        primaryHref: theme.heroPrimaryHref || postsPath,
+        secondaryLabel: theme.heroSecondaryLabel,
+        secondaryHref: theme.heroSecondaryHref,
+      },
+    ];
+
+    const parsed = this.parseJsonSetting<unknown>(value);
+    if (!Array.isArray(parsed)) return defaultBlocks;
+
+    const blocks = parsed
+      .map((item, index) => {
+        if (!item || typeof item !== 'object') return null;
+        const block = item as Record<string, unknown>;
+        const id = this.getString(block.id, `block-${index + 1}`);
+        const type = this.getString(block.type, '');
+        const enabled = this.getBoolean(block.enabled, true);
+        const title = this.getString(block.title, '');
+
+        if (type === 'featured_pages') {
+          return { id, type, enabled, title: title || theme.homepageSections.pages.title } satisfies SiteHomepageBlock;
+        }
+        if (type === 'latest_posts') {
+          return { id, type, enabled, title: title || theme.homepageSections.posts.title } satisfies SiteHomepageBlock;
+        }
+        if (type === 'cta') {
+          return {
+            id,
+            type,
+            enabled,
+            title: title || theme.heroTitle,
+            body: this.getString(block.body, theme.heroBody),
+            primaryLabel: this.getString(block.primaryLabel, theme.heroPrimaryLabel),
+            primaryHref: this.getString(block.primaryHref, theme.heroPrimaryHref || postsPath),
+            secondaryLabel: this.getString(block.secondaryLabel, theme.heroSecondaryLabel),
+            secondaryHref: this.getString(block.secondaryHref, theme.heroSecondaryHref),
+          } satisfies SiteHomepageBlock;
+        }
+
+        return null;
+      })
+      .filter((block): block is SiteHomepageBlock => block !== null);
+
+    return blocks.length > 0 ? blocks : defaultBlocks;
   }
 
   private normalizeThemeSettings(value: string | undefined, postsPath: string): SiteThemeSettings {
@@ -594,6 +673,20 @@ export class PublicContentService {
         return { label, href };
       })
       .filter((item): item is SiteMenuItem => item !== null);
+  }
+
+  private mergeMenuItems(baseItems: SiteMenuItem[], extensionItems: SiteMenuItem[]) {
+    const merged = [...baseItems];
+    const seen = new Set(baseItems.map((item) => `${item.label.toLowerCase()}::${item.href.toLowerCase()}`));
+
+    for (const item of extensionItems) {
+      const key = `${item.label.toLowerCase()}::${item.href.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+    }
+
+    return merged;
   }
 
   private parseJsonSetting<T>(value?: string): T | null {

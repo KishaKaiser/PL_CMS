@@ -1,6 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  DEFAULT_HOMEPAGE_SETTINGS,
+  DEFAULT_POSTS_PAGE_SETTINGS,
+  DEFAULT_SITE_EXTENSION_POINTS,
+  DEFAULT_SITE_IDENTITY,
+  DEFAULT_SITE_MENUS,
+  DEFAULT_SITE_THEME,
+  SITE_SETTING_KEYS,
+  buildDefaultHomepageBlocks,
+} from '@pl-cms/shared';
 
 interface Setting {
   key: string;
@@ -62,60 +72,44 @@ interface SiteMenusForm {
   footer: MenuItem[];
 }
 
-const SITE_IDENTITY_KEY = 'site_identity';
-const SITE_HOMEPAGE_KEY = 'site_homepage';
-const SITE_POSTS_PAGE_KEY = 'site_posts_page';
-const SITE_MENUS_KEY = 'site_menus';
-const SITE_THEME_KEY = 'site_theme';
+const SITE_IDENTITY_KEY = SITE_SETTING_KEYS.SITE_IDENTITY;
+const SITE_HOMEPAGE_KEY = SITE_SETTING_KEYS.SITE_HOMEPAGE;
+const SITE_POSTS_PAGE_KEY = SITE_SETTING_KEYS.SITE_POSTS_PAGE;
+const SITE_MENUS_KEY = SITE_SETTING_KEYS.SITE_MENUS;
+const SITE_THEME_KEY = SITE_SETTING_KEYS.SITE_THEME;
+const SITE_HOMEPAGE_BLOCKS_KEY = SITE_SETTING_KEYS.SITE_HOMEPAGE_BLOCKS;
+const SITE_EXTENSION_POINTS_KEY = SITE_SETTING_KEYS.SITE_EXTENSION_POINTS;
 
 const defaultIdentityForm: SiteIdentityForm = {
-  title: 'Psychic Link CMS',
-  tagline: 'Public CMS frontend powered by published content.',
-  logoUrl: '',
-  footerText: 'Browse published pages and blog posts managed in the CMS.',
+  ...DEFAULT_SITE_IDENTITY,
 };
 
 const defaultHomepageForm: SiteHomepageForm = {
-  mode: 'landing',
-  pageSlug: '',
+  ...DEFAULT_HOMEPAGE_SETTINGS,
 };
 
 const defaultPostsPageForm: SitePostsPageForm = {
-  type: 'default',
-  pageSlug: '',
+  ...DEFAULT_POSTS_PAGE_SETTINGS,
 };
 
 const defaultThemeForm: SiteThemeForm = {
-  primaryColor: '#4f46e5',
-  accentColor: '#7c3aed',
-  heroTitle: 'Psychic Link CMS',
-  heroBody: 'Welcome to the public site. Read our latest posts or browse CMS pages.',
-  heroPrimaryLabel: 'Visit Blog',
-  heroPrimaryHref: '',
-  heroSecondaryLabel: 'Admin',
-  heroSecondaryHref: '/admin',
-  homepageSections: {
-    pages: {
-      enabled: true,
-      title: 'Browse Pages',
-    },
-    posts: {
-      enabled: true,
-      title: 'Latest Posts',
-    },
-  },
+  ...DEFAULT_SITE_THEME,
 };
 
 const defaultMenusForm: SiteMenusForm = {
-  header: [
-    { id: 'header-home', label: 'Home', href: '/' },
-    { id: 'header-blog', label: 'Blog', href: '/blog' },
-  ],
-  footer: [
-    { id: 'footer-home', label: 'Home', href: '/' },
-    { id: 'footer-blog', label: 'Blog', href: '/blog' },
-  ],
+  header: DEFAULT_SITE_MENUS.header.map((item, index) => ({
+    id: `header-${index + 1}`,
+    label: item.label,
+    href: item.href,
+  })),
+  footer: DEFAULT_SITE_MENUS.footer.map((item, index) => ({
+    id: `footer-${index + 1}`,
+    label: item.label,
+    href: item.href,
+  })),
 };
+
+const defaultHomepageBlocks = buildDefaultHomepageBlocks('/blog');
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -775,6 +769,59 @@ export default function AdminSettingsPage() {
               className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
             >
               {saving[SITE_THEME_KEY] ? 'Saving…' : 'Save theme options'}
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-xl border bg-white p-6 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">Homepage blocks</h2>
+            <p className="text-sm text-gray-500">
+              The public landing page now renders reusable blocks from the <code className="font-mono text-xs">{SITE_HOMEPAGE_BLOCKS_KEY}</code> setting.
+              Use reset to reapply a safe starter block layout.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-600">
+            <p>
+              Starter blocks include featured pages, latest posts, and an optional CTA block. Advanced users can fine-tune the JSON value in <strong>All settings</strong>.
+            </p>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={() => void saveManagedSetting(SITE_HOMEPAGE_BLOCKS_KEY, defaultHomepageBlocks)}
+              disabled={saving[SITE_HOMEPAGE_BLOCKS_KEY] || loading}
+              className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {saving[SITE_HOMEPAGE_BLOCKS_KEY] ? 'Saving…' : 'Reset starter blocks'}
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-xl border bg-white p-6 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">Extension points</h2>
+            <p className="text-sm text-gray-500">
+              Keep lightweight integration hooks under <code className="font-mono text-xs">{SITE_EXTENSION_POINTS_KEY}</code> (for example, extra menu links injected by future modules).
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-600">
+            <p>
+              This remains intentionally lightweight: no plugin marketplace, but a stable seam for integration-friendly customizations.
+            </p>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={() => void saveManagedSetting(SITE_EXTENSION_POINTS_KEY, DEFAULT_SITE_EXTENSION_POINTS)}
+              disabled={saving[SITE_EXTENSION_POINTS_KEY] || loading}
+              className="rounded border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {saving[SITE_EXTENSION_POINTS_KEY] ? 'Saving…' : 'Reset extension points'}
             </button>
           </div>
         </section>

@@ -32,6 +32,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <span className="text-sm font-semibold uppercase tracking-widest text-indigo-400">
             Admin
           </span>
+          <div className="mt-2">
+            <Link href="/" className="text-xs text-gray-300 hover:text-white hover:underline">
+              ← View public site
+            </Link>
+          </div>
         </div>
         <nav className="flex-1 overflow-y-auto py-4">
           <ul className="space-y-1 px-3">
@@ -48,6 +53,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         ? 'bg-indigo-600 text-white'
                         : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                     }`}
+                    aria-current={active ? 'page' : undefined}
                   >
                     {item.label}
                   </Link>

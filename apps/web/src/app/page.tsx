@@ -1,6 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BlogIndex } from '../components/blog-index';
+import {
+  CalloutBlock,
+  FeaturedPagesBlock,
+  LatestPostsBlock,
+} from '../components/public-content-blocks';
 import { PublicSiteShell } from '../components/public-site-shell';
 import { RichContent } from '../components/cms/rich-content';
 import {
@@ -9,11 +14,9 @@ import {
   getPublishedPosts,
   getPublicSiteConfig,
   getSafeImageSrc,
-  toPlainText,
 } from '../lib/public-cms';
 import { buildSeoMetadata, getSeoDescription, getSeoTitle } from '../lib/seo';
 
-const HOMEPAGE_EXCERPT_LENGTH = 120;
 const MAX_FEATURED_PAGES = 3;
 const MAX_FEATURED_POSTS = 3;
 export const dynamic = 'force-dynamic';
@@ -132,85 +135,37 @@ export default async function HomePage({ searchParams }: Props) {
           </Link>
         </nav>
 
-        {siteConfig.theme.homepageSections.pages.enabled && (
-          <section>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-2xl font-semibold">{siteConfig.theme.homepageSections.pages.title}</h2>
-            </div>
+        {siteConfig.homepageBlocks
+          .filter((block) => block.enabled)
+          .map((block) => {
+            if (block.type === 'featured_pages') {
+              return <FeaturedPagesBlock key={block.id} title={block.title} pages={featuredPages} />;
+            }
 
-            {featuredPages.length === 0 ? (
-              <p className="text-gray-500">No published pages yet.</p>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-3">
-                {featuredPages.map((page) => {
-                  const preview = toPlainText(page.content);
-                  const featuredImageSrc = getSafeImageSrc(page.featuredImageUrl);
+            if (block.type === 'latest_posts') {
+              return (
+                <LatestPostsBlock
+                  key={block.id}
+                  title={block.title}
+                  posts={featuredPosts}
+                  siteConfig={siteConfig}
+                />
+              );
+            }
 
-                  return (
-                    <article key={page.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
-                      {featuredImageSrc && (
-                        <img src={featuredImageSrc} alt={page.title} className="h-40 w-full object-cover" />
-                      )}
-                      <div className="p-4">
-                        <h3 className="text-lg font-semibold">
-                          <Link href={`/${page.slug}`} className="hover:underline">
-                            {page.title}
-                          </Link>
-                        </h3>
-                        <p className="mt-2 text-sm text-gray-700">
-                          {preview.slice(0, HOMEPAGE_EXCERPT_LENGTH)}
-                          {preview.length > HOMEPAGE_EXCERPT_LENGTH ? '…' : ''}
-                        </p>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        )}
-
-        {siteConfig.theme.homepageSections.posts.enabled && (
-          <section>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-2xl font-semibold">{siteConfig.theme.homepageSections.posts.title}</h2>
-              <Link href={siteConfig.postsPage.path} className="text-sm hover:underline" style={{ color: siteConfig.theme.primaryColor }}>
-                View all posts
-              </Link>
-            </div>
-
-            {featuredPosts.length === 0 ? (
-              <p className="text-gray-500">No published posts yet.</p>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-3">
-                {featuredPosts.map((post) => {
-                  const preview = toPlainText(post.excerpt || post.content);
-                  const featuredImageSrc = getSafeImageSrc(post.featuredImageUrl);
-
-                  return (
-                    <article key={post.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
-                      {featuredImageSrc && (
-                        <img src={featuredImageSrc} alt={post.title} className="h-40 w-full object-cover" />
-                      )}
-                      <div className="p-4">
-                        <h3 className="text-lg font-semibold">
-                          <Link href={`/blog/${post.slug}`} className="hover:underline">
-                            {post.title}
-                          </Link>
-                        </h3>
-                        <p className="mt-1 text-xs text-gray-500">{new Date(post.publishedAt).toLocaleDateString()}</p>
-                        <p className="mt-2 text-sm text-gray-700">
-                          {preview.slice(0, HOMEPAGE_EXCERPT_LENGTH)}
-                          {preview.length > HOMEPAGE_EXCERPT_LENGTH ? '…' : ''}
-                        </p>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        )}
+            return (
+              <CalloutBlock
+                key={block.id}
+                title={block.title}
+                body={block.body}
+                primaryLabel={block.primaryLabel}
+                primaryHref={block.primaryHref}
+                secondaryLabel={block.secondaryLabel}
+                secondaryHref={block.secondaryHref}
+                siteConfig={siteConfig}
+              />
+            );
+          })}
       </main>
     </PublicSiteShell>
   );
