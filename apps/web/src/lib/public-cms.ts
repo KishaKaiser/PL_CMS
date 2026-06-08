@@ -84,7 +84,7 @@ const DEFAULT_PUBLIC_SITE_CONFIG: PublicSiteConfig = {
     heroTitle: 'Psychic Link CMS',
     heroBody: 'Welcome to the public site. Read our latest posts or browse CMS pages.',
     heroPrimaryLabel: 'Visit Blog',
-    heroPrimaryHref: '',
+    heroPrimaryHref: '/blog',
     heroSecondaryLabel: 'Admin',
     heroSecondaryHref: '/admin',
     homepageSections: {

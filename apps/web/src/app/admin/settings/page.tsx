@@ -139,6 +139,14 @@ function readBoolean(value: unknown, fallback = false) {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function createMenuItemId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `menu-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function normalizeMenuItems(value: unknown, fallback: MenuItem[]) {
   if (!Array.isArray(value)) return fallback;
 
@@ -147,11 +155,10 @@ function normalizeMenuItems(value: unknown, fallback: MenuItem[]) {
       if (!isRecord(item)) return null;
 
       const label = readString(item.label).trim();
-      // Support previously stored menu payloads that still use `url` instead of `href`.
       const href = readString(item.href ?? item.url).trim();
 
       if (!label || !href) return null;
-      return { id: crypto.randomUUID(), label, href };
+      return { id: createMenuItemId(), label, href };
     })
     .filter((item): item is MenuItem => item !== null);
 
@@ -185,7 +192,7 @@ function MenuEditor({
         <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
         <button
           type="button"
-          onClick={() => onChange([...items, { id: crypto.randomUUID(), label: '', href: '' }])}
+          onClick={() => onChange([...items, { id: createMenuItemId(), label: '', href: '' }])}
           className="rounded border border-gray-200 px-3 py-1 text-xs font-medium hover:bg-gray-50"
         >
           Add item

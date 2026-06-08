@@ -448,7 +448,7 @@ export class PublicContentService {
     if (mode === 'page' && !selectedPage) {
       if (pageSlug) {
         this.logger.warn(
-          `Configured homepage page "${pageSlug}" is unavailable; falling back to landing mode.`,
+          `Configured homepage page "${pageSlug}" was not found among published pages (it may be unpublished, deleted, or missing); falling back to landing mode.`,
         );
       } else {
         this.logger.warn('Homepage mode is set to "page" without a configured page slug; falling back to landing mode.');
@@ -556,7 +556,6 @@ export class PublicContentService {
         if (!item || typeof item !== 'object') return null;
         const label = this.getString((item as { label?: unknown }).label, '');
         const href = this.getString(
-          // Support previously stored menu payloads that still use `url` instead of `href`.
           (item as { href?: unknown; url?: unknown }).href ?? (item as { url?: unknown }).url,
           '',
         );
