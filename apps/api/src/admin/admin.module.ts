@@ -3,6 +3,8 @@ import { DashboardController } from './admin-dashboard/dashboard.controller';
 import { DashboardService } from './admin-dashboard/dashboard.service';
 import { MediaController } from './admin-media/media.controller';
 import { MediaService } from './admin-media/media.service';
+import { ModulesController } from './admin-modules/modules.controller';
+import { ModulesService } from './admin-modules/modules.service';
 import { PagesController } from './admin-pages/pages.controller';
 import { PagesService } from './admin-pages/pages.service';
 import { PostsController } from './admin-posts/posts.controller';
@@ -29,6 +31,7 @@ import { AuditService } from './audit/audit.service';
     AuditController,
     TaxonomiesController,
     MediaController,
+    ModulesController,
   ],
   providers: [
     DashboardService,
@@ -40,6 +43,7 @@ import { AuditService } from './audit/audit.service';
     AuditService,
     TaxonomiesService,
     MediaService,
+    ModulesService,
   ],
   exports: [AuditService],
 })
