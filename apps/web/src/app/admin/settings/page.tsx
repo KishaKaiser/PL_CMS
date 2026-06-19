@@ -810,7 +810,7 @@ export default function AdminSettingsPage() {
 
           <div className="rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-600">
             <p>
-              This remains intentionally lightweight: no plugin marketplace, but a stable seam for integration-friendly customizations.
+              This remains intentionally lightweight: no third-party marketplace, but a stable seam for integration-friendly customizations.
             </p>
           </div>
 

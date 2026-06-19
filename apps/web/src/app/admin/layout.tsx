@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { href: '/admin/taxonomies', label: 'Categories & Tags' },
   { href: '/admin/media', label: 'Media' },
   { href: '/admin/users', label: 'Users' },
-  { href: '/admin/plugins', label: 'Plugins' },
+  { href: '/admin/modules', label: 'Modules' },
   { href: '/admin/settings', label: 'Settings' },
   { href: '/admin/audit', label: 'Audit Log' },
   { href: '/admin/products', label: 'Products' },
