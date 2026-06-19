@@ -10,7 +10,20 @@ interface User {
   createdAt: string;
 }
 
-const ROLES = ['ADMIN', 'ADVISOR', 'CLIENT'];
+interface CreateUserForm {
+  name: string;
+  email: string;
+  role: string;
+  password: string;
+}
+
+const ROLES = ['ADMIN', 'EDITOR', 'ADVISOR', 'CLIENT'];
+const emptyCreateForm: CreateUserForm = {
+  name: '',
+  email: '',
+  role: 'CLIENT',
+  password: '',
+};
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -19,6 +32,9 @@ export default function AdminUsersPage() {
   const [resetForms, setResetForms] = useState<Record<string, string>>({});
   const [resetErrors, setResetErrors] = useState<Record<string, string>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateUserForm>(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -50,6 +66,36 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function handleCreateUser(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    if (createForm.password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const res = await fetch('/api/proxy/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createForm),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? 'User creation failed');
+      }
+      const created = await res.json() as User;
+      setUsers((currentUsers) => [created, ...currentUsers]);
+      setCreateForm(emptyCreateForm);
+      setShowCreateForm(false);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error creating user');
+    } finally {
+      setCreating(false);
+    }
+  }
+
   async function handleResetPassword(id: string) {
     const newPassword = resetForms[id] ?? '';
     if (newPassword.length < 8) {
@@ -73,8 +119,92 @@ export default function AdminUsersPage() {
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
-      <h1 className="mb-6 text-3xl font-bold">Users</h1>
+      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Users</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Manage user roles, passwords, and manually add new accounts.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCreateForm((currentValue) => !currentValue)}
+          className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+        >
+          {showCreateForm ? 'Cancel New User' : 'Add New User'}
+        </button>
+      </div>
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+
+      {showCreateForm && (
+        <section className="mb-6 rounded-lg border bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold">Add user</h2>
+          <form onSubmit={handleCreateUser} className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Name</label>
+              <input
+                required
+                value={createForm.name}
+                onChange={(event) =>
+                  setCreateForm((currentForm) => ({ ...currentForm, name: event.target.value }))
+                }
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Email</label>
+              <input
+                required
+                type="email"
+                value={createForm.email}
+                onChange={(event) =>
+                  setCreateForm((currentForm) => ({ ...currentForm, email: event.target.value }))
+                }
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Role</label>
+              <select
+                value={createForm.role}
+                onChange={(event) =>
+                  setCreateForm((currentForm) => ({ ...currentForm, role: event.target.value }))
+                }
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              >
+                {ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Password</label>
+              <input
+                required
+                type="password"
+                minLength={8}
+                value={createForm.password}
+                onChange={(event) =>
+                  setCreateForm((currentForm) => ({ ...currentForm, password: event.target.value }))
+                }
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                disabled={creating}
+                className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {creating ? 'Creating…' : 'Create User'}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
       {loading ? <p className="text-gray-500">Loading…</p> : users.length === 0 ? (
         <p className="text-gray-500">No users found.</p>
       ) : (
