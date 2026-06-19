@@ -122,6 +122,7 @@ export default function AdminPagesPage() {
   const [error, setError] = useState('');
   const [form, setForm] = useState<PageForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
   const [saving, setSaving] = useState(false);
   const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
@@ -356,6 +357,7 @@ export default function AdminPagesPage() {
   }
 
   function startEdit(page: Page) {
+    setShowEditor(true);
     applyPageToForm(page);
     setShowRevisions(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -371,6 +373,7 @@ export default function AdminPagesPage() {
     setError('');
     setShowRevisions(false);
     setAutosaveState('idle');
+    setShowEditor(false);
   }
 
   function toggleSelection(ids: string[], id: string) {
@@ -390,20 +393,32 @@ export default function AdminPagesPage() {
         <div>
           <h1 className="text-3xl font-bold">Pages</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Create draft, scheduled, and published pages with autosave and revision history.
+            Review all pages, then create or edit content when needed.
           </p>
         </div>
-        {editingId && (
+        {showEditor ? (
           <button
             type="button"
             onClick={resetForm}
             className="rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50"
+          >
+            Back to All Pages
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              resetForm();
+              setShowEditor(true);
+            }}
+            className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
           >
             Create New Page
           </button>
         )}
       </div>
 
+      {showEditor && (
       <section className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -733,6 +748,7 @@ export default function AdminPagesPage() {
           </div>
         </form>
       </section>
+      )}
 
       <section>
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
