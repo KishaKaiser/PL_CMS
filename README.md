@@ -214,7 +214,7 @@ Prisma schema with the following models:
 | `Post` | Blog/news posts |
 | `MediaAsset` | Uploaded media library assets reused across CMS workflows |
 | `Setting` | Key-value platform settings |
-| `Module` | Pluggable feature modules |
+| `Module` | Built-in and configurable feature modules |
 | `Product` | Purchasable products (minute packs, etc.) |
 | `Order` | Customer orders with PayPal tracking |
 | `OrderItem` | Line items within an order |
