@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import type { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateModuleDto, UpdateModuleDto } from './modules.dto';
 
