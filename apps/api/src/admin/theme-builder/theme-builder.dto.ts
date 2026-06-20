@@ -34,8 +34,40 @@ export class CreateBuilderTemplateDto {
   schemaJson!: Record<string, unknown>;
 
   @IsOptional()
+  @IsObject()
+  assignmentRules?: Record<string, unknown>;
+
+  @IsOptional()
   @IsBoolean()
   isGlobal?: boolean;
+}
+
+export class CreateWidgetDto {
+  @IsString()
+  type!: string;
+
+  @IsString()
+  label!: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @IsOptional()
+  @IsString()
+  pluginName?: string;
+
+  @IsOptional()
+  @IsObject()
+  schemaJson?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  defaultJson?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
 }
 
 export class CreateGlobalComponentDto {
@@ -80,8 +112,23 @@ export class CreateThemeDto {
   components?: Record<string, unknown>;
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  widgetRegistry?: string[];
+
+  @IsOptional()
   @IsObject()
   schemaJson?: Record<string, unknown>;
+}
+
+export class AssignPageDesignDto {
+  @IsOptional()
+  @IsString()
+  builderTemplateId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  cmsThemeId?: string | null;
 }
 
 export class ThemeAssetDto {

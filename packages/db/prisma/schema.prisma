@@ -335,13 +335,19 @@ model Page {
   content          String
   featuredImageUrl String?
   featuredMediaId  String?
+  builderTemplateId String?
+  cmsThemeId        String?
   publishedAt      DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   featuredMedia MediaAsset? @relation("PageFeaturedMedia", fields: [featuredMediaId], references: [id], onDelete: SetNull)
+  builderTemplate BuilderTemplate? @relation(fields: [builderTemplateId], references: [id], onDelete: SetNull)
+  cmsTheme CmsTheme? @relation(fields: [cmsThemeId], references: [id], onDelete: SetNull)
 
   @@index([featuredMediaId])
+  @@index([builderTemplateId])
+  @@index([cmsThemeId])
   @@map("pages")
 }
 
@@ -490,15 +496,33 @@ model BuilderTemplate {
   description String?
   category    String   @default("page")
   schemaJson  Json
+  assignmentRules Json @default("{}")
   isGlobal    Boolean  @default(false)
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   createdBy User? @relation("BuilderTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  pages Page[]
 
   @@index([category])
   @@map("builder_templates")
+}
+
+model BuilderWidget {
+  id          String   @id @default(cuid())
+  type        String   @unique
+  label       String
+  category    String   @default("content")
+  pluginName  String?
+  schemaJson  Json     @default("{}")
+  defaultJson Json     @default("{}")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@map("builder_widgets")
 }
 
 model GlobalComponent {
@@ -526,12 +550,14 @@ model CmsTheme {
   globalStyles Json    @default("{}")
   templates   Json     @default("{}")
   components  Json     @default("{}")
+  widgetRegistry Json  @default("[]")
   schemaJson  Json     @default("{}")
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   assets    ThemeAsset[]
+  pages     Page[]
   createdBy User? @relation("CmsThemeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@map("cms_themes")

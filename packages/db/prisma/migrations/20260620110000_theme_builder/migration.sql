@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS "builder_templates" (
   "description" TEXT,
   "category" TEXT NOT NULL DEFAULT 'page',
   "schemaJson" JSONB NOT NULL,
+  "assignmentRules" JSONB NOT NULL DEFAULT '{}',
   "isGlobal" BOOLEAN NOT NULL DEFAULT false,
   "createdById" TEXT,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -70,6 +71,23 @@ CREATE TABLE IF NOT EXISTS "global_components" (
   CONSTRAINT "global_components_pkey" PRIMARY KEY ("id")
 );
 
+CREATE TABLE IF NOT EXISTS "builder_widgets" (
+  "id" TEXT NOT NULL,
+  "type" TEXT NOT NULL,
+  "label" TEXT NOT NULL,
+  "category" TEXT NOT NULL DEFAULT 'content',
+  "pluginName" TEXT,
+  "schemaJson" JSONB NOT NULL DEFAULT '{}',
+  "defaultJson" JSONB NOT NULL DEFAULT '{}',
+  "enabled" BOOLEAN NOT NULL DEFAULT true,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "builder_widgets_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "builder_widgets_type_key" ON "builder_widgets"("type");
+CREATE INDEX IF NOT EXISTS "builder_widgets_category_idx" ON "builder_widgets"("category");
+
 CREATE INDEX IF NOT EXISTS "global_components_componentType_idx" ON "global_components"("componentType");
 
 ALTER TABLE "global_components"
@@ -86,6 +104,7 @@ CREATE TABLE IF NOT EXISTS "cms_themes" (
   "globalStyles" JSONB NOT NULL DEFAULT '{}',
   "templates" JSONB NOT NULL DEFAULT '{}',
   "components" JSONB NOT NULL DEFAULT '{}',
+  "widgetRegistry" JSONB NOT NULL DEFAULT '[]',
   "schemaJson" JSONB NOT NULL DEFAULT '{}',
   "createdById" TEXT,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -121,3 +140,38 @@ FOREIGN KEY ("themeId") REFERENCES "cms_themes"("id") ON DELETE CASCADE ON UPDAT
 ALTER TABLE "theme_assets"
 ADD CONSTRAINT "theme_assets_mediaAssetId_fkey"
 FOREIGN KEY ("mediaAssetId") REFERENCES "media_assets"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE "pages"
+ADD COLUMN IF NOT EXISTS "builderTemplateId" TEXT,
+ADD COLUMN IF NOT EXISTS "cmsThemeId" TEXT;
+
+CREATE INDEX IF NOT EXISTS "pages_builderTemplateId_idx" ON "pages"("builderTemplateId");
+CREATE INDEX IF NOT EXISTS "pages_cmsThemeId_idx" ON "pages"("cmsThemeId");
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'pages_builderTemplateId_fkey'
+  ) THEN
+    ALTER TABLE "pages"
+    ADD CONSTRAINT "pages_builderTemplateId_fkey"
+    FOREIGN KEY ("builderTemplateId") REFERENCES "builder_templates"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'pages_cmsThemeId_fkey'
+  ) THEN
+    ALTER TABLE "pages"
+    ADD CONSTRAINT "pages_cmsThemeId_fkey"
+    FOREIGN KEY ("cmsThemeId") REFERENCES "cms_themes"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+INSERT INTO "builder_widgets" ("id", "type", "label", "category", "schemaJson", "defaultJson", "enabled", "updatedAt")
+VALUES
+  ('widget_heading', 'heading', 'Heading', 'content', '{"props":{"text":"string","level":"number","align":"string"}}', '{"id":"heading","type":"heading","props":{"text":"New Heading","level":2}}', true, now()),
+  ('widget_text', 'text', 'Text', 'content', '{"props":{"text":"string"}}', '{"id":"text","type":"text","props":{"text":"New text block."}}', true, now()),
+  ('widget_image', 'image', 'Image', 'media', '{"props":{"src":"string","alt":"string"}}', '{"id":"image","type":"image","props":{"src":"","alt":""}}', true, now()),
+  ('widget_button', 'button', 'Button', 'content', '{"props":{"label":"string","href":"string"}}', '{"id":"button","type":"button","props":{"label":"Learn More","href":"#"}}', true, now()),
+  ('widget_columns', 'columns', 'Columns', 'layout', '{"props":{"columns":"number"},"children":"recursive"}', '{"id":"columns","type":"columns","props":{"columns":2},"children":[]}', true, now())
+ON CONFLICT ("type") DO NOTHING;
