@@ -63,6 +63,25 @@ export interface PublicPage {
   featuredImageUrl: string | null;
   publishedAt: string;
   updatedAt: string;
+  builderLayout?: BuilderLayout | null;
+}
+
+export interface BuilderBlock {
+  id: string;
+  type: string;
+  props: Record<string, unknown>;
+  children?: BuilderBlock[];
+}
+
+export interface BuilderLayout {
+  version: number;
+  type: string;
+  sections: Array<{
+    id: string;
+    type: string;
+    settings: Record<string, unknown>;
+    blocks: BuilderBlock[];
+  }>;
 }
 
 export interface TaxonomyItem {
