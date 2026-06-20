@@ -16,6 +16,7 @@ import { FulfillmentModule } from './fulfillment/fulfillment.module';
 import { AdminModule } from './admin/admin.module';
 import { PublicContentModule } from './public/public-content.module';
 import { MessagesModule } from './messages/messages.module';
+import { AccountModule } from './account/account.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { MessagesModule } from './messages/messages.module';
     AdminModule,
     PublicContentModule,
     MessagesModule,
+    AccountModule,
   ],
 })
 export class AppModule {}

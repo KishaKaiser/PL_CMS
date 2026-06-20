@@ -18,6 +18,7 @@ const ALLOWED_PATH_PREFIXES = [
   'settings',
   'audit',
   'admin',
+  'account',
   'dashboard',
   'modules',
   'media',
