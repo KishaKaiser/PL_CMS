@@ -11,6 +11,7 @@ export type ThemeSectionSettings = {
 export type SiteThemeSettings = {
   primaryColor: string;
   accentColor: string;
+  fontFamily: string;
   heroTitle: string;
   heroBody: string;
   heroPrimaryLabel: string;
@@ -111,6 +112,7 @@ export const DEFAULT_POSTS_PAGE_SETTINGS: PostsPageSettings = {
 export const DEFAULT_SITE_THEME: SiteThemeSettings = {
   primaryColor: '#4f46e5',
   accentColor: '#7c3aed',
+  fontFamily: 'Inter, Arial, sans-serif',
   heroTitle: DEFAULT_SITE_TITLE,
   heroBody: 'Welcome to the public site. Read our latest posts or browse CMS pages.',
   heroPrimaryLabel: 'Visit Blog',

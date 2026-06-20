@@ -17,7 +17,7 @@ export async function PublicSiteShell({ children, siteConfig }: Props) {
   const footerLinks = config.menus.footer;
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900">
+    <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900" style={{ fontFamily: config.theme.fontFamily }}>
       <a href="#public-main-content" className="sr-only rounded px-3 py-2 focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:bg-white focus:shadow">
         Skip to content
       </a>
