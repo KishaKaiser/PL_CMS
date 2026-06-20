@@ -181,7 +181,15 @@ export class PublicContentService {
     });
 
     if (!page) throw new NotFoundException(`Page ${slug} not found`);
-    return page;
+    const builderLayout = await this.prisma.builderLayout.findUnique({
+      where: { entityType_entityId: { entityType: 'page', entityId: page.id } },
+      select: { publishedJson: true, status: true },
+    });
+    return {
+      ...page,
+      builderLayout:
+        builderLayout?.status === 'PUBLISHED' ? builderLayout.publishedJson : null,
+    };
   }
 
   async findPageRedirectBySlug(slug: string) {

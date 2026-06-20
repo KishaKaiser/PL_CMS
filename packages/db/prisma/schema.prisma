@@ -90,6 +90,11 @@ model User {
   broadcastMessages BroadcastMessage[]
   auditLogs         AuditLog[]
   contentRevisions  ContentRevision[]
+  builderLayoutsUpdated BuilderLayout[] @relation("BuilderLayoutUpdatedBy")
+  builderLayoutVersions BuilderLayoutVersion[] @relation("BuilderLayoutVersionCreatedBy")
+  builderTemplates BuilderTemplate[] @relation("BuilderTemplateCreatedBy")
+  globalComponents GlobalComponent[] @relation("GlobalComponentCreatedBy")
+  cmsThemes CmsTheme[] @relation("CmsThemeCreatedBy")
   posts             Post[]
   orders            Order[]
   walletTransactions WalletTransaction[]
@@ -378,6 +383,7 @@ model MediaAsset {
   featuredByPages Page[] @relation("PageFeaturedMedia")
   featuredByPosts Post[] @relation("PostFeaturedMedia")
   featuredByProducts Product[] @relation("ProductFeaturedMedia")
+  themeAssets ThemeAsset[] @relation("ThemeAssetMedia")
 
   @@map("media_assets")
 }
@@ -436,6 +442,117 @@ model ContentRevision {
 
   @@index([entityType, entityId])
   @@map("content_revisions")
+}
+
+// ──────────────────────────────────────────────
+// Visual Builder & Themes
+// ──────────────────────────────────────────────
+
+model BuilderLayout {
+  id            String   @id @default(cuid())
+  entityType    String
+  entityId      String
+  draftJson     Json
+  publishedJson Json?
+  version       Int      @default(1)
+  status        String   @default("DRAFT")
+  updatedById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  publishedAt   DateTime?
+
+  updatedBy User? @relation("BuilderLayoutUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  versions  BuilderLayoutVersion[]
+
+  @@unique([entityType, entityId])
+  @@index([entityType, entityId])
+  @@map("builder_layouts")
+}
+
+model BuilderLayoutVersion {
+  id        String   @id @default(cuid())
+  layoutId  String
+  version   Int
+  snapshot  Json
+  createdById String?
+  createdAt DateTime @default(now())
+
+  layout BuilderLayout @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("BuilderLayoutVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([layoutId, version])
+  @@map("builder_layout_versions")
+}
+
+model BuilderTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  category    String   @default("page")
+  schemaJson  Json
+  isGlobal    Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User? @relation("BuilderTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@map("builder_templates")
+}
+
+model GlobalComponent {
+  id          String   @id @default(cuid())
+  name        String
+  componentType String
+  schemaJson  Json
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User? @relation("GlobalComponentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([componentType])
+  @@map("global_components")
+}
+
+model CmsTheme {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  version     String   @default("1.0.0")
+  description String?
+  isActive    Boolean  @default(false)
+  globalStyles Json    @default("{}")
+  templates   Json     @default("{}")
+  components  Json     @default("{}")
+  schemaJson  Json     @default("{}")
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assets    ThemeAsset[]
+  createdBy User? @relation("CmsThemeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("cms_themes")
+}
+
+model ThemeAsset {
+  id        String   @id @default(cuid())
+  themeId   String
+  assetType String
+  path      String
+  mimeType  String?
+  content   String?
+  mediaAssetId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  theme CmsTheme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+  mediaAsset MediaAsset? @relation("ThemeAssetMedia", fields: [mediaAssetId], references: [id], onDelete: SetNull)
+
+  @@index([themeId])
+  @@map("theme_assets")
 }
 
 // ──────────────────────────────────────────────

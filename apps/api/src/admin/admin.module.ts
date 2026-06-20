@@ -19,6 +19,8 @@ import { AdminUsersController } from './admin-users/users.controller';
 import { AdminUsersService } from './admin-users/users.service';
 import { AuditController } from './audit/audit.controller';
 import { AuditService } from './audit/audit.service';
+import { ThemeBuilderController } from './theme-builder/theme-builder.controller';
+import { ThemeBuilderService } from './theme-builder/theme-builder.service';
 
 @Module({
   controllers: [
@@ -32,6 +34,7 @@ import { AuditService } from './audit/audit.service';
     TaxonomiesController,
     MediaController,
     ModulesController,
+    ThemeBuilderController,
   ],
   providers: [
     DashboardService,
@@ -44,6 +47,7 @@ import { AuditService } from './audit/audit.service';
     TaxonomiesService,
     MediaService,
     ModulesService,
+    ThemeBuilderService,
   ],
   exports: [AuditService],
 })

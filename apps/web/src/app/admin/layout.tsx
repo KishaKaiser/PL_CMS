@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: '/admin/posts', label: 'Posts' },
   { href: '/admin/taxonomies', label: 'Categories & Tags' },
   { href: '/admin/media', label: 'Media' },
+  { href: '/admin/theme-builder', label: 'Theme Builder' },
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/messages', label: 'Messages' },
   { href: '/admin/modules', label: 'Modules' },
