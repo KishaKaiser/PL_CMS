@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@pl-cms/db';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -207,7 +208,7 @@ export class AccountService {
           label: dto.label.trim(),
           methodType: dto.methodType.trim(),
           accountName: dto.accountName.trim(),
-          details: dto.details ?? {},
+          details: toJsonObject(dto.details),
           isDefault: dto.isDefault ?? false,
         },
       });
@@ -233,6 +234,10 @@ export class AccountService {
     if (!advisor) throw new NotFoundException('Advisor profile not found');
     return advisor;
   }
+}
+
+function toJsonObject(value: Record<string, unknown> | undefined): Prisma.InputJsonObject {
+  return (value ?? {}) as Prisma.InputJsonObject;
 }
 
 function cleanAddress(dto: SaveAddressDto) {
