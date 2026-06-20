@@ -93,6 +93,8 @@ model User {
   posts             Post[]
   orders            Order[]
   walletTransactions WalletTransaction[]
+  accountAddresses    AccountAddress[]
+  savedPaymentMethods SavedPaymentMethod[]
 
   @@map("users")
 }
@@ -115,6 +117,7 @@ model AdvisorProfile {
   availabilitySlots   AvailabilitySchedule[]
   callQueues          CallQueue[]
   callSessionsAsAdvisor CallSession[]        @relation("AdvisorSessions")
+  payoutMethods       AdvisorPayoutMethod[]
 
   @@map("advisor_profiles")
 }
@@ -252,6 +255,66 @@ model BroadcastTarget {
   broadcast BroadcastMessage @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
 
   @@map("broadcast_targets")
+}
+
+// ──────────────────────────────────────────────
+// Account Dashboard
+// ──────────────────────────────────────────────
+
+model AccountAddress {
+  id         String   @id @default(cuid())
+  userId     String
+  label      String
+  fullName   String
+  phone      String?
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  postalCode String
+  country    String   @default("US")
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account_addresses")
+}
+
+model SavedPaymentMethod {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String
+  provider  String
+  brand     String?
+  last4     String?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("saved_payment_methods")
+}
+
+model AdvisorPayoutMethod {
+  id          String   @id @default(cuid())
+  advisorId   String
+  label       String
+  methodType  String
+  accountName String
+  details     Json     @default("{}")
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  advisor AdvisorProfile @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+
+  @@index([advisorId])
+  @@map("advisor_payout_methods")
 }
 
 // ──────────────────────────────────────────────
