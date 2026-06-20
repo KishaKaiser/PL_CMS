@@ -83,7 +83,7 @@ export class PublicContentService {
 
   async getSiteConfig() {
     const now = new Date();
-    const [settings, publishedPages] = await Promise.all([
+    const [settings, publishedPages, activeCmsTheme] = await Promise.all([
       this.prisma.setting.findMany({
         where: { key: { in: [...PUBLIC_SITE_SETTING_KEYS] } },
       }),
@@ -94,6 +94,11 @@ export class PublicContentService {
           slug: true,
           title: true,
         },
+      }),
+      this.prisma.cmsTheme.findFirst({
+        where: { isActive: true },
+        orderBy: { updatedAt: 'desc' },
+        select: { globalStyles: true },
       }),
     ]);
 
@@ -109,7 +114,10 @@ export class PublicContentService {
       settingMap.get(SITE_SETTING_KEYS.SITE_POSTS_PAGE),
       publishedPageMap,
     );
-    const theme = this.normalizeThemeSettings(settingMap.get(SITE_SETTING_KEYS.SITE_THEME), postsPage.path);
+    const theme = this.applyCmsThemeStyles(
+      this.normalizeThemeSettings(settingMap.get(SITE_SETTING_KEYS.SITE_THEME), postsPage.path),
+      activeCmsTheme?.globalStyles,
+    );
     const extensionPoints = this.normalizeExtensionPoints(
       settingMap.get(SITE_SETTING_KEYS.SITE_EXTENSION_POINTS),
     );
@@ -646,6 +654,7 @@ export class PublicContentService {
     return {
       primaryColor: this.getString(parsed?.primaryColor, DEFAULT_SITE_THEME.primaryColor),
       accentColor: this.getString(parsed?.accentColor, DEFAULT_SITE_THEME.accentColor),
+      fontFamily: this.getString(parsed?.fontFamily, DEFAULT_SITE_THEME.fontFamily),
       heroTitle: this.getString(parsed?.heroTitle, DEFAULT_SITE_THEME.heroTitle),
       heroBody: this.getString(parsed?.heroBody, DEFAULT_SITE_THEME.heroBody),
       heroPrimaryLabel: this.getString(parsed?.heroPrimaryLabel, DEFAULT_SITE_THEME.heroPrimaryLabel),
@@ -662,6 +671,23 @@ export class PublicContentService {
           title: this.getString(postSection?.title, DEFAULT_SITE_THEME.homepageSections.posts.title),
         },
       },
+    };
+  }
+
+  private applyCmsThemeStyles(theme: SiteThemeSettings, value: Prisma.JsonValue | undefined) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return theme;
+    const styles = value as Record<string, unknown>;
+    return {
+      ...theme,
+      primaryColor: this.getString(styles.primaryColor, theme.primaryColor),
+      accentColor: this.getString(styles.accentColor, theme.accentColor),
+      fontFamily: this.getString(styles.fontFamily, theme.fontFamily),
+      heroTitle: this.getString(styles.heroTitle, theme.heroTitle),
+      heroBody: this.getString(styles.heroBody, theme.heroBody),
+      heroPrimaryLabel: this.getString(styles.heroPrimaryLabel, theme.heroPrimaryLabel),
+      heroPrimaryHref: this.getString(styles.heroPrimaryHref, theme.heroPrimaryHref),
+      heroSecondaryLabel: this.getString(styles.heroSecondaryLabel, theme.heroSecondaryLabel),
+      heroSecondaryHref: this.getString(styles.heroSecondaryHref, theme.heroSecondaryHref),
     };
   }
 

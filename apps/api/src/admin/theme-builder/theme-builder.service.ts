@@ -214,20 +214,24 @@ export class ThemeBuilderService {
   async createTheme(dto: CreateThemeDto, userId?: string) {
     const existing = await this.prisma.cmsTheme.findUnique({ where: { slug: dto.slug } });
     if (existing) throw new ConflictException(`Theme slug "${dto.slug}" already exists`);
-    return this.prisma.cmsTheme.create({
-      data: {
-        name: dto.name.trim(),
-        slug: dto.slug.trim(),
-        version: dto.version?.trim() || '1.0.0',
-        description: dto.description?.trim() || null,
-        globalStyles: toJsonObject(dto.globalStyles),
-        templates: toJsonObject(dto.templates),
-        components: toJsonObject(dto.components),
-        widgetRegistry: (dto.widgetRegistry ?? []) as Prisma.InputJsonArray,
-        schemaJson: toJsonObject(dto.schemaJson),
-        createdById: userId,
-      },
-      include: { assets: true },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.cmsTheme.updateMany({ data: { isActive: false } });
+      return tx.cmsTheme.create({
+        data: {
+          name: dto.name.trim(),
+          slug: dto.slug.trim(),
+          version: dto.version?.trim() || '1.0.0',
+          description: dto.description?.trim() || null,
+          isActive: true,
+          globalStyles: toJsonObject(dto.globalStyles),
+          templates: toJsonObject(dto.templates),
+          components: toJsonObject(dto.components),
+          widgetRegistry: (dto.widgetRegistry ?? []) as Prisma.InputJsonArray,
+          schemaJson: toJsonObject(dto.schemaJson),
+          createdById: userId,
+        },
+        include: { assets: true },
+      });
     });
   }
 

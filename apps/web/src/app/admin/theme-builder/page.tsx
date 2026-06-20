@@ -119,6 +119,7 @@ export default function ThemeBuilderPage() {
     slug: '',
     version: '1.0.0',
     primaryColor: '#4f46e5',
+    accentColor: '#0f766e',
     fontFamily: 'Inter, sans-serif',
   });
   const [assetForm, setAssetForm] = useState({ themeId: '', path: 'theme.css', content: '' });
@@ -131,6 +132,8 @@ export default function ThemeBuilderPage() {
     [layout, selectedBlockId],
   );
   const enabledWidgets = useMemo(() => widgets.filter((widget) => widget.enabled), [widgets]);
+  const activeTheme = useMemo(() => themes.find((theme) => theme.isActive) ?? null, [themes]);
+  const previewTheme = useMemo(() => getThemePreviewStyles(activeTheme, themeForm), [activeTheme, themeForm]);
 
   const fetchResources = useCallback(async () => {
     setError('');
@@ -305,6 +308,7 @@ export default function ThemeBuilderPage() {
       version: themeForm.version,
       globalStyles: {
         primaryColor: themeForm.primaryColor,
+        accentColor: themeForm.accentColor,
         fontFamily: themeForm.fontFamily,
       },
       templates: {
@@ -315,8 +319,8 @@ export default function ThemeBuilderPage() {
       components: { widgets: widgets.map((widget) => widget.type) },
       widgetRegistry: widgets.filter((widget) => widget.enabled).map((widget) => widget.type),
       schemaJson: { builderVersion: 1, supports: ['sections', 'blocks', 'nested-components'] },
-    }, 'Theme created.');
-    setThemeForm({ name: '', slug: '', version: '1.0.0', primaryColor: '#4f46e5', fontFamily: 'Inter, sans-serif' });
+    }, 'Theme created and activated.');
+    setThemeForm({ name: '', slug: '', version: '1.0.0', primaryColor: '#4f46e5', accentColor: '#0f766e', fontFamily: 'Inter, sans-serif' });
   }
 
   async function saveThemeAsset(event: FormEvent<HTMLFormElement>) {
@@ -396,14 +400,6 @@ export default function ThemeBuilderPage() {
     await postBuilder(`pages/${selectedPageId}/design`, { builderTemplateId: templateId }, 'Template assigned to page.');
   }
 
-  async function assignSelectedTheme(themeId: string) {
-    if (!selectedPageId) {
-      setError('Choose a page first.');
-      return;
-    }
-    await postBuilder(`pages/${selectedPageId}/design`, { cmsThemeId: themeId }, 'Theme assigned to page.');
-  }
-
   async function uploadFile(event: ChangeEvent<HTMLInputElement>, path: string, successMessage: string) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -423,12 +419,12 @@ export default function ThemeBuilderPage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl p-8">
+    <main className="p-6">
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Theme Builder</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Build structured JSON layouts, reusable templates, global components, and packaged themes.
+            Build site-wide themes, visual page layouts, reusable templates, global components, and packaged theme ZIPs.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -463,8 +459,23 @@ export default function ThemeBuilderPage() {
       {error && <p className="mb-4 rounded bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
       {status && <p className="mb-4 rounded bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{status}</p>}
 
-      <div className="grid gap-6 xl:grid-cols-[280px_1fr_340px]">
+      <div className="grid gap-5 xl:grid-cols-[260px_minmax(720px,1fr)_320px]">
         <aside className="space-y-4">
+          <Panel title="Active Theme">
+            {activeTheme ? (
+              <div className="space-y-2 text-sm">
+                <div className="font-medium">{activeTheme.name}</div>
+                <div className="text-xs text-gray-500">{activeTheme.slug} · {activeTheme.version}</div>
+                <div className="flex gap-2">
+                  <span className="h-6 w-6 rounded border" style={{ backgroundColor: previewTheme.primaryColor }} />
+                  <span className="h-6 w-6 rounded border" style={{ backgroundColor: previewTheme.accentColor }} />
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No active theme yet. Create one or run migrations to install the default theme.</p>
+            )}
+          </Panel>
+
           <Panel title="Page">
             <select
               value={selectedPageId}
@@ -591,7 +602,7 @@ export default function ThemeBuilderPage() {
 
           <Panel title="Live Preview">
             <div className="mx-auto transition-all" style={{ maxWidth: responsiveWidth(responsiveMode) }}>
-              <BuilderPreview layout={layout} components={components} />
+              <BuilderPreview layout={layout} components={components} theme={previewTheme} />
             </div>
           </Panel>
         </section>
@@ -621,9 +632,18 @@ export default function ThemeBuilderPage() {
               <input value={themeForm.name} onChange={(event) => setThemeForm((current) => ({ ...current, name: event.target.value }))} placeholder="Theme name" className="w-full rounded border px-3 py-2 text-sm" />
               <input value={themeForm.slug} onChange={(event) => setThemeForm((current) => ({ ...current, slug: event.target.value }))} placeholder="theme-slug" className="w-full rounded border px-3 py-2 text-sm" />
               <input value={themeForm.version} onChange={(event) => setThemeForm((current) => ({ ...current, version: event.target.value }))} placeholder="1.0.0" className="w-full rounded border px-3 py-2 text-sm" />
-              <input type="color" value={themeForm.primaryColor} onChange={(event) => setThemeForm((current) => ({ ...current, primaryColor: event.target.value }))} className="h-10 w-full rounded border" />
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs font-medium text-gray-600">
+                  Primary
+                  <input type="color" value={themeForm.primaryColor} onChange={(event) => setThemeForm((current) => ({ ...current, primaryColor: event.target.value }))} className="mt-1 h-10 w-full rounded border" />
+                </label>
+                <label className="text-xs font-medium text-gray-600">
+                  Accent
+                  <input type="color" value={themeForm.accentColor} onChange={(event) => setThemeForm((current) => ({ ...current, accentColor: event.target.value }))} className="mt-1 h-10 w-full rounded border" />
+                </label>
+              </div>
               <input value={themeForm.fontFamily} onChange={(event) => setThemeForm((current) => ({ ...current, fontFamily: event.target.value }))} placeholder="Font family" className="w-full rounded border px-3 py-2 text-sm" />
-              <button className="rounded bg-gray-900 px-3 py-2 text-sm text-white">Create Theme</button>
+              <button className="rounded bg-gray-900 px-3 py-2 text-sm text-white">Create & Activate Theme</button>
             </form>
             <label className="mt-3 block cursor-pointer rounded border px-3 py-2 text-sm hover:bg-gray-50">
               Import Theme ZIP
@@ -631,7 +651,7 @@ export default function ThemeBuilderPage() {
             </label>
           </Panel>
 
-          <Panel title="Themes & Assets">
+          <Panel title="Site Themes & Assets">
             <div className="space-y-2">
               {themes.map((theme) => (
                 <div key={theme.id} className="rounded border p-2 text-sm">
@@ -643,14 +663,13 @@ export default function ThemeBuilderPage() {
                     {theme.isActive && <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-700">Active</span>}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <button onClick={() => void postBuilder(`themes/${theme.id}/activate`, {}, 'Theme activated.')} className="text-indigo-600 hover:underline">
-                      Activate
-                    </button>
+                    {!theme.isActive && (
+                      <button onClick={() => void postBuilder(`themes/${theme.id}/activate`, {}, 'Theme activated for the site.')} className="text-indigo-600 hover:underline">
+                        Activate Site Theme
+                      </button>
+                    )}
                     <button onClick={() => void exportTheme(theme.id)} className="text-indigo-600 hover:underline">
                       Export ZIP
-                    </button>
-                    <button onClick={() => void assignSelectedTheme(theme.id)} className="text-indigo-600 hover:underline">
-                      Assign
                     </button>
                     <button onClick={() => setAssetForm((current) => ({ ...current, themeId: theme.id }))} className="text-indigo-600 hover:underline">
                       Add Asset
@@ -730,14 +749,20 @@ function BlockEditor({ block, onChange }: { block: BuilderBlock; onChange: (prop
   );
 }
 
-function BuilderPreview({ layout, components }: { layout: BuilderLayout; components: GlobalComponent[] }) {
+type ThemePreviewStyles = {
+  primaryColor: string;
+  accentColor: string;
+  fontFamily: string;
+};
+
+function BuilderPreview({ layout, components, theme }: { layout: BuilderLayout; components: GlobalComponent[]; theme: ThemePreviewStyles }) {
   return (
-    <div className="overflow-hidden rounded border bg-white">
+    <div className="min-h-[560px] overflow-hidden rounded border bg-white shadow-sm" style={{ fontFamily: theme.fontFamily }}>
       {layout.sections.map((section) => (
         <section key={section.id} style={{ background: section.settings.background, padding: section.settings.padding }}>
           <div className={section.settings.layout === 'full' ? '' : 'mx-auto max-w-4xl'}>
             {section.blocks.map((block) => (
-              <PreviewBlock key={block.id} block={block} components={components} />
+              <PreviewBlock key={block.id} block={block} components={components} theme={theme} />
             ))}
           </div>
         </section>
@@ -746,9 +771,9 @@ function BuilderPreview({ layout, components }: { layout: BuilderLayout; compone
   );
 }
 
-function PreviewBlock({ block, components }: { block: BuilderBlock; components: GlobalComponent[] }) {
+function PreviewBlock({ block, components, theme }: { block: BuilderBlock; components: GlobalComponent[]; theme: ThemePreviewStyles }) {
   if (block.type === 'heading') {
-    return <h1 className="mb-3 text-4xl font-bold">{String(block.props.text ?? 'Heading')}</h1>;
+    return <h1 className="mb-3 text-4xl font-bold" style={{ color: theme.primaryColor }}>{String(block.props.text ?? 'Heading')}</h1>;
   }
   if (block.type === 'text') {
     return <p className="mb-4 text-gray-700">{String(block.props.text ?? 'Text block')}</p>;
@@ -758,11 +783,11 @@ function PreviewBlock({ block, components }: { block: BuilderBlock; components: 
     return src ? <img src={src} alt="" className="mb-4 max-h-80 w-full rounded object-cover" /> : <div className="mb-4 rounded bg-gray-100 p-8 text-center text-sm text-gray-500">Image</div>;
   }
   if (block.type === 'button') {
-    return <a href={String(block.props.href ?? '#')} className="mb-4 inline-block rounded bg-indigo-600 px-4 py-2 text-white">{String(block.props.label ?? 'Button')}</a>;
+    return <a href={String(block.props.href ?? '#')} className="mb-4 inline-block rounded px-4 py-2 text-white" style={{ backgroundColor: theme.primaryColor }}>{String(block.props.label ?? 'Button')}</a>;
   }
   if (block.type === 'global') {
     const component = components.find((item) => item.id === block.props.componentId);
-    return component ? <PreviewBlock block={component.schemaJson} components={components} /> : <div className="rounded border p-3 text-sm text-gray-500">Global component</div>;
+    return component ? <PreviewBlock block={component.schemaJson} components={components} theme={theme} /> : <div className="rounded border p-3 text-sm text-gray-500">Global component</div>;
   }
   return <div className="mb-4 grid gap-3 md:grid-cols-2"><div className="rounded bg-gray-100 p-4">Column</div><div className="rounded bg-gray-100 p-4">Column</div></div>;
 }
@@ -798,6 +823,22 @@ function responsiveWidth(mode: ResponsiveMode) {
   if (mode === 'mobile') return '390px';
   if (mode === 'tablet') return '768px';
   return '100%';
+}
+
+function getThemePreviewStyles(
+  activeTheme: CmsTheme | null,
+  themeForm: { primaryColor: string; accentColor: string; fontFamily: string },
+): ThemePreviewStyles {
+  const globalStyles = activeTheme?.globalStyles ?? {};
+  return {
+    primaryColor: getStringStyle(globalStyles.primaryColor, themeForm.primaryColor),
+    accentColor: getStringStyle(globalStyles.accentColor, themeForm.accentColor),
+    fontFamily: getStringStyle(globalStyles.fontFamily, themeForm.fontFamily),
+  };
+}
+
+function getStringStyle(value: unknown, fallback: string) {
+  return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
 function parseJsonObject(value: string) {
