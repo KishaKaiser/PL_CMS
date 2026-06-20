@@ -377,6 +377,7 @@ model MediaAsset {
 
   featuredByPages Page[] @relation("PageFeaturedMedia")
   featuredByPosts Post[] @relation("PostFeaturedMedia")
+  featuredByProducts Product[] @relation("ProductFeaturedMedia")
 
   @@map("media_assets")
 }
@@ -388,7 +389,8 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  posts Post[]
+  posts    Post[]
+  products Product[]
 
   @@map("categories")
 }
@@ -400,7 +402,8 @@ model Tag {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  posts Post[]
+  posts    Post[]
+  products Product[]
 
   @@map("tags")
 }
@@ -492,15 +495,31 @@ model Product {
   type        ProductType @default(DIGITAL)
   description String?
   price       Decimal
+  regularPrice Decimal?
+  salePrice    Decimal?
+  saleStartsAt DateTime?
+  saleEndsAt   DateTime?
   currency    String   @default("USD")
   isActive    Boolean  @default(true)
   minutesPack Int      @default(0)
+  weightOz     Decimal?
+  lengthIn     Decimal?
+  widthIn      Decimal?
+  heightIn     Decimal?
+  trackStock   Boolean  @default(false)
+  stockStatus  String   @default("IN_STOCK")
+  imageUrl     String?
+  featuredMediaId String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   orderItems OrderItem[]
   variants   ProductVariant[]
+  featuredMedia MediaAsset? @relation("ProductFeaturedMedia", fields: [featuredMediaId], references: [id], onDelete: SetNull)
+  categories Category[]
+  tags       Tag[]
 
+  @@index([featuredMediaId])
   @@map("products")
 }
 

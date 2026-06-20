@@ -61,7 +61,7 @@ export class CheckoutService {
     const itemSubtotalBeforeTx = dto.items.reduce((sum, item) => {
       const product = productMap.get(item.productId)!;
       const variant = item.variantId ? variantMap.get(item.variantId) : undefined;
-      const unitPrice = variant?.priceOverride ?? product.price;
+      const unitPrice = variant?.priceOverride ?? getEffectiveProductPrice(product);
       return sum.add(unitPrice.mul(item.quantity));
     }, new Decimal(0));
 
@@ -81,7 +81,7 @@ export class CheckoutService {
     const orderItems = dto.items.map((item) => {
       const product = productMap.get(item.productId)!;
       const variant = item.variantId ? variantMap.get(item.variantId) : undefined;
-      const unitPrice = variant?.priceOverride ?? product.price;
+      const unitPrice = variant?.priceOverride ?? getEffectiveProductPrice(product);
       return {
         productId: item.productId,
         variantId: item.variantId ?? null,
@@ -434,4 +434,16 @@ export class CheckoutService {
 
     return order;
   }
+}
+
+function getEffectiveProductPrice(product: {
+  price: Decimal;
+  salePrice?: Decimal | null;
+  saleStartsAt?: Date | null;
+  saleEndsAt?: Date | null;
+}) {
+  const now = new Date();
+  const startsOk = !product.saleStartsAt || product.saleStartsAt <= now;
+  const endsOk = !product.saleEndsAt || product.saleEndsAt >= now;
+  return product.salePrice && startsOk && endsOk ? product.salePrice : product.price;
 }
