@@ -26,6 +26,12 @@ export default function ClientPage() {
           My Orders →
         </a>
         <a
+          href="/client/messages"
+          className="rounded border px-4 py-2 text-sm hover:bg-gray-100"
+        >
+          Messages →
+        </a>
+        <a
           href="/client/session"
           className="rounded border px-4 py-2 text-sm hover:bg-gray-100"
         >

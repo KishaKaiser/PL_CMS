@@ -223,6 +223,10 @@ model Message {
   sender    User @relation("SentMessages", fields: [senderId], references: [id])
   recipient User @relation("ReceivedMessages", fields: [recipientId], references: [id])
 
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([senderId, recipientId, sentAt])
+  @@index([recipientId, readAt])
   @@map("messages")
 }
 

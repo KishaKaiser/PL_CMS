@@ -12,6 +12,14 @@ export default function AdvisorPage() {
         <li>Messages</li>
         <li>Profile settings</li>
       </ul>
+      <div className="mt-6">
+        <a
+          href="/advisor/messages"
+          className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700"
+        >
+          Messages →
+        </a>
+      </div>
     </main>
   );
 }
