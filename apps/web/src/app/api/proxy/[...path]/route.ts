@@ -21,6 +21,7 @@ const ALLOWED_PATH_PREFIXES = [
   'dashboard',
   'modules',
   'media',
+  'messages',
 ];
 
 type Context = { params: Promise<{ path: string[] }> };
