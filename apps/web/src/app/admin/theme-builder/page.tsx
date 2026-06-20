@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 type BuilderBlockType = 'heading' | 'text' | 'image' | 'button' | 'columns' | 'global';
+type ResponsiveMode = 'desktop' | 'tablet' | 'mobile';
 
 interface BuilderBlock {
   id: string;
@@ -41,6 +42,7 @@ interface BuilderTemplate {
   description?: string | null;
   category: string;
   schemaJson: BuilderLayout;
+  assignmentRules?: Record<string, unknown>;
 }
 
 interface GlobalComponent {
@@ -60,6 +62,7 @@ interface CmsTheme {
   globalStyles: Record<string, unknown>;
   templates: Record<string, unknown>;
   components: Record<string, unknown>;
+  widgetRegistry: string[];
   schemaJson: Record<string, unknown>;
   assets: Array<{ id: string; assetType: string; path: string; content?: string | null }>;
 }
@@ -80,12 +83,22 @@ const emptyLayout: BuilderLayout = {
   ],
 };
 
-const widgetPalette: Array<{ type: BuilderBlockType; label: string }> = [
-  { type: 'heading', label: 'Heading' },
-  { type: 'text', label: 'Text' },
-  { type: 'image', label: 'Image' },
-  { type: 'button', label: 'Button' },
-  { type: 'columns', label: 'Columns' },
+interface BuilderWidget {
+  id?: string;
+  type: BuilderBlockType;
+  label: string;
+  category?: string | null;
+  pluginName?: string | null;
+  defaultJson?: BuilderBlock;
+  enabled: boolean;
+}
+
+const fallbackWidgets: BuilderWidget[] = [
+  { type: 'heading', label: 'Heading', category: 'content', enabled: true },
+  { type: 'text', label: 'Text', category: 'content', enabled: true },
+  { type: 'image', label: 'Image', category: 'media', enabled: true },
+  { type: 'button', label: 'Button', category: 'content', enabled: true },
+  { type: 'columns', label: 'Columns', category: 'layout', enabled: true },
 ];
 
 export default function ThemeBuilderPage() {
@@ -93,11 +106,14 @@ export default function ThemeBuilderPage() {
   const [templates, setTemplates] = useState<BuilderTemplate[]>([]);
   const [components, setComponents] = useState<GlobalComponent[]>([]);
   const [themes, setThemes] = useState<CmsTheme[]>([]);
+  const [widgets, setWidgets] = useState<BuilderWidget[]>(fallbackWidgets);
   const [selectedPageId, setSelectedPageId] = useState('');
   const [layout, setLayout] = useState<BuilderLayout>(emptyLayout);
   const [selectedBlockId, setSelectedBlockId] = useState('');
   const [templateName, setTemplateName] = useState('');
+  const [templateRules, setTemplateRules] = useState('{"pageType":"page"}');
   const [componentName, setComponentName] = useState('');
+  const [responsiveMode, setResponsiveMode] = useState<ResponsiveMode>('desktop');
   const [themeForm, setThemeForm] = useState({
     name: '',
     slug: '',
@@ -114,25 +130,30 @@ export default function ThemeBuilderPage() {
     () => layout.sections.flatMap((section) => section.blocks).find((block) => block.id === selectedBlockId),
     [layout, selectedBlockId],
   );
+  const enabledWidgets = useMemo(() => widgets.filter((widget) => widget.enabled), [widgets]);
 
   const fetchResources = useCallback(async () => {
     setError('');
     try {
-      const [pagesRes, templatesRes, componentsRes, themesRes] = await Promise.all([
+      const [pagesRes, templatesRes, componentsRes, themesRes, widgetsRes] = await Promise.all([
         fetch('/api/proxy/pages'),
         fetch('/api/proxy/admin/builder/templates'),
         fetch('/api/proxy/admin/builder/components'),
         fetch('/api/proxy/admin/builder/themes'),
+        fetch('/api/proxy/admin/builder/widgets'),
       ]);
       if (!pagesRes.ok) throw new Error('Unable to load pages');
       if (!templatesRes.ok) throw new Error('Unable to load templates');
       if (!componentsRes.ok) throw new Error('Unable to load global components');
       if (!themesRes.ok) throw new Error('Unable to load themes');
+      if (!widgetsRes.ok) throw new Error('Unable to load widget registry');
       const nextPages = (await pagesRes.json()) as PageOption[];
+      const nextWidgets = (await widgetsRes.json()) as BuilderWidget[];
       setPages(nextPages);
       setTemplates((await templatesRes.json()) as BuilderTemplate[]);
       setComponents((await componentsRes.json()) as GlobalComponent[]);
       setThemes((await themesRes.json()) as CmsTheme[]);
+      setWidgets(nextWidgets.length > 0 ? nextWidgets : fallbackWidgets);
       if (!selectedPageId && nextPages[0]) setSelectedPageId(nextPages[0].id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error loading builder');
@@ -203,7 +224,7 @@ export default function ThemeBuilderPage() {
   }
 
   function addBlock(type: BuilderBlockType, sectionId: string) {
-    const block = createBlock(type);
+    const block = createBlock(type, widgets.find((widget) => widget.type === type));
     setLayout((current) => ({
       ...current,
       sections: current.sections.map((section) =>
@@ -260,6 +281,7 @@ export default function ThemeBuilderPage() {
       name: templateName,
       category: 'page',
       schemaJson: layout,
+      assignmentRules: parseJsonObject(templateRules),
     }, 'Template saved.');
     setTemplateName('');
   }
@@ -290,7 +312,8 @@ export default function ThemeBuilderPage() {
         footer: null,
         pageTypes: { page: layout },
       },
-      components: { widgets: widgetPalette.map((widget) => widget.type) },
+      components: { widgets: widgets.map((widget) => widget.type) },
+      widgetRegistry: widgets.filter((widget) => widget.enabled).map((widget) => widget.type),
       schemaJson: { builderVersion: 1, supports: ['sections', 'blocks', 'nested-components'] },
     }, 'Theme created.');
     setThemeForm({ name: '', slug: '', version: '1.0.0', primaryColor: '#4f46e5', fontFamily: 'Inter, sans-serif' });
@@ -365,6 +388,22 @@ export default function ThemeBuilderPage() {
     event.target.value = '';
   }
 
+  async function assignSelectedTemplate(templateId: string) {
+    if (!selectedPageId) {
+      setError('Choose a page first.');
+      return;
+    }
+    await postBuilder(`pages/${selectedPageId}/design`, { builderTemplateId: templateId }, 'Template assigned to page.');
+  }
+
+  async function assignSelectedTheme(themeId: string) {
+    if (!selectedPageId) {
+      setError('Choose a page first.');
+      return;
+    }
+    await postBuilder(`pages/${selectedPageId}/design`, { cmsThemeId: themeId }, 'Theme assigned to page.');
+  }
+
   async function uploadFile(event: ChangeEvent<HTMLInputElement>, path: string, successMessage: string) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -393,6 +432,18 @@ export default function ThemeBuilderPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {(['desktop', 'tablet', 'mobile'] as ResponsiveMode[]).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setResponsiveMode(mode)}
+              className={`rounded border px-3 py-2 text-sm capitalize hover:bg-gray-50 ${
+                responsiveMode === mode ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : ''
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
           <button onClick={() => void saveLayout(false)} className="rounded border px-3 py-2 text-sm hover:bg-gray-50">
             Save Draft
           </button>
@@ -428,7 +479,7 @@ export default function ThemeBuilderPage() {
 
           <Panel title="Widgets">
             <div className="space-y-2">
-              {widgetPalette.map((widget) => (
+              {enabledWidgets.map((widget) => (
                 <button
                   key={widget.type}
                   type="button"
@@ -436,7 +487,8 @@ export default function ThemeBuilderPage() {
                   className="block w-full rounded border px-3 py-2 text-left text-sm hover:bg-gray-50"
                   disabled={layout.sections.length === 0}
                 >
-                  {widget.label}
+                  <span className="block font-medium">{widget.label}</span>
+                  <span className="block text-xs text-gray-500">{widget.pluginName ?? widget.category ?? 'core'}</span>
                 </button>
               ))}
             </div>
@@ -452,6 +504,12 @@ export default function ThemeBuilderPage() {
                 onChange={(event) => setTemplateName(event.target.value)}
                 placeholder="Template name"
                 className="w-full rounded border px-3 py-2 text-sm"
+              />
+              <textarea
+                value={templateRules}
+                onChange={(event) => setTemplateRules(event.target.value)}
+                rows={3}
+                className="w-full rounded border px-3 py-2 font-mono text-xs"
               />
               <button className="rounded bg-indigo-600 px-3 py-2 text-sm text-white">Save Template</button>
             </form>
@@ -469,6 +527,9 @@ export default function ThemeBuilderPage() {
                     </button>
                     <button onClick={() => void exportTemplate(template.id)} className="text-indigo-600 hover:underline">
                       Export
+                    </button>
+                    <button onClick={() => void assignSelectedTemplate(template.id)} className="text-indigo-600 hover:underline">
+                      Assign
                     </button>
                   </div>
                 </div>
@@ -490,7 +551,7 @@ export default function ThemeBuilderPage() {
                   <div className="mb-3 flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase text-gray-500">{section.id}</span>
                     <div className="flex gap-2">
-                      {widgetPalette.map((widget) => (
+                      {enabledWidgets.map((widget) => (
                         <button key={widget.type} onClick={() => addBlock(widget.type, section.id)} className="rounded border px-2 py-1 text-xs">
                           + {widget.label}
                         </button>
@@ -529,7 +590,9 @@ export default function ThemeBuilderPage() {
           </Panel>
 
           <Panel title="Live Preview">
-            <BuilderPreview layout={layout} components={components} />
+            <div className="mx-auto transition-all" style={{ maxWidth: responsiveWidth(responsiveMode) }}>
+              <BuilderPreview layout={layout} components={components} />
+            </div>
           </Panel>
         </section>
 
@@ -586,10 +649,18 @@ export default function ThemeBuilderPage() {
                     <button onClick={() => void exportTheme(theme.id)} className="text-indigo-600 hover:underline">
                       Export ZIP
                     </button>
+                    <button onClick={() => void assignSelectedTheme(theme.id)} className="text-indigo-600 hover:underline">
+                      Assign
+                    </button>
                     <button onClick={() => setAssetForm((current) => ({ ...current, themeId: theme.id }))} className="text-indigo-600 hover:underline">
                       Add Asset
                     </button>
                   </div>
+                  {(theme.widgetRegistry ?? []).length > 0 && (
+                    <div className="mt-2 text-xs text-gray-500">
+                      Widgets: {(theme.widgetRegistry ?? []).join(', ')}
+                    </div>
+                  )}
                   {theme.assets.length > 0 && (
                     <div className="mt-2 text-xs text-gray-500">
                       {theme.assets.map((asset) => asset.path).join(', ')}
@@ -696,8 +767,11 @@ function PreviewBlock({ block, components }: { block: BuilderBlock; components: 
   return <div className="mb-4 grid gap-3 md:grid-cols-2"><div className="rounded bg-gray-100 p-4">Column</div><div className="rounded bg-gray-100 p-4">Column</div></div>;
 }
 
-function createBlock(type: BuilderBlockType): BuilderBlock {
+function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlock {
   const id = createId(type);
+  if (widget?.defaultJson) {
+    return { ...JSON.parse(JSON.stringify(widget.defaultJson)), id, type };
+  }
   if (type === 'heading') return { id, type, props: { text: 'New Heading', level: 2 } };
   if (type === 'text') return { id, type, props: { text: 'New text block.' } };
   if (type === 'image') return { id, type, props: { src: '', alt: '' } };
@@ -718,6 +792,21 @@ function normalizeLayout(value: unknown): BuilderLayout {
 
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function responsiveWidth(mode: ResponsiveMode) {
+  if (mode === 'mobile') return '390px';
+  if (mode === 'tablet') return '768px';
+  return '100%';
+}
+
+function parseJsonObject(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function downloadFile(filename: string, content: string, type: string) {

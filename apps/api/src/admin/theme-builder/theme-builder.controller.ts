@@ -20,6 +20,8 @@ import {
   CreateBuilderTemplateDto,
   CreateGlobalComponentDto,
   CreateThemeDto,
+  CreateWidgetDto,
+  AssignPageDesignDto,
   SaveLayoutDto,
   SaveThemeAssetsDto,
 } from './theme-builder.dto';
@@ -55,6 +57,16 @@ export class ThemeBuilderController {
   @Get('templates')
   listTemplates(@Query('category') category?: string) {
     return this.themeBuilder.listTemplates(category);
+  }
+
+  @Get('widgets')
+  listWidgets() {
+    return this.themeBuilder.listWidgets();
+  }
+
+  @Post('widgets')
+  createWidget(@Body() dto: CreateWidgetDto) {
+    return this.themeBuilder.createWidget(dto);
   }
 
   @Post('templates')
@@ -120,5 +132,10 @@ export class ThemeBuilderController {
     @Request() req: AuthenticatedRequest,
   ) {
     return this.themeBuilder.importThemeZip(file, req.user.id);
+  }
+
+  @Post('pages/:pageId/design')
+  assignPageDesign(@Param('pageId') pageId: string, @Body() dto: AssignPageDesignDto) {
+    return this.themeBuilder.assignPageDesign(pageId, dto);
   }
 }

@@ -5,6 +5,8 @@ import {
   CreateBuilderTemplateDto,
   CreateGlobalComponentDto,
   CreateThemeDto,
+  CreateWidgetDto,
+  AssignPageDesignDto,
   SaveLayoutDto,
   SaveThemeAssetsDto,
 } from './theme-builder.dto';
@@ -47,6 +49,7 @@ export class ThemeBuilderService {
   }
 
   async saveLayout(dto: SaveLayoutDto, userId?: string) {
+    validateBuilderLayout(dto.layout);
     const existing = await this.prisma.builderLayout.findUnique({
       where: { entityType_entityId: { entityType: dto.entityType, entityId: dto.entityId } },
     });
@@ -109,12 +112,14 @@ export class ThemeBuilderService {
   }
 
   createTemplate(dto: CreateBuilderTemplateDto, userId?: string) {
+    validateBuilderLayout(dto.schemaJson);
     return this.prisma.builderTemplate.create({
       data: {
         name: dto.name.trim(),
         description: dto.description?.trim() || null,
         category: dto.category?.trim() || 'page',
         schemaJson: toJsonObject(dto.schemaJson),
+        assignmentRules: toJsonObject(dto.assignmentRules),
         isGlobal: dto.isGlobal ?? false,
         createdById: userId,
       },
@@ -128,6 +133,7 @@ export class ThemeBuilderService {
       description?: string;
       category?: string;
       schemaJson?: Record<string, unknown>;
+      assignmentRules?: Record<string, unknown>;
     };
     return this.createTemplate(
       {
@@ -135,6 +141,7 @@ export class ThemeBuilderService {
         description: payload.description,
         category: payload.category || 'page',
         schemaJson: payload.schemaJson || payload,
+        assignmentRules: payload.assignmentRules,
       },
       userId,
     );
@@ -148,8 +155,38 @@ export class ThemeBuilderService {
       description: template.description,
       category: template.category,
       schemaJson: template.schemaJson,
+      assignmentRules: template.assignmentRules,
       exportedAt: new Date().toISOString(),
     };
+  }
+
+  listWidgets() {
+    return this.prisma.builderWidget.findMany({
+      orderBy: [{ enabled: 'desc' }, { category: 'asc' }, { label: 'asc' }],
+    });
+  }
+
+  createWidget(dto: CreateWidgetDto) {
+    return this.prisma.builderWidget.upsert({
+      where: { type: dto.type },
+      create: {
+        type: dto.type.trim(),
+        label: dto.label.trim(),
+        category: dto.category?.trim() || 'content',
+        pluginName: dto.pluginName?.trim() || null,
+        schemaJson: toJsonObject(dto.schemaJson),
+        defaultJson: toJsonObject(dto.defaultJson),
+        enabled: dto.enabled ?? true,
+      },
+      update: {
+        label: dto.label.trim(),
+        category: dto.category?.trim() || 'content',
+        pluginName: dto.pluginName?.trim() || null,
+        schemaJson: toJsonObject(dto.schemaJson),
+        defaultJson: toJsonObject(dto.defaultJson),
+        enabled: dto.enabled ?? true,
+      },
+    });
   }
 
   listGlobalComponents() {
@@ -186,6 +223,7 @@ export class ThemeBuilderService {
         globalStyles: toJsonObject(dto.globalStyles),
         templates: toJsonObject(dto.templates),
         components: toJsonObject(dto.components),
+        widgetRegistry: (dto.widgetRegistry ?? []) as Prisma.InputJsonArray,
         schemaJson: toJsonObject(dto.schemaJson),
         createdById: userId,
       },
@@ -232,6 +270,7 @@ export class ThemeBuilderService {
       globalStyles: theme.globalStyles,
       templates: theme.templates,
       components: theme.components,
+      widgetRegistry: theme.widgetRegistry,
     };
 
     return createStoreZip([
@@ -249,6 +288,7 @@ export class ThemeBuilderService {
     const manifestBuffer = entries.get('theme.json');
     if (!manifestBuffer) throw new NotFoundException('theme.json not found in ZIP');
     const manifest = JSON.parse(manifestBuffer.toString('utf8')) as CreateThemeDto;
+    validateThemeManifest(manifest);
     const slug = manifest.slug || manifest.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'imported-theme';
 
     const theme = await this.createTheme(
@@ -275,8 +315,45 @@ export class ThemeBuilderService {
     const theme = await this.prisma.cmsTheme.findUnique({ where: { id }, select: { id: true } });
     if (!theme) throw new NotFoundException(`Theme ${id} not found`);
   }
+
+  async assignPageDesign(pageId: string, dto: AssignPageDesignDto) {
+    return this.prisma.page.update({
+      where: { id: pageId },
+      data: {
+        ...(dto.builderTemplateId !== undefined
+          ? {
+              builderTemplate: dto.builderTemplateId
+                ? { connect: { id: dto.builderTemplateId } }
+                : { disconnect: true },
+            }
+          : {}),
+        ...(dto.cmsThemeId !== undefined
+          ? {
+              cmsTheme: dto.cmsThemeId
+                ? { connect: { id: dto.cmsThemeId } }
+                : { disconnect: true },
+            }
+          : {}),
+      },
+      select: { id: true, builderTemplateId: true, cmsThemeId: true },
+    });
+  }
 }
 
 function toJsonObject(value: Record<string, unknown> | undefined): Prisma.InputJsonObject {
   return (value ?? {}) as Prisma.InputJsonObject;
+}
+
+function validateBuilderLayout(value: Record<string, unknown>) {
+  if (!value || typeof value !== 'object') throw new NotFoundException('Builder layout JSON is required');
+  if (!Array.isArray(value.sections)) {
+    throw new NotFoundException('Builder layout must include a sections array');
+  }
+}
+
+function validateThemeManifest(value: CreateThemeDto) {
+  if (!value.name) throw new NotFoundException('Theme manifest must include a name');
+  if (!value.globalStyles || typeof value.globalStyles !== 'object') {
+    throw new NotFoundException('Theme manifest must include globalStyles');
+  }
 }
