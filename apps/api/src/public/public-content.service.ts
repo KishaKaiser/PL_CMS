@@ -193,10 +193,16 @@ export class PublicContentService {
       where: { entityType_entityId: { entityType: 'page', entityId: page.id } },
       select: { publishedJson: true, status: true },
     });
+    const activeCmsTheme = await this.prisma.cmsTheme.findFirst({
+      where: { isActive: true },
+      orderBy: { updatedAt: 'desc' },
+      select: { templates: true },
+    });
+    const themeLayout = this.getThemePageLayout(activeCmsTheme?.templates);
     return {
       ...page,
       builderLayout:
-        builderLayout?.status === 'PUBLISHED' ? builderLayout.publishedJson : null,
+        builderLayout?.status === 'PUBLISHED' ? builderLayout.publishedJson : themeLayout,
     };
   }
 
@@ -689,6 +695,15 @@ export class PublicContentService {
       heroSecondaryLabel: this.getString(styles.heroSecondaryLabel, theme.heroSecondaryLabel),
       heroSecondaryHref: this.getString(styles.heroSecondaryHref, theme.heroSecondaryHref),
     };
+  }
+
+  private getThemePageLayout(value: Prisma.JsonValue | undefined) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const pageTypes = (value as Record<string, unknown>).pageTypes;
+    if (!pageTypes || typeof pageTypes !== 'object' || Array.isArray(pageTypes)) return null;
+    const pageLayout = (pageTypes as Record<string, unknown>).page;
+    if (!pageLayout || typeof pageLayout !== 'object' || Array.isArray(pageLayout)) return null;
+    return Array.isArray((pageLayout as Record<string, unknown>).sections) ? pageLayout : null;
   }
 
   private normalizeMenuItems(value: unknown): SiteMenuItem[] {

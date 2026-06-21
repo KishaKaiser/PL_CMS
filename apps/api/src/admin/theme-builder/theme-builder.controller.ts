@@ -24,6 +24,7 @@ import {
   AssignPageDesignDto,
   SaveLayoutDto,
   SaveThemeAssetsDto,
+  UpdateThemeDto,
 } from './theme-builder.dto';
 import { ThemeBuilderService } from './theme-builder.service';
 
@@ -107,6 +108,11 @@ export class ThemeBuilderController {
   @Post('themes')
   createTheme(@Body() dto: CreateThemeDto, @Request() req: AuthenticatedRequest) {
     return this.themeBuilder.createTheme(dto, req.user.id);
+  }
+
+  @Post('themes/:id')
+  updateTheme(@Param('id') id: string, @Body() dto: UpdateThemeDto) {
+    return this.themeBuilder.updateTheme(id, dto);
   }
 
   @Post('themes/:id/activate')
