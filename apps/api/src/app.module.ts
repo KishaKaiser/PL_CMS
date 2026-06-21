@@ -17,6 +17,7 @@ import { AdminModule } from './admin/admin.module';
 import { PublicContentModule } from './public/public-content.module';
 import { MessagesModule } from './messages/messages.module';
 import { AccountModule } from './account/account.module';
+import { DefaultContentModule } from './bootstrap/default-content.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AccountModule } from './account/account.module';
     PublicContentModule,
     MessagesModule,
     AccountModule,
+    DefaultContentModule,
   ],
 })
 export class AppModule {}

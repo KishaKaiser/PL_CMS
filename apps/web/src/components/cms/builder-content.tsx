@@ -33,21 +33,34 @@ export async function BuilderContent({ layout }: { layout: BuilderLayout }) {
 
   return (
     <div>
-      {layout.sections.map((section) => (
-        <section
-          key={section.id}
-          style={{
-            background: String(section.settings.background ?? 'transparent'),
-            padding: String(section.settings.padding ?? '40px 24px'),
-          }}
-        >
-          <div className={section.settings.layout === 'full' ? '' : 'mx-auto max-w-5xl'}>
-            {section.blocks.map((block) => (
-              <BuilderBlockView key={block.id} block={block} storeData={storeData} />
-            ))}
-          </div>
-        </section>
-      ))}
+      {layout.settings?.breadcrumbs !== false && (
+        <nav className="border-b bg-gray-50 px-8 py-3 text-sm text-gray-500">
+          <Link href="/">Home</Link>
+          <span className="mx-2">/</span>
+          <span>Page</span>
+        </nav>
+      )}
+      <div className={pageShellClass(layout.settings?.layout)}>
+        {layout.settings?.layout === 'sidebar-left' && <DefaultSidebar />}
+        <div>
+          {layout.sections.map((section) => (
+            <section
+              key={section.id}
+              style={{
+                background: String(section.settings.background ?? 'transparent'),
+                padding: String(section.settings.padding ?? '40px 24px'),
+              }}
+            >
+              <div className={section.settings.layout === 'full' ? '' : 'mx-auto max-w-5xl'}>
+                {section.blocks.map((block) => (
+                  <BuilderBlockView key={block.id} block={block} storeData={storeData} />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+        {layout.settings?.layout === 'sidebar-right' && <DefaultSidebar />}
+      </div>
     </div>
   );
 }
@@ -135,4 +148,20 @@ function imageAlign(value: unknown) {
   if (value === 'left') return 'flex-start';
   if (value === 'right') return 'flex-end';
   return 'center';
+}
+
+function pageShellClass(layout?: string) {
+  if (layout === 'full') return '';
+  if (layout === 'sidebar-left') return 'mx-auto grid max-w-6xl gap-6 p-6 lg:grid-cols-[260px_minmax(0,1fr)]';
+  if (layout === 'sidebar-right') return 'mx-auto grid max-w-6xl gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_260px]';
+  return '';
+}
+
+function DefaultSidebar() {
+  return (
+    <aside className="rounded border bg-gray-50 p-4 text-sm text-gray-600">
+      <h2 className="font-semibold text-gray-900">Sidebar</h2>
+      <p className="mt-2">Add sidebar widgets from the theme builder.</p>
+    </aside>
+  );
 }
