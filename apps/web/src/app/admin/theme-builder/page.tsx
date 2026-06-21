@@ -38,6 +38,10 @@ interface BuilderSection {
 interface BuilderLayout {
   version: number;
   type: string;
+  settings?: {
+    layout?: string;
+    breadcrumbs?: boolean;
+  };
   sections: BuilderSection[];
 }
 
@@ -109,6 +113,7 @@ type ThemePreviewStyles = {
 const emptyLayout: BuilderLayout = {
   version: 1,
   type: 'page',
+  settings: { layout: 'default', breadcrumbs: true },
   sections: [
     {
       id: 'section-hero',
@@ -397,6 +402,13 @@ export default function ThemeBuilderPage() {
     }));
   }
 
+  function updateLayoutSettings(settings: NonNullable<BuilderLayout['settings']>) {
+    setLayout((current) => ({
+      ...current,
+      settings: { ...current.settings, ...settings },
+    }));
+  }
+
   function removeBlock(blockId: string) {
     setLayout((current) => ({
       ...current,
@@ -562,6 +574,32 @@ export default function ThemeBuilderPage() {
             </div>
           </Panel>
 
+          <Panel title="Page Options">
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Layout
+                <select
+                  value={layout.settings?.layout ?? 'default'}
+                  onChange={(event) => updateLayoutSettings({ layout: event.target.value })}
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                >
+                  <option value="default">Default Width</option>
+                  <option value="full">Full Width</option>
+                  <option value="sidebar-left">Sidebar Left</option>
+                  <option value="sidebar-right">Sidebar Right</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={layout.settings?.breadcrumbs !== false}
+                  onChange={(event) => updateLayoutSettings({ breadcrumbs: event.target.checked })}
+                />
+                Show breadcrumbs
+              </label>
+            </div>
+          </Panel>
+
           <Panel title="Selected Block">
             {selectedBlock ? (
               <BlockEditor block={selectedBlock} onChange={(props) => updateBlock(selectedBlock.id, props)} theme={previewTheme} />
@@ -672,24 +710,33 @@ function BuilderPreview({
 }) {
   return (
     <div className="min-h-[calc(100vh-112px)] overflow-hidden bg-white shadow-xl" style={{ fontFamily: theme.fontFamily }}>
-      {layout.sections.map((section) => (
-        <section key={section.id} style={{ background: section.settings.background, padding: section.settings.padding }} onDragOver={(event) => event.preventDefault()} onDrop={() => onMoveBlock(section.id, section.blocks.length)} className="group/section relative">
-          <div className="absolute right-3 top-3 z-10 hidden gap-2 rounded bg-white/90 p-2 shadow group-hover/section:flex">
-            <button onClick={() => onAddBlock('heading', section.id)} className="rounded border px-2 py-1 text-xs">Heading</button>
-            <button onClick={() => onAddBlock('text', section.id)} className="rounded border px-2 py-1 text-xs">Text</button>
-            <button onClick={() => onAddBlock('image', section.id)} className="rounded border px-2 py-1 text-xs">Image</button>
-          </div>
-          <div className={section.settings.layout === 'full' ? '' : 'mx-auto max-w-5xl'}>
-            {section.blocks.length === 0 ? (
-              <button onClick={() => onAddBlock('heading', section.id)} className="w-full rounded border border-dashed p-10 text-sm text-gray-500">Add content</button>
-            ) : (
-              section.blocks.map((block, index) => (
-                <EditableBlock key={block.id} block={block} components={components} theme={theme} storePreview={storePreview} selected={selectedBlockId === block.id} onSelect={() => onSelectBlock(block.id)} onRemove={() => onRemoveBlock(block.id)} onDragStart={() => onDragStart(block.id)} onDrop={() => onMoveBlock(section.id, index)} />
-              ))
-            )}
-          </div>
-        </section>
-      ))}
+      {layout.settings?.breadcrumbs !== false && (
+        <div className="border-b bg-gray-50 px-8 py-3 text-sm text-gray-500">Home / Preview</div>
+      )}
+      <div className={pageShellClass(layout.settings?.layout)}>
+        {layout.settings?.layout === 'sidebar-left' && <PreviewSidebar />}
+        <div>
+          {layout.sections.map((section) => (
+            <section key={section.id} style={{ background: section.settings.background, padding: section.settings.padding }} onDragOver={(event) => event.preventDefault()} onDrop={() => onMoveBlock(section.id, section.blocks.length)} className="group/section relative">
+              <div className="absolute right-3 top-3 z-10 hidden gap-2 rounded bg-white/90 p-2 shadow group-hover/section:flex">
+                <button onClick={() => onAddBlock('heading', section.id)} className="rounded border px-2 py-1 text-xs">Heading</button>
+                <button onClick={() => onAddBlock('text', section.id)} className="rounded border px-2 py-1 text-xs">Text</button>
+                <button onClick={() => onAddBlock('image', section.id)} className="rounded border px-2 py-1 text-xs">Image</button>
+              </div>
+              <div className={section.settings.layout === 'full' ? '' : 'mx-auto max-w-5xl'}>
+                {section.blocks.length === 0 ? (
+                  <button onClick={() => onAddBlock('heading', section.id)} className="w-full rounded border border-dashed p-10 text-sm text-gray-500">Add content</button>
+                ) : (
+                  section.blocks.map((block, index) => (
+                    <EditableBlock key={block.id} block={block} components={components} theme={theme} storePreview={storePreview} selected={selectedBlockId === block.id} onSelect={() => onSelectBlock(block.id)} onRemove={() => onRemoveBlock(block.id)} onDragStart={() => onDragStart(block.id)} onDrop={() => onMoveBlock(section.id, index)} />
+                  ))
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
+        {layout.settings?.layout === 'sidebar-right' && <PreviewSidebar />}
+      </div>
     </div>
   );
 }
@@ -816,7 +863,12 @@ function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlo
 function normalizeLayout(value: unknown): BuilderLayout {
   if (!value || typeof value !== 'object') return emptyLayout;
   const candidate = value as Partial<BuilderLayout>;
-  return { version: candidate.version ?? 1, type: candidate.type ?? 'page', sections: Array.isArray(candidate.sections) ? candidate.sections : emptyLayout.sections };
+  return {
+    version: candidate.version ?? 1,
+    type: candidate.type ?? 'page',
+    settings: candidate.settings && typeof candidate.settings === 'object' ? candidate.settings : emptyLayout.settings,
+    sections: Array.isArray(candidate.sections) ? candidate.sections : emptyLayout.sections,
+  };
 }
 
 function mergeWidgets(widgets: BuilderWidget[]) {
@@ -859,6 +911,21 @@ function imageAlign(value: unknown) {
   if (value === 'left') return 'flex-start';
   if (value === 'right') return 'flex-end';
   return 'center';
+}
+
+function pageShellClass(layout?: string) {
+  if (layout === 'full') return '';
+  if (layout === 'sidebar-left') return 'mx-auto grid max-w-6xl gap-6 p-6 lg:grid-cols-[260px_minmax(0,1fr)]';
+  if (layout === 'sidebar-right') return 'mx-auto grid max-w-6xl gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_260px]';
+  return 'mx-auto max-w-5xl';
+}
+
+function PreviewSidebar() {
+  return (
+    <aside className="rounded border bg-gray-50 p-4 text-sm text-gray-500">
+      Sidebar content
+    </aside>
+  );
 }
 
 function getThemePreviewStyles(activeTheme: CmsTheme | null, themeForm: { primaryColor: string; accentColor: string; fontFamily: string }): ThemePreviewStyles {

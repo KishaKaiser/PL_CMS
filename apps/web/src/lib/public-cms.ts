@@ -76,6 +76,10 @@ export interface BuilderBlock {
 export interface BuilderLayout {
   version: number;
   type: string;
+  settings?: {
+    layout?: string;
+    breadcrumbs?: boolean;
+  };
   sections: Array<{
     id: string;
     type: string;
