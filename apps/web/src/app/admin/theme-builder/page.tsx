@@ -203,6 +203,7 @@ export default function ThemeBuilderPage() {
   const fetchResources = useCallback(async () => {
     setError('');
     try {
+      await fetch('/api/proxy/admin/builder/defaults/ensure', { method: 'POST' });
       const [pagesRes, componentsRes, themesRes, widgetsRes, productsRes, categoriesRes, tagsRes] = await Promise.all([
         fetch('/api/proxy/pages'),
         fetch('/api/proxy/admin/builder/components'),

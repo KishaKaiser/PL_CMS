@@ -27,6 +27,7 @@ import {
   UpdateThemeDto,
 } from './theme-builder.dto';
 import { ThemeBuilderService } from './theme-builder.service';
+import { DefaultContentService } from '../../bootstrap/default-content.service';
 
 type AuthenticatedRequest = { user: { id: string } };
 
@@ -34,7 +35,15 @@ type AuthenticatedRequest = { user: { id: string } };
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @Roles(Role.ADMIN, Role.EDITOR)
 export class ThemeBuilderController {
-  constructor(private readonly themeBuilder: ThemeBuilderService) {}
+  constructor(
+    private readonly themeBuilder: ThemeBuilderService,
+    private readonly defaultContent: DefaultContentService,
+  ) {}
+
+  @Post('defaults/ensure')
+  ensureDefaults() {
+    return this.defaultContent.ensureDefaults();
+  }
 
   @Get('layouts/:entityType/:entityId')
   getLayout(@Param('entityType') entityType: string, @Param('entityId') entityId: string) {

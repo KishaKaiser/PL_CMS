@@ -18,6 +18,7 @@ import {
   buildDefaultHomepageBlocks,
 } from '@pl-cms/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { DefaultContentService } from '../bootstrap/default-content.service';
 import {
   normalizeEmailInput,
   normalizeOptionalStringInput,
@@ -31,7 +32,10 @@ export class InstallService {
   // returns 409 as soon as an ADMIN row exists.
   private isRunning = false;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly defaultContent: DefaultContentService,
+  ) {}
 
   async getStatus() {
     let dbConnected = false;
@@ -204,5 +208,7 @@ export class InstallService {
         create: m,
       });
     }
+
+    await this.defaultContent.ensureDefaults();
   }
 }
