@@ -56,6 +56,7 @@ export default async function CmsPage({ params, searchParams }: Props) {
 
   const featuredImageSrc = getSafeImageSrc(page.featuredImageUrl);
   const builderLayout = page.builderLayout;
+  const showPageTitle = builderLayout?.settings?.showTitle !== false;
 
   return (
     <PublicSiteShell siteConfig={siteConfig}>
@@ -70,9 +71,11 @@ export default async function CmsPage({ params, searchParams }: Props) {
               <img src={featuredImageSrc} alt={page.title} className="h-72 w-full object-cover" />
             )}
             <div className="p-8">
-              <h1 className="mb-4 text-3xl font-bold" style={{ color: siteConfig.theme.primaryColor }}>
-                {page.title}
-              </h1>
+              {showPageTitle && (
+                <h1 className="mb-4 text-3xl font-bold" style={{ color: siteConfig.theme.primaryColor }}>
+                  {page.title}
+                </h1>
+              )}
               <RichContent html={page.content} className="prose max-w-none text-gray-800" />
             </div>
           </div>

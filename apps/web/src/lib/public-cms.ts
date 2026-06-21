@@ -79,6 +79,7 @@ export interface BuilderLayout {
   settings?: {
     layout?: string;
     breadcrumbs?: boolean;
+    showTitle?: boolean;
   };
   sections: Array<{
     id: string;

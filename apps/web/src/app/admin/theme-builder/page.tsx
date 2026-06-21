@@ -41,6 +41,7 @@ interface BuilderLayout {
   settings?: {
     layout?: string;
     breadcrumbs?: boolean;
+    showTitle?: boolean;
   };
   sections: BuilderSection[];
 }
@@ -113,7 +114,7 @@ type ThemePreviewStyles = {
 const emptyLayout: BuilderLayout = {
   version: 1,
   type: 'page',
-  settings: { layout: 'default', breadcrumbs: true },
+  settings: { layout: 'default', breadcrumbs: true, showTitle: true },
   sections: [
     {
       id: 'section-hero',
@@ -144,6 +145,12 @@ const defaultWidgets: BuilderWidget[] = [
 ];
 
 const emptyStorePreview: StorePreviewData = { products: [], categories: [], tags: [] };
+
+async function readApiError(res: Response, fallback: string) {
+  const payload = (await res.json().catch(() => null)) as { message?: string | string[]; error?: string } | null;
+  if (Array.isArray(payload?.message)) return payload.message.join(' ');
+  return payload?.message ?? payload?.error ?? fallback;
+}
 
 export default function ThemeBuilderPage() {
   const [pages, setPages] = useState<PageOption[]>([]);
@@ -283,9 +290,9 @@ export default function ThemeBuilderPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ entityType: 'page', entityId: selectedPageId, layout }),
         });
-        if (!saveRes.ok) throw new Error('Page layout could not be saved.');
+        if (!saveRes.ok) throw new Error(await readApiError(saveRes, 'Page layout could not be saved.'));
         const publishRes = await fetch(`/api/proxy/admin/builder/layouts/page/${selectedPageId}/publish`, { method: 'POST' });
-        if (!publishRes.ok) throw new Error('Page layout could not be published.');
+        if (!publishRes.ok) throw new Error(await readApiError(publishRes, 'Page layout could not be published.'));
         setStatus(`${selectedPage?.title ?? 'Page'} layout saved.`);
         return;
       }
@@ -300,7 +307,7 @@ export default function ThemeBuilderPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildThemePayload(themeForm, layout, widgets, activeTheme, editorTarget)),
       });
-      if (!res.ok) throw new Error('Theme could not be saved.');
+      if (!res.ok) throw new Error(await readApiError(res, 'Theme could not be saved.'));
       setStatus(`${editorTargetLabel(editorTarget)} saved.`);
       await fetchResources();
     } catch (err: unknown) {
@@ -318,7 +325,7 @@ export default function ThemeBuilderPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildThemePayload(themeForm, layout, widgets, activeTheme, editorTarget)),
       });
-      if (!res.ok) throw new Error('Theme could not be created.');
+      if (!res.ok) throw new Error(await readApiError(res, 'Theme could not be created.'));
       setStatus('Theme created and activated.');
       await fetchResources();
     } catch (err: unknown) {
@@ -331,7 +338,7 @@ export default function ThemeBuilderPage() {
     setStatus('');
     try {
       const res = await fetch(`/api/proxy/admin/builder/themes/${themeId}/activate`, { method: 'POST' });
-      if (!res.ok) throw new Error('Theme could not be activated.');
+      if (!res.ok) throw new Error(await readApiError(res, 'Theme could not be activated.'));
       setStatus('Theme activated for the site.');
       await fetchResources();
     } catch (err: unknown) {
@@ -353,7 +360,7 @@ export default function ThemeBuilderPage() {
     setError('');
     try {
       const res = await fetch('/api/proxy/admin/builder/themes/import', { method: 'POST', body });
-      if (!res.ok) throw new Error('Theme import failed.');
+      if (!res.ok) throw new Error(await readApiError(res, 'Theme import failed.'));
       setStatus('Theme imported.');
       await fetchResources();
     } catch (err: unknown) {
@@ -463,7 +470,7 @@ export default function ThemeBuilderPage() {
             </button>
           ))}
           <button onClick={() => void saveCurrentTarget()} className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700">
-            Save
+            Save Current
           </button>
           {activeTheme && (
             <button onClick={() => void exportTheme(activeTheme.id)} className="rounded border px-3 py-2 text-sm hover:bg-gray-50">Export ZIP</button>
@@ -548,6 +555,11 @@ export default function ThemeBuilderPage() {
         <aside className="min-h-0 overflow-y-auto border-l bg-white p-3">
           <Panel title="Theme">
             <form onSubmit={createThemeFromCurrentLayout} className="space-y-3">
+              {activeTheme && (
+                <p className="rounded bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                  Editing active theme: {activeTheme.name}
+                </p>
+              )}
               <input value={themeForm.name} onChange={(event) => setThemeForm((current) => ({ ...current, name: event.target.value }))} placeholder="Theme name" className="w-full rounded border px-3 py-2 text-sm" />
               <input value={themeForm.slug} onChange={(event) => setThemeForm((current) => ({ ...current, slug: event.target.value }))} placeholder="theme-slug" className="w-full rounded border px-3 py-2 text-sm" />
               <div className="grid grid-cols-2 gap-2">
@@ -597,6 +609,14 @@ export default function ThemeBuilderPage() {
                   onChange={(event) => updateLayoutSettings({ breadcrumbs: event.target.checked })}
                 />
                 Show breadcrumbs
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={layout.settings?.showTitle !== false}
+                  onChange={(event) => updateLayoutSettings({ showTitle: event.target.checked })}
+                />
+                Show page title
               </label>
             </div>
           </Panel>
