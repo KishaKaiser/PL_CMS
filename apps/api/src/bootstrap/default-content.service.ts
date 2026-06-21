@@ -162,10 +162,14 @@ export class DefaultContentService implements OnModuleInit {
     }
   }
 
-  private async ensureDefaults() {
+  async ensureDefaults() {
     await this.ensureSettings();
     const theme = await this.ensureDefaultTheme();
     await this.ensureDefaultPages(theme.id);
+    return {
+      themeSlug: DEFAULT_THEME.slug,
+      pages: DEFAULT_PAGES.map((page) => page.slug),
+    };
   }
 
   private async ensureSettings() {

@@ -21,8 +21,10 @@ import { AuditController } from './audit/audit.controller';
 import { AuditService } from './audit/audit.service';
 import { ThemeBuilderController } from './theme-builder/theme-builder.controller';
 import { ThemeBuilderService } from './theme-builder/theme-builder.service';
+import { DefaultContentModule } from '../bootstrap/default-content.module';
 
 @Module({
+  imports: [DefaultContentModule],
   controllers: [
     DashboardController,
     PagesController,
