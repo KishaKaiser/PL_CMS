@@ -76,6 +76,7 @@ export default async function HomePage({ searchParams }: Props) {
     .slice(0, MAX_FEATURED_PAGES);
   const featuredPosts = posts.slice(0, MAX_FEATURED_POSTS);
   const homePageImageSrc = getSafeImageSrc(homePage?.featuredImageUrl);
+  const showHomePageTitle = homePage?.builderLayout?.settings?.showTitle !== false;
 
   if (managedHomepageSlug && homePage) {
     return (
@@ -86,9 +87,11 @@ export default async function HomePage({ searchParams }: Props) {
               <img src={homePageImageSrc} alt={homePage.title} className="h-72 w-full object-cover" />
             )}
             <div className="p-8">
-              <h1 className="mb-4 text-3xl font-bold" style={{ color: siteConfig.theme.primaryColor }}>
-                {homePage.title}
-              </h1>
+              {showHomePageTitle && (
+                <h1 className="mb-4 text-3xl font-bold" style={{ color: siteConfig.theme.primaryColor }}>
+                  {homePage.title}
+                </h1>
+              )}
               <RichContent html={homePage.content} className="prose max-w-none text-gray-800" />
             </div>
           </div>
@@ -105,9 +108,11 @@ export default async function HomePage({ searchParams }: Props) {
             <img src={homePageImageSrc} alt={homePage?.title ?? siteConfig.identity.title} className="h-64 w-full object-cover" />
           )}
           <div className="p-6">
-            <h1 className="text-4xl font-bold" style={{ color: siteConfig.theme.primaryColor }}>
-              {siteConfig.theme.heroTitle || homePage?.title || siteConfig.identity.title}
-            </h1>
+            {showHomePageTitle && (
+              <h1 className="text-4xl font-bold" style={{ color: siteConfig.theme.primaryColor }}>
+                {siteConfig.theme.heroTitle || homePage?.title || siteConfig.identity.title}
+              </h1>
+            )}
             <div className="mt-4 text-gray-700">
               {homePage?.content ? (
                 <RichContent html={homePage.content} className="prose max-w-none text-gray-700" />

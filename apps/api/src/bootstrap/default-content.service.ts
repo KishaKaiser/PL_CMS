@@ -19,6 +19,7 @@ const DEFAULT_PAGE_LAYOUT = {
   settings: {
     layout: 'default',
     breadcrumbs: true,
+    showTitle: true,
   },
   sections: [
     {

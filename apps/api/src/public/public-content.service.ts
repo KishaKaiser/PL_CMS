@@ -448,6 +448,7 @@ export class PublicContentService {
       title: this.getString(identityValue?.title, fallbackTitle),
       tagline: this.getString(identityValue?.tagline, DEFAULT_SITE_IDENTITY.tagline),
       logoUrl: this.getString(identityValue?.logoUrl, DEFAULT_SITE_IDENTITY.logoUrl),
+      faviconUrl: this.getString(identityValue?.faviconUrl, DEFAULT_SITE_IDENTITY.faviconUrl),
       footerText: this.getString(identityValue?.footerText, DEFAULT_SITE_IDENTITY.footerText),
     };
   }

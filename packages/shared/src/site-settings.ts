@@ -28,6 +28,7 @@ export type SiteIdentitySettings = {
   title: string;
   tagline: string;
   logoUrl: string;
+  faviconUrl: string;
   footerText: string;
 };
 
@@ -129,6 +130,7 @@ export const DEFAULT_SITE_IDENTITY: SiteIdentitySettings = {
   title: DEFAULT_SITE_TITLE,
   tagline: DEFAULT_SITE_TAGLINE,
   logoUrl: '',
+  faviconUrl: '',
   footerText: DEFAULT_FOOTER_TEXT,
 };
 

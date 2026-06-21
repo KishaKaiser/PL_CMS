@@ -34,7 +34,27 @@ interface SiteIdentityForm {
   title: string;
   tagline: string;
   logoUrl: string;
+  faviconUrl: string;
   footerText: string;
+}
+
+interface BillingApiForm {
+  provider: 'manual' | 'paypal' | 'stripe';
+  environment: 'sandbox' | 'live';
+  paypalClientId: string;
+  paypalClientSecret: string;
+  stripePublishableKey: string;
+  stripeSecretKey: string;
+  webhookSecret: string;
+}
+
+interface ShippingApiForm {
+  provider: 'manual' | 'shipstation' | 'shippo' | 'easypost';
+  apiKey: string;
+  apiSecret: string;
+  accountId: string;
+  originPostalCode: string;
+  originCountry: string;
 }
 
 interface SiteHomepageForm {
@@ -79,9 +99,30 @@ const SITE_MENUS_KEY = SITE_SETTING_KEYS.SITE_MENUS;
 const SITE_THEME_KEY = SITE_SETTING_KEYS.SITE_THEME;
 const SITE_HOMEPAGE_BLOCKS_KEY = SITE_SETTING_KEYS.SITE_HOMEPAGE_BLOCKS;
 const SITE_EXTENSION_POINTS_KEY = SITE_SETTING_KEYS.SITE_EXTENSION_POINTS;
+const BILLING_API_SETTINGS_KEY = 'billing_api_settings';
+const SHIPPING_API_SETTINGS_KEY = 'shipping_api_settings';
 
 const defaultIdentityForm: SiteIdentityForm = {
   ...DEFAULT_SITE_IDENTITY,
+};
+
+const defaultBillingApiForm: BillingApiForm = {
+  provider: 'manual',
+  environment: 'sandbox',
+  paypalClientId: '',
+  paypalClientSecret: '',
+  stripePublishableKey: '',
+  stripeSecretKey: '',
+  webhookSecret: '',
+};
+
+const defaultShippingApiForm: ShippingApiForm = {
+  provider: 'manual',
+  apiKey: '',
+  apiSecret: '',
+  accountId: '',
+  originPostalCode: '',
+  originCountry: 'US',
 };
 
 const defaultHomepageForm: SiteHomepageForm = {
@@ -131,6 +172,10 @@ function readString(value: unknown, fallback = '') {
 
 function readBoolean(value: unknown, fallback = false) {
   return typeof value === 'boolean' ? value : fallback;
+}
+
+function readOption<T extends string>(value: unknown, options: readonly T[], fallback: T) {
+  return typeof value === 'string' && options.includes(value as T) ? (value as T) : fallback;
 }
 
 function createMenuItemId() {
@@ -238,6 +283,8 @@ export default function AdminSettingsPage() {
   const [postsPageForm, setPostsPageForm] = useState<SitePostsPageForm>(defaultPostsPageForm);
   const [themeForm, setThemeForm] = useState<SiteThemeForm>(defaultThemeForm);
   const [menusForm, setMenusForm] = useState<SiteMenusForm>(defaultMenusForm);
+  const [billingApiForm, setBillingApiForm] = useState<BillingApiForm>(defaultBillingApiForm);
+  const [shippingApiForm, setShippingApiForm] = useState<ShippingApiForm>(defaultShippingApiForm);
 
   const publishedPages = useMemo(
     () => pages.filter((page) => Boolean(page.publishedAt)),
@@ -250,6 +297,8 @@ export default function AdminSettingsPage() {
     const postsPage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_POSTS_PAGE_KEY));
     const theme = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_THEME_KEY));
     const menus = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_MENUS_KEY));
+    const billingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, BILLING_API_SETTINGS_KEY));
+    const shippingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SHIPPING_API_SETTINGS_KEY));
     const homepageSections = isRecord(theme?.homepageSections) ? theme.homepageSections : null;
     const pageSection = isRecord(homepageSections?.pages) ? homepageSections.pages : null;
     const postSection = isRecord(homepageSections?.posts) ? homepageSections.posts : null;
@@ -258,6 +307,7 @@ export default function AdminSettingsPage() {
       title: readString(identity?.title, defaultIdentityForm.title),
       tagline: readString(identity?.tagline, defaultIdentityForm.tagline),
       logoUrl: readString(identity?.logoUrl, defaultIdentityForm.logoUrl),
+      faviconUrl: readString(identity?.faviconUrl, defaultIdentityForm.faviconUrl),
       footerText: readString(identity?.footerText, defaultIdentityForm.footerText),
     });
     setHomepageForm({
@@ -294,6 +344,23 @@ export default function AdminSettingsPage() {
     setMenusForm({
       header: normalizeMenuItems(menus?.header, defaultMenusForm.header),
       footer: normalizeMenuItems(menus?.footer, defaultMenusForm.footer),
+    });
+    setBillingApiForm({
+      provider: readOption(billingApi?.provider, ['manual', 'paypal', 'stripe'] as const, defaultBillingApiForm.provider),
+      environment: readOption(billingApi?.environment, ['sandbox', 'live'] as const, defaultBillingApiForm.environment),
+      paypalClientId: readString(billingApi?.paypalClientId, defaultBillingApiForm.paypalClientId),
+      paypalClientSecret: readString(billingApi?.paypalClientSecret, defaultBillingApiForm.paypalClientSecret),
+      stripePublishableKey: readString(billingApi?.stripePublishableKey, defaultBillingApiForm.stripePublishableKey),
+      stripeSecretKey: readString(billingApi?.stripeSecretKey, defaultBillingApiForm.stripeSecretKey),
+      webhookSecret: readString(billingApi?.webhookSecret, defaultBillingApiForm.webhookSecret),
+    });
+    setShippingApiForm({
+      provider: readOption(shippingApi?.provider, ['manual', 'shipstation', 'shippo', 'easypost'] as const, defaultShippingApiForm.provider),
+      apiKey: readString(shippingApi?.apiKey, defaultShippingApiForm.apiKey),
+      apiSecret: readString(shippingApi?.apiSecret, defaultShippingApiForm.apiSecret),
+      accountId: readString(shippingApi?.accountId, defaultShippingApiForm.accountId),
+      originPostalCode: readString(shippingApi?.originPostalCode, defaultShippingApiForm.originPostalCode),
+      originCountry: readString(shippingApi?.originCountry, defaultShippingApiForm.originCountry),
     });
   }, []);
 
@@ -545,6 +612,15 @@ export default function AdminSettingsPage() {
               />
             </div>
             <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700">Favicon URL</label>
+              <input
+                value={identityForm.faviconUrl}
+                onChange={(event) => setIdentityForm((currentForm) => ({ ...currentForm, faviconUrl: event.target.value }))}
+                placeholder="https://example.com/favicon.ico"
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700">Footer text</label>
               <textarea
                 value={identityForm.footerText}
@@ -564,6 +640,114 @@ export default function AdminSettingsPage() {
             >
               {saving[SITE_IDENTITY_KEY] ? 'Saving…' : 'Save site identity'}
             </button>
+          </div>
+        </section>
+
+        <section className="rounded-xl border bg-white p-6 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">API settings</h2>
+            <p className="text-sm text-gray-500">Store billing and shipping provider credentials used by checkout and fulfillment features.</p>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="space-y-4 rounded-lg border border-gray-200 p-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Billing</h3>
+                <p className="text-xs text-gray-500">Choose a payment provider and keep its credentials together.</p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Provider
+                  <select
+                    value={billingApiForm.provider}
+                    onChange={(event) =>
+                      setBillingApiForm((currentForm) => ({
+                        ...currentForm,
+                        provider: event.target.value as BillingApiForm['provider'],
+                      }))
+                    }
+                    className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  >
+                    <option value="manual">Manual</option>
+                    <option value="paypal">PayPal</option>
+                    <option value="stripe">Stripe</option>
+                  </select>
+                </label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Environment
+                  <select
+                    value={billingApiForm.environment}
+                    onChange={(event) =>
+                      setBillingApiForm((currentForm) => ({
+                        ...currentForm,
+                        environment: event.target.value as BillingApiForm['environment'],
+                      }))
+                    }
+                    className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  >
+                    <option value="sandbox">Sandbox</option>
+                    <option value="live">Live</option>
+                  </select>
+                </label>
+              </div>
+              <input value={billingApiForm.paypalClientId} onChange={(event) => setBillingApiForm((currentForm) => ({ ...currentForm, paypalClientId: event.target.value }))} placeholder="PayPal client ID" className="w-full rounded border px-3 py-2 text-sm" />
+              <input value={billingApiForm.paypalClientSecret} onChange={(event) => setBillingApiForm((currentForm) => ({ ...currentForm, paypalClientSecret: event.target.value }))} placeholder="PayPal client secret" className="w-full rounded border px-3 py-2 text-sm" />
+              <input value={billingApiForm.stripePublishableKey} onChange={(event) => setBillingApiForm((currentForm) => ({ ...currentForm, stripePublishableKey: event.target.value }))} placeholder="Stripe publishable key" className="w-full rounded border px-3 py-2 text-sm" />
+              <input value={billingApiForm.stripeSecretKey} onChange={(event) => setBillingApiForm((currentForm) => ({ ...currentForm, stripeSecretKey: event.target.value }))} placeholder="Stripe secret key" className="w-full rounded border px-3 py-2 text-sm" />
+              <input value={billingApiForm.webhookSecret} onChange={(event) => setBillingApiForm((currentForm) => ({ ...currentForm, webhookSecret: event.target.value }))} placeholder="Webhook secret" className="w-full rounded border px-3 py-2 text-sm" />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void saveManagedSetting(BILLING_API_SETTINGS_KEY, billingApiForm)}
+                  disabled={saving[BILLING_API_SETTINGS_KEY] || loading}
+                  className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {saving[BILLING_API_SETTINGS_KEY] ? 'Saving…' : 'Save billing API'}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4 rounded-lg border border-gray-200 p-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Shipping</h3>
+                <p className="text-xs text-gray-500">Keep carrier and fulfillment API details with store settings.</p>
+              </div>
+              <label className="block text-sm font-medium text-gray-700">
+                Provider
+                <select
+                  value={shippingApiForm.provider}
+                  onChange={(event) =>
+                    setShippingApiForm((currentForm) => ({
+                      ...currentForm,
+                      provider: event.target.value as ShippingApiForm['provider'],
+                    }))
+                  }
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                >
+                  <option value="manual">Manual</option>
+                  <option value="shipstation">ShipStation</option>
+                  <option value="shippo">Shippo</option>
+                  <option value="easypost">EasyPost</option>
+                </select>
+              </label>
+              <input value={shippingApiForm.apiKey} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, apiKey: event.target.value }))} placeholder="API key" className="w-full rounded border px-3 py-2 text-sm" />
+              <input value={shippingApiForm.apiSecret} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, apiSecret: event.target.value }))} placeholder="API secret" className="w-full rounded border px-3 py-2 text-sm" />
+              <input value={shippingApiForm.accountId} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, accountId: event.target.value }))} placeholder="Account ID" className="w-full rounded border px-3 py-2 text-sm" />
+              <div className="grid gap-4 md:grid-cols-2">
+                <input value={shippingApiForm.originPostalCode} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, originPostalCode: event.target.value }))} placeholder="Origin ZIP/postal code" className="w-full rounded border px-3 py-2 text-sm" />
+                <input value={shippingApiForm.originCountry} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, originCountry: event.target.value }))} placeholder="Origin country" className="w-full rounded border px-3 py-2 text-sm" />
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void saveManagedSetting(SHIPPING_API_SETTINGS_KEY, shippingApiForm)}
+                  disabled={saving[SHIPPING_API_SETTINGS_KEY] || loading}
+                  className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {saving[SHIPPING_API_SETTINGS_KEY] ? 'Saving…' : 'Save shipping API'}
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
