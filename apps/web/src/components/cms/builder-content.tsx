@@ -1,6 +1,36 @@
+import Link from 'next/link';
 import type { BuilderBlock, BuilderLayout } from '../../lib/public-cms';
+import { getCategories, getTags } from '../../lib/public-cms';
 
-export function BuilderContent({ layout }: { layout: BuilderLayout }) {
+interface Product {
+  id: string;
+  name: string;
+  description?: string;
+  price: string | number;
+  currency?: string;
+}
+
+type StoreData = {
+  products: Product[];
+  categories: Array<{ id: string; slug: string; name: string }>;
+  tags: Array<{ id: string; slug: string; name: string }>;
+};
+
+async function getProducts(): Promise<Product[]> {
+  const apiBase = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
+  try {
+    const res = await fetch(`${apiBase}/products`, { next: { revalidate: 60 } });
+    if (!res.ok) return [];
+    return res.json() as Promise<Product[]>;
+  } catch {
+    return [];
+  }
+}
+
+export async function BuilderContent({ layout }: { layout: BuilderLayout }) {
+  const [products, categories, tags] = await Promise.all([getProducts(), getCategories(), getTags()]);
+  const storeData = { products, categories, tags };
+
   return (
     <div>
       {layout.sections.map((section) => (
@@ -13,7 +43,7 @@ export function BuilderContent({ layout }: { layout: BuilderLayout }) {
         >
           <div className={section.settings.layout === 'full' ? '' : 'mx-auto max-w-5xl'}>
             {section.blocks.map((block) => (
-              <BuilderBlockView key={block.id} block={block} />
+              <BuilderBlockView key={block.id} block={block} storeData={storeData} />
             ))}
           </div>
         </section>
@@ -22,16 +52,30 @@ export function BuilderContent({ layout }: { layout: BuilderLayout }) {
   );
 }
 
-function BuilderBlockView({ block }: { block: BuilderBlock }) {
+function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData: StoreData }) {
   if (block.type === 'heading') {
-    return <h1 className="mb-4 text-4xl font-bold">{String(block.props.text ?? '')}</h1>;
+    return <h1 className="mb-4 font-bold" style={textStyle(block, 40)}>{String(block.props.text ?? '')}</h1>;
   }
   if (block.type === 'text') {
-    return <p className="mb-4 text-gray-700">{String(block.props.text ?? '')}</p>;
+    return <p className="mb-4 leading-7" style={textStyle(block, 16)}>{String(block.props.text ?? '')}</p>;
   }
   if (block.type === 'image') {
     const src = String(block.props.src ?? '');
-    return src ? <img src={src} alt={String(block.props.alt ?? '')} className="mb-4 w-full rounded object-cover" /> : null;
+    if (!src) return null;
+    return (
+      <div className="mb-4 flex" style={{ justifyContent: imageAlign(block.props.align) }}>
+        <img
+          src={src}
+          alt={String(block.props.alt ?? '')}
+          style={{
+            width: `${Number(block.props.width ?? 100)}%`,
+            height: `${Number(block.props.height ?? 320)}px`,
+            objectFit: String(block.props.objectFit ?? 'cover') as 'cover',
+            borderRadius: Number(block.props.borderRadius ?? 8),
+          }}
+        />
+      </div>
+    );
   }
   if (block.type === 'button') {
     return (
@@ -43,9 +87,52 @@ function BuilderBlockView({ block }: { block: BuilderBlock }) {
   if (block.type === 'columns') {
     return (
       <div className="mb-4 grid gap-4 md:grid-cols-2">
-        {(block.children ?? []).map((child) => <BuilderBlockView key={child.id} block={child} />)}
+        {(block.children ?? []).map((child) => <BuilderBlockView key={child.id} block={child} storeData={storeData} />)}
+      </div>
+    );
+  }
+  if (block.type === 'product-grid') {
+    const products = storeData.products.slice(0, Number(block.props.limit ?? 3));
+    return (
+      <div className="mb-6 grid gap-4 md:grid-cols-3">
+        {products.map((product) => (
+          <Link key={product.id} href={`/shop/${product.id}`} className="rounded border bg-white p-4 shadow-sm hover:shadow">
+            <h3 className="font-semibold">{product.name}</h3>
+            {product.description && <p className="mt-1 text-sm text-gray-500">{product.description}</p>}
+            <p className="mt-3 text-xl font-bold text-indigo-700">${Number(product.price).toFixed(2)}</p>
+          </Link>
+        ))}
+      </div>
+    );
+  }
+  if (block.type === 'product-categories') {
+    return (
+      <div className="mb-6 flex flex-wrap gap-2">
+        {storeData.categories.map((category) => <span key={category.id} className="rounded-full border px-3 py-1 text-sm">{category.name}</span>)}
+      </div>
+    );
+  }
+  if (block.type === 'product-tags') {
+    return (
+      <div className="mb-6 flex flex-wrap gap-2">
+        {storeData.tags.map((tag) => <span key={tag.id} className="rounded bg-gray-100 px-3 py-1 text-sm">#{tag.name}</span>)}
       </div>
     );
   }
   return null;
+}
+
+function textStyle(block: BuilderBlock, fallbackSize: number) {
+  return {
+    color: typeof block.props.color === 'string' ? block.props.color : undefined,
+    fontFamily: typeof block.props.fontFamily === 'string' ? block.props.fontFamily : undefined,
+    fontSize: `${Number(block.props.fontSize ?? fallbackSize)}px`,
+    textAlign: String(block.props.align ?? 'left') as 'left',
+  };
+}
+
+function imageAlign(value: unknown) {
+  if (value === 'left') return 'flex-start';
+  if (value === 'right') return 'flex-end';
+  return 'center';
 }
