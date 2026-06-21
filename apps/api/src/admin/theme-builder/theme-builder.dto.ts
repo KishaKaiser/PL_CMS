@@ -121,6 +121,41 @@ export class CreateThemeDto {
   schemaJson?: Record<string, unknown>;
 }
 
+export class UpdateThemeDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  version?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsObject()
+  globalStyles?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  templates?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  components?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  widgetRegistry?: string[];
+
+  @IsOptional()
+  @IsObject()
+  schemaJson?: Record<string, unknown>;
+}
+
 export class AssignPageDesignDto {
   @IsOptional()
   @IsString()

@@ -9,6 +9,7 @@ import {
   AssignPageDesignDto,
   SaveLayoutDto,
   SaveThemeAssetsDto,
+  UpdateThemeDto,
 } from './theme-builder.dto';
 import { createStoreZip, readStoreZip } from './zip.util';
 
@@ -240,6 +241,26 @@ export class ThemeBuilderService {
     return this.prisma.$transaction(async (tx) => {
       await tx.cmsTheme.updateMany({ data: { isActive: false } });
       return tx.cmsTheme.update({ where: { id }, data: { isActive: true }, include: { assets: true } });
+    });
+  }
+
+  async updateTheme(id: string, dto: UpdateThemeDto) {
+    await this.ensureTheme(id);
+    return this.prisma.cmsTheme.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.version !== undefined ? { version: dto.version.trim() || '1.0.0' } : {}),
+        ...(dto.description !== undefined ? { description: dto.description?.trim() || null } : {}),
+        ...(dto.globalStyles !== undefined ? { globalStyles: toJsonObject(dto.globalStyles) } : {}),
+        ...(dto.templates !== undefined ? { templates: toJsonObject(dto.templates) } : {}),
+        ...(dto.components !== undefined ? { components: toJsonObject(dto.components) } : {}),
+        ...(dto.widgetRegistry !== undefined
+          ? { widgetRegistry: dto.widgetRegistry as Prisma.InputJsonArray }
+          : {}),
+        ...(dto.schemaJson !== undefined ? { schemaJson: toJsonObject(dto.schemaJson) } : {}),
+      },
+      include: { assets: true },
     });
   }
 

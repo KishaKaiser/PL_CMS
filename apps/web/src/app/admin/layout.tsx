@@ -22,10 +22,15 @@ const NAV_ITEMS = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const isThemeBuilder = pathname.startsWith('/admin/theme-builder');
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
+  }
+
+  if (isThemeBuilder) {
+    return <main className="min-h-screen bg-gray-100">{children}</main>;
   }
 
   return (
