@@ -16,7 +16,15 @@ export class AuthService {
 
   async validateUser(email: string, password: string) {
     const normalizedEmail = normalizeEmailInput(email);
-    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        role: true,
+      },
+    });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
     const valid = await bcrypt.compare(password, user.passwordHash);
