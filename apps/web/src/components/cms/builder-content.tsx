@@ -132,11 +132,10 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
   }
   if (block.type === 'grid') {
     const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 3)));
+    const children = block.children ?? [];
     return (
       <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-        {getLines(block.props.itemsText, ['Grid item', 'Grid item', 'Grid item']).map((item, index) => (
-          <div key={`${item}-${index}`} className="rounded border bg-white p-4 shadow-sm">{item}</div>
-        ))}
+        {children.map((child) => <BuilderBlockView key={child.id} block={child} storeData={storeData} />)}
       </div>
     );
   }
@@ -146,7 +145,9 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
     return (
       <div className="mb-6 overflow-hidden rounded border bg-gray-100" style={{ height }}>
         {slides.length > 0 ? (
-          <img src={slides[0].src} alt={slides[0].alt} className="h-full w-full object-cover" />
+          <div className="flex h-full w-full overflow-x-auto">
+            {slides.map((slide) => <img key={slide.src} src={slide.src} alt={slide.alt} className="h-full min-w-full object-cover" />)}
+          </div>
         ) : null}
       </div>
     );
@@ -170,8 +171,9 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
     );
   }
   if (block.type === 'columns') {
+    const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 2)));
     return (
-      <div className="mb-4 grid gap-4 md:grid-cols-2">
+      <div className="mb-4 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
         {(block.children ?? []).map((child) => <BuilderBlockView key={child.id} block={child} storeData={storeData} />)}
       </div>
     );
@@ -239,7 +241,10 @@ function getMenuLinks(block: BuilderBlock) {
 function getSlides(block: BuilderBlock) {
   if (!Array.isArray(block.props.slides)) return [];
   return block.props.slides
-    .map((slide) => (slide && typeof slide === 'object' ? slide as { src?: unknown; alt?: unknown } : null))
+    .map((slide) => {
+      if (typeof slide === 'string') return { src: slide, alt: '' };
+      return slide && typeof slide === 'object' ? slide as { src?: unknown; alt?: unknown } : null;
+    })
     .filter((slide): slide is { src?: unknown; alt?: unknown } => Boolean(slide?.src))
     .map((slide) => ({ src: String(slide.src), alt: String(slide.alt ?? '') }));
 }

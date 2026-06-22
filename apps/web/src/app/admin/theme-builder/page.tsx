@@ -191,7 +191,7 @@ export default function ThemeBuilderPage() {
 
   const activeTheme = useMemo(() => themes.find((theme) => theme.isActive) ?? null, [themes]);
   const selectedBlock = useMemo(
-    () => layout.sections.flatMap((section) => section.blocks).find((block) => block.id === selectedBlockId),
+    () => findBlockInLayout(layout, selectedBlockId),
     [layout, selectedBlockId],
   );
   const previewTheme = useMemo(() => getThemePreviewStyles(activeTheme, themeForm), [activeTheme, themeForm]);
@@ -462,11 +462,27 @@ export default function ThemeBuilderPage() {
       ...current,
       sections: current.sections.map((section) => ({
         ...section,
-        blocks: section.blocks.map((block) =>
+        blocks: mapBlocks(section.blocks, (block) =>
           block.id === blockId ? { ...block, props: { ...block.props, ...props } } : block,
         ),
       })),
     }));
+  }
+
+  function addChildBlock(parentId: string, type: BuilderBlockType) {
+    const block = createBlock(type, widgets.find((widget) => widget.type === type));
+    setLayout((current) => ({
+      ...current,
+      sections: current.sections.map((section) => ({
+        ...section,
+        blocks: mapBlocks(section.blocks, (candidate) =>
+          candidate.id === parentId
+            ? { ...candidate, children: [...(candidate.children ?? []), block] }
+            : candidate,
+        ),
+      })),
+    }));
+    setSelectedBlockId(block.id);
   }
 
   function updateLayoutSettings(settings: NonNullable<BuilderLayout['settings']>) {
@@ -481,7 +497,7 @@ export default function ThemeBuilderPage() {
       ...current,
       sections: current.sections.map((section) => ({
         ...section,
-        blocks: section.blocks.filter((block) => block.id !== blockId),
+        blocks: removeBlockById(section.blocks, blockId),
       })),
     }));
     setSelectedBlockId('');
@@ -697,8 +713,10 @@ export default function ThemeBuilderPage() {
               <BlockEditor
                 block={selectedBlock}
                 onChange={(props) => updateBlock(selectedBlock.id, props)}
+                onAddChild={(type) => addChildBlock(selectedBlock.id, type)}
                 theme={previewTheme}
                 mediaAssets={mediaAssets}
+                widgets={mergeWidgets(widgets)}
               />
             ) : (
               <p className="text-sm text-gray-500">Select content in the live preview.</p>
@@ -722,13 +740,17 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
 function BlockEditor({
   block,
   onChange,
+  onAddChild,
   theme,
   mediaAssets,
+  widgets,
 }: {
   block: BuilderBlock;
   onChange: (props: Record<string, unknown>) => void;
+  onAddChild: (type: BuilderBlockType) => void;
   theme: ThemePreviewStyles;
   mediaAssets: MediaAsset[];
+  widgets: BuilderWidget[];
 }) {
   const text = String(block.props.text ?? block.props.label ?? '');
   const href = String(block.props.href ?? '');
@@ -846,25 +868,45 @@ function BlockEditor({
       {block.type === 'grid' && (
         <>
           <label className="block text-sm font-medium text-gray-700">Columns<input type="number" min="2" max="6" value={Number(block.props.columns ?? 3)} onChange={(event) => onChange({ columns: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
-          <label className="block text-sm font-medium text-gray-700">Items (one per line)<textarea value={String(block.props.itemsText ?? 'Grid item\\nGrid item\\nGrid item')} rows={5} onChange={(event) => onChange({ itemsText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <ContainerChildControls block={block} widgets={widgets} onAddChild={onAddChild} />
+        </>
+      )}
+      {block.type === 'columns' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Columns<input type="number" min="2" max="6" value={Number(block.props.columns ?? 2)} onChange={(event) => onChange({ columns: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <ContainerChildControls block={block} widgets={widgets} onAddChild={onAddChild} />
         </>
       )}
       {block.type === 'image-slider' && (
         <>
-          <label className="block text-sm font-medium text-gray-700">Slides
-            <select
-              multiple
-              value={Array.isArray(block.props.mediaIds) ? block.props.mediaIds.map(String) : []}
-              onChange={(event) => {
-                const selectedIds = Array.from(event.target.selectedOptions).map((option) => option.value);
-                const slides = selectedIds.map((id) => mediaAssets.find((asset) => asset.id === id)).filter(Boolean).map((asset) => ({ id: asset!.id, src: asset!.url, alt: asset!.altText || asset!.title || asset!.originalName }));
-                onChange({ mediaIds: selectedIds, slides });
-              }}
-              className="mt-1 h-32 w-full rounded border px-3 py-2 text-sm"
-            >
-              {mediaAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.title || asset.originalName}</option>)}
-            </select>
-          </label>
+          <div className="rounded border p-3">
+            <p className="mb-2 text-sm font-medium text-gray-700">Slides</p>
+            <div className="max-h-48 space-y-2 overflow-y-auto">
+              {mediaAssets.map((asset) => {
+                const selectedIds = Array.isArray(block.props.mediaIds) ? block.props.mediaIds.map(String) : [];
+                const checked = selectedIds.includes(asset.id);
+                return (
+                  <label key={asset.id} className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) => {
+                        const nextIds = event.target.checked
+                          ? [...selectedIds, asset.id]
+                          : selectedIds.filter((id) => id !== asset.id);
+                        const slides = nextIds
+                          .map((id) => mediaAssets.find((item) => item.id === id))
+                          .filter(Boolean)
+                          .map((item) => ({ id: item!.id, src: item!.url, alt: item!.altText || item!.title || item!.originalName }));
+                        onChange({ mediaIds: nextIds, slides });
+                      }}
+                    />
+                    <span className="truncate">{asset.title || asset.originalName}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
           <label className="block text-sm font-medium text-gray-700">Height<input type="number" min="120" max="800" value={Number(block.props.height ?? 360)} onChange={(event) => onChange({ height: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
         </>
       )}
@@ -880,6 +922,39 @@ function BlockEditor({
       {block.type === 'product-grid' && (
         <label className="block text-sm font-medium text-gray-700">Products to Show<input type="number" min="1" max="12" value={Number(block.props.limit ?? 3)} onChange={(event) => onChange({ limit: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
       )}
+    </div>
+  );
+}
+
+function ContainerChildControls({
+  block,
+  widgets,
+  onAddChild,
+}: {
+  block: BuilderBlock;
+  widgets: BuilderWidget[];
+  onAddChild: (type: BuilderBlockType) => void;
+}) {
+  const childCount = block.children?.length ?? 0;
+  return (
+    <div className="rounded border border-dashed p-3">
+      <p className="mb-2 text-xs text-gray-500">
+        {childCount} nested widget{childCount === 1 ? '' : 's'}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        {widgets
+          .filter((widget) => widget.enabled && widget.type !== 'grid' && widget.type !== 'columns')
+          .map((widget) => (
+            <button
+              key={widget.type}
+              type="button"
+              onClick={() => onAddChild(widget.type)}
+              className="rounded border px-2 py-1 text-left text-xs hover:border-indigo-300 hover:bg-indigo-50"
+            >
+              {widget.label}
+            </button>
+          ))}
+      </div>
     </div>
   );
 }
@@ -1020,7 +1095,7 @@ function PreviewLayout({
                   active ? <button onClick={() => onAddBlock('heading', section.id)} className="w-full rounded border border-dashed p-10 text-sm text-gray-500">Add content</button> : null
                 ) : (
                   section.blocks.map((block, index) => (
-                    <EditableBlock key={block.id} block={block} components={components} theme={theme} storePreview={storePreview} selected={selectedBlockId === block.id} onSelect={() => active && onSelectBlock(block.id)} onRemove={() => active && onRemoveBlock(block.id)} onDragStart={() => active && onDragStart(block.id)} onDrop={() => active && onMoveBlock(section.id, index)} />
+                    <EditableBlock key={block.id} block={block} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} onDragStart={() => active && onDragStart(block.id)} onDrop={() => active && onMoveBlock(section.id, index)} active={active} />
                   ))
                 )}
               </div>
@@ -1038,33 +1113,54 @@ function EditableBlock({
   components,
   theme,
   storePreview,
-  selected,
-  onSelect,
-  onRemove,
+  selectedBlockId,
+  onSelectBlock,
+  onRemoveBlock,
   onDragStart,
   onDrop,
+  active,
 }: {
   block: BuilderBlock;
   components: GlobalComponent[];
   theme: ThemePreviewStyles;
   storePreview: StorePreviewData;
-  selected: boolean;
-  onSelect: () => void;
-  onRemove: () => void;
+  selectedBlockId: string;
+  onSelectBlock: (id: string) => void;
+  onRemoveBlock: (id: string) => void;
   onDragStart: () => void;
   onDrop: () => void;
+  active: boolean;
 }) {
+  const selected = selectedBlockId === block.id;
   return (
-    <div draggable onClick={(event) => { event.stopPropagation(); onSelect(); }} onDragStart={onDragStart} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onDrop(); }} className={`group/block relative cursor-move rounded px-2 py-1 ${selected ? 'ring-2 ring-indigo-500' : 'hover:ring-1 hover:ring-indigo-300'}`}>
+    <div draggable={active} onClick={(event) => { event.stopPropagation(); if (active) onSelectBlock(block.id); }} onDragStart={onDragStart} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onDrop(); }} className={`group/block relative cursor-move rounded px-2 py-1 ${selected ? 'ring-2 ring-indigo-500' : 'hover:ring-1 hover:ring-indigo-300'}`}>
       <div className="absolute right-2 top-2 z-20 hidden rounded bg-white shadow group-hover/block:block">
-        <button onClick={(event) => { event.stopPropagation(); onRemove(); }} className="px-2 py-1 text-xs text-red-600">Remove</button>
+        <button onClick={(event) => { event.stopPropagation(); onRemoveBlock(block.id); }} className="px-2 py-1 text-xs text-red-600">Remove</button>
       </div>
-      <PreviewBlock block={block} components={components} theme={theme} storePreview={storePreview} />
+      <PreviewBlock block={block} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} />
     </div>
   );
 }
 
-function PreviewBlock({ block, components, theme, storePreview }: { block: BuilderBlock; components: GlobalComponent[]; theme: ThemePreviewStyles; storePreview: StorePreviewData }) {
+function PreviewBlock({
+  block,
+  components,
+  theme,
+  storePreview,
+  selectedBlockId,
+  onSelectBlock,
+  onRemoveBlock,
+  active,
+}: {
+  block: BuilderBlock;
+  components: GlobalComponent[];
+  theme: ThemePreviewStyles;
+  storePreview: StorePreviewData;
+  selectedBlockId?: string;
+  onSelectBlock?: (id: string) => void;
+  onRemoveBlock?: (id: string) => void;
+  active?: boolean;
+}) {
   if (block.type === 'heading') {
     return <h1 className="mb-3 font-bold" style={textStyle(block, theme, 42)}>{String(block.props.text ?? 'Heading')}</h1>;
   }
@@ -1094,12 +1190,13 @@ function PreviewBlock({ block, components, theme, storePreview }: { block: Build
   }
   if (block.type === 'grid') {
     const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 3)));
-    return <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{getLines(block.props.itemsText, ['Grid item', 'Grid item', 'Grid item']).map((item, index) => <div key={`${item}-${index}`} className="rounded border bg-white p-4 shadow-sm">{item}</div>)}</div>;
+    const children = block.children ?? [];
+    return <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this grid and add widgets from the right panel.</div>}</div>;
   }
   if (block.type === 'image-slider') {
     const slides = getSlides(block);
     const height = `${Number(block.props.height ?? 360)}px`;
-    return <div className="mb-6 overflow-hidden rounded border bg-gray-100" style={{ height }}>{slides.length > 0 ? <img src={slides[0].src} alt={slides[0].alt} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm text-gray-500">Image slider</div>}</div>;
+    return <div className="mb-6 overflow-hidden rounded border bg-gray-100" style={{ height }}>{slides.length > 0 ? <div className="flex h-full w-full overflow-x-auto">{slides.map((slide) => <img key={slide.src} src={slide.src} alt={slide.alt} className="h-full min-w-full object-cover" />)}</div> : <div className="flex h-full items-center justify-center text-sm text-gray-500">Select images for this slider.</div>}</div>;
   }
   if (block.type === 'video') {
     const url = String(block.props.url ?? '');
@@ -1120,9 +1217,11 @@ function PreviewBlock({ block, components, theme, storePreview }: { block: Build
   }
   if (block.type === 'global') {
     const component = components.find((item) => item.id === block.props.componentId);
-    return component ? <PreviewBlock block={component.schemaJson} components={components} theme={theme} storePreview={storePreview} /> : <div className="rounded border p-3 text-sm text-gray-500">Global component</div>;
+    return component ? <PreviewBlock block={component.schemaJson} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} /> : <div className="rounded border p-3 text-sm text-gray-500">Global component</div>;
   }
-  return <div className="mb-4 grid gap-3 md:grid-cols-2"><div className="rounded bg-gray-100 p-4">Column</div><div className="rounded bg-gray-100 p-4">Column</div></div>;
+  const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 2)));
+  const children = block.children ?? [];
+  return <div className="mb-4 grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this container and add widgets from the right panel.</div>}</div>;
 }
 
 function buildThemePayload(
@@ -1215,6 +1314,39 @@ function normalizeLayout(value: unknown): BuilderLayout {
   };
 }
 
+function findBlockInLayout(layout: BuilderLayout, blockId: string) {
+  for (const section of layout.sections) {
+    const block = findBlock(section.blocks, blockId);
+    if (block) return block;
+  }
+  return undefined;
+}
+
+function findBlock(blocks: BuilderBlock[], blockId: string): BuilderBlock | undefined {
+  for (const block of blocks) {
+    if (block.id === blockId) return block;
+    const child = findBlock(block.children ?? [], blockId);
+    if (child) return child;
+  }
+  return undefined;
+}
+
+function mapBlocks(blocks: BuilderBlock[], mapper: (block: BuilderBlock) => BuilderBlock): BuilderBlock[] {
+  return blocks.map((block) => {
+    const mapped = mapper(block);
+    return mapped.children ? { ...mapped, children: mapBlocks(mapped.children, mapper) } : mapped;
+  });
+}
+
+function removeBlockById(blocks: BuilderBlock[], blockId: string): BuilderBlock[] {
+  return blocks
+    .filter((block) => block.id !== blockId)
+    .map((block) => ({
+      ...block,
+      children: block.children ? removeBlockById(block.children, blockId) : block.children,
+    }));
+}
+
 function mergeWidgets(widgets: BuilderWidget[]) {
   const map = new Map<BuilderBlockType, BuilderWidget>();
   [...defaultWidgets, ...widgets].forEach((widget) => map.set(widget.type, { ...widget, enabled: widget.enabled !== false }));
@@ -1274,7 +1406,10 @@ function getMenuLinks(block: BuilderBlock) {
 function getSlides(block: BuilderBlock) {
   if (!Array.isArray(block.props.slides)) return [];
   return block.props.slides
-    .map((slide) => (slide && typeof slide === 'object' ? slide as { src?: unknown; alt?: unknown } : null))
+    .map((slide) => {
+      if (typeof slide === 'string') return { src: slide, alt: '' };
+      return slide && typeof slide === 'object' ? slide as { src?: unknown; alt?: unknown } : null;
+    })
     .filter((slide): slide is { src?: unknown; alt?: unknown } => Boolean(slide?.src))
     .map((slide) => ({ src: String(slide.src), alt: String(slide.alt ?? '') }));
 }
