@@ -36,6 +36,7 @@ interface Product {
   id: string;
   name: string;
   description?: string | null;
+  shortDescription?: string | null;
   price: number | string;
   regularPrice?: number | string | null;
   salePrice?: number | string | null;
@@ -60,6 +61,7 @@ interface Product {
 const emptyProductForm = {
   name: '',
   description: '',
+  shortDescription: '',
   regularPrice: '',
   salePrice: '',
   saleStartsAt: '',
@@ -152,6 +154,7 @@ export default function AdminProductsPage() {
     setForm({
       name: product.name,
       description: product.description ?? '',
+      shortDescription: product.shortDescription ?? '',
       regularPrice: String(product.regularPrice ?? product.price ?? ''),
       salePrice: product.salePrice == null ? '' : String(product.salePrice),
       saleStartsAt: toDatetimeLocal(product.saleStartsAt),
@@ -342,7 +345,20 @@ export default function AdminProductsPage() {
               className="md:col-span-2"
             />
             <label className="block text-sm font-medium text-gray-700 md:col-span-2">
-              Description
+              Short Description
+              <textarea
+                value={form.shortDescription}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, shortDescription: event.target.value }))
+                }
+                rows={2}
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                placeholder="Brief shop card summary"
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-gray-700 md:col-span-2">
+              Description (HTML allowed)
               <textarea
                 value={form.description}
                 onChange={(event) =>
@@ -568,6 +584,9 @@ export default function AdminProductsPage() {
                           <span>{product.stockStatus.replaceAll('_', ' ')}</span>
                           <span>{product.variants.length} variant{product.variants.length === 1 ? '' : 's'}</span>
                         </div>
+                        {product.shortDescription && (
+                          <p className="mt-2 max-w-2xl text-sm text-gray-500">{product.shortDescription}</p>
+                        )}
                         <div className="mt-2 flex flex-wrap gap-2">
                           {product.categories.map((category) => (
                             <span key={category.id} className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">
@@ -627,6 +646,7 @@ function buildProductPayload(form: typeof emptyProductForm, clearBlankValues: bo
   return {
     name: form.name,
     description: form.description || undefined,
+    shortDescription: form.shortDescription || undefined,
     price: regularPrice,
     regularPrice,
     salePrice: optionalNumber(form.salePrice, clearBlankValues),

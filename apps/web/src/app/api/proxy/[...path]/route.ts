@@ -23,6 +23,7 @@ const ALLOWED_PATH_PREFIXES = [
   'modules',
   'media',
   'messages',
+  'public',
 ];
 
 type Context = { params: Promise<{ path: string[] }> };

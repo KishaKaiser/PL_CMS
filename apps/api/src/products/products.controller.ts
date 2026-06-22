@@ -6,13 +6,14 @@ import {
   Delete,
   Body,
   Param,
+  Request,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ProductsService } from './products.service';
-import { CreateProductDto, UpdateProductDto } from './products.dto';
+import { CreateProductDto, CreateProductReviewDto, UpdateProductDto } from './products.dto';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import { Role } from '@pl-cms/shared';
 
@@ -39,11 +40,26 @@ export class ProductsController {
     return this.productsService.findOne(id);
   }
 
+  @Get(':id/reviews')
+  listReviews(@Param('id') id: string) {
+    return this.productsService.listReviews(id);
+  }
+
   @Post()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
   create(@Body() dto: CreateProductDto) {
     return this.productsService.create(dto);
+  }
+
+  @Post(':id/reviews')
+  @UseGuards(AuthGuard('jwt'))
+  createReview(
+    @Param('id') id: string,
+    @Request() req: { user: { id: string } },
+    @Body() dto: CreateProductReviewDto,
+  ) {
+    return this.productsService.createReview(id, req.user.id, dto);
   }
 
   @Put(':id')

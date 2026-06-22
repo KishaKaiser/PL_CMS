@@ -11,6 +11,12 @@ type BuilderBlockType =
   | 'image'
   | 'button'
   | 'columns'
+  | 'grid'
+  | 'icon'
+  | 'menu'
+  | 'image-slider'
+  | 'video'
+  | 'sidebar-widgets'
   | 'global'
   | 'product-grid'
   | 'product-categories'
@@ -138,8 +144,14 @@ const defaultWidgets: BuilderWidget[] = [
   { type: 'heading', label: 'Heading', category: 'content', enabled: true },
   { type: 'text', label: 'Text', category: 'content', enabled: true },
   { type: 'image', label: 'Image', category: 'media', enabled: true },
+  { type: 'image-slider', label: 'Image Slider', category: 'media', enabled: true },
+  { type: 'video', label: 'Video Embed', category: 'media', enabled: true },
   { type: 'button', label: 'Button', category: 'content', enabled: true },
+  { type: 'icon', label: 'Font Awesome Icon', category: 'content', enabled: true },
   { type: 'columns', label: 'Columns', category: 'layout', enabled: true },
+  { type: 'grid', label: 'Grid', category: 'layout', enabled: true },
+  { type: 'menu', label: 'Menu', category: 'navigation', enabled: true },
+  { type: 'sidebar-widgets', label: 'Sidebar Widgets', category: 'layout', enabled: true },
   { type: 'product-grid', label: 'Products', category: 'store', enabled: true },
   { type: 'product-categories', label: 'Product Categories', category: 'store', enabled: true },
   { type: 'product-tags', label: 'Product Tags', category: 'store', enabled: true },
@@ -802,6 +814,69 @@ function BlockEditor({
       {block.type === 'button' && (
         <label className="block text-sm font-medium text-gray-700">Link<input value={href} onChange={(event) => onChange({ href: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
       )}
+      {block.type === 'icon' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Font Awesome Class<input value={String(block.props.iconClass ?? 'fa-solid fa-star')} onChange={(event) => onChange({ iconClass: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Label<input value={String(block.props.label ?? '')} onChange={(event) => onChange({ label: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Size<input type="number" min="12" max="120" value={Number(block.props.size ?? 36)} onChange={(event) => onChange({ size: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Color<input type="color" value={String(block.props.color ?? theme.primaryColor)} onChange={(event) => onChange({ color: event.target.value })} className="mt-1 h-10 w-full rounded border" /></label>
+        </>
+      )}
+      {block.type === 'menu' && (
+        <>
+          <select value={String(block.props.source ?? 'header')} onChange={(event) => onChange({ source: event.target.value })} className="w-full rounded border px-3 py-2 text-sm">
+            <option value="header">Header menu</option>
+            <option value="footer">Footer menu</option>
+            <option value="custom">Custom links</option>
+          </select>
+          <select value={String(block.props.orientation ?? 'horizontal')} onChange={(event) => onChange({ orientation: event.target.value })} className="w-full rounded border px-3 py-2 text-sm">
+            <option value="horizontal">Horizontal</option>
+            <option value="vertical">Vertical</option>
+            <option value="sidebar">Sidebar</option>
+          </select>
+          <select value={String(block.props.placement ?? 'header')} onChange={(event) => onChange({ placement: event.target.value })} className="w-full rounded border px-3 py-2 text-sm">
+            <option value="header">Header</option>
+            <option value="footer">Footer</option>
+            <option value="sidebar">Sidebar</option>
+            <option value="content">Content</option>
+          </select>
+          <label className="block text-sm font-medium text-gray-700">Custom Links (label|url per line)<textarea value={String(block.props.linksText ?? '')} rows={4} onChange={(event) => onChange({ linksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+        </>
+      )}
+      {block.type === 'grid' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Columns<input type="number" min="2" max="6" value={Number(block.props.columns ?? 3)} onChange={(event) => onChange({ columns: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Items (one per line)<textarea value={String(block.props.itemsText ?? 'Grid item\\nGrid item\\nGrid item')} rows={5} onChange={(event) => onChange({ itemsText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+        </>
+      )}
+      {block.type === 'image-slider' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Slides
+            <select
+              multiple
+              value={Array.isArray(block.props.mediaIds) ? block.props.mediaIds.map(String) : []}
+              onChange={(event) => {
+                const selectedIds = Array.from(event.target.selectedOptions).map((option) => option.value);
+                const slides = selectedIds.map((id) => mediaAssets.find((asset) => asset.id === id)).filter(Boolean).map((asset) => ({ id: asset!.id, src: asset!.url, alt: asset!.altText || asset!.title || asset!.originalName }));
+                onChange({ mediaIds: selectedIds, slides });
+              }}
+              className="mt-1 h-32 w-full rounded border px-3 py-2 text-sm"
+            >
+              {mediaAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.title || asset.originalName}</option>)}
+            </select>
+          </label>
+          <label className="block text-sm font-medium text-gray-700">Height<input type="number" min="120" max="800" value={Number(block.props.height ?? 360)} onChange={(event) => onChange({ height: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+        </>
+      )}
+      {block.type === 'video' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Video URL<input value={String(block.props.url ?? '')} onChange={(event) => onChange({ url: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="YouTube, Vimeo, or MP4 URL" /></label>
+          <label className="block text-sm font-medium text-gray-700">Aspect Ratio<select value={String(block.props.aspectRatio ?? '16 / 9')} onChange={(event) => onChange({ aspectRatio: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="16 / 9">16:9</option><option value="4 / 3">4:3</option><option value="1 / 1">Square</option></select></label>
+        </>
+      )}
+      {block.type === 'sidebar-widgets' && (
+        <label className="block text-sm font-medium text-gray-700">Widgets (one per line)<textarea value={String(block.props.itemsText ?? 'Search\\nCategories\\nRecent posts')} rows={4} onChange={(event) => onChange({ itemsText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+      )}
       {block.type === 'product-grid' && (
         <label className="block text-sm font-medium text-gray-700">Products to Show<input type="number" min="1" max="12" value={Number(block.props.limit ?? 3)} onChange={(event) => onChange({ limit: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
       )}
@@ -1009,6 +1084,30 @@ function PreviewBlock({ block, components, theme, storePreview }: { block: Build
   if (block.type === 'button') {
     return <a href={String(block.props.href ?? '#')} className="mb-4 inline-block rounded px-4 py-2 text-white" style={{ backgroundColor: theme.primaryColor }}>{String(block.props.label ?? 'Button')}</a>;
   }
+  if (block.type === 'icon') {
+    return <div className="mb-4 flex items-center gap-3"><i className={String(block.props.iconClass ?? 'fa-solid fa-star')} style={{ color: String(block.props.color ?? theme.primaryColor), fontSize: `${Number(block.props.size ?? 36)}px` }} /><span>{String(block.props.label ?? '')}</span></div>;
+  }
+  if (block.type === 'menu') {
+    const links = getMenuLinks(block);
+    const vertical = block.props.orientation === 'vertical' || block.props.orientation === 'sidebar';
+    return <nav className={`mb-4 flex ${vertical ? 'flex-col items-start' : 'flex-wrap items-center'} gap-3`}>{links.map((link) => <a key={`${link.label}-${link.href}`} href={link.href} className="text-sm font-medium hover:underline" style={{ color: theme.primaryColor }}>{link.label}</a>)}</nav>;
+  }
+  if (block.type === 'grid') {
+    const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 3)));
+    return <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{getLines(block.props.itemsText, ['Grid item', 'Grid item', 'Grid item']).map((item, index) => <div key={`${item}-${index}`} className="rounded border bg-white p-4 shadow-sm">{item}</div>)}</div>;
+  }
+  if (block.type === 'image-slider') {
+    const slides = getSlides(block);
+    const height = `${Number(block.props.height ?? 360)}px`;
+    return <div className="mb-6 overflow-hidden rounded border bg-gray-100" style={{ height }}>{slides.length > 0 ? <img src={slides[0].src} alt={slides[0].alt} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm text-gray-500">Image slider</div>}</div>;
+  }
+  if (block.type === 'video') {
+    const url = String(block.props.url ?? '');
+    return <div className="mb-6 overflow-hidden rounded border bg-black" style={{ aspectRatio: String(block.props.aspectRatio ?? '16 / 9') }}>{url ? videoEmbed(url) : <div className="flex h-full items-center justify-center text-sm text-white">Video embed</div>}</div>;
+  }
+  if (block.type === 'sidebar-widgets') {
+    return <aside className="mb-6 rounded border bg-gray-50 p-4">{getLines(block.props.itemsText, ['Search', 'Categories', 'Recent posts']).map((item) => <div key={item} className="border-b py-2 text-sm last:border-b-0">{item}</div>)}</aside>;
+  }
   if (block.type === 'product-grid') {
     const products = storePreview.products.slice(0, Number(block.props.limit ?? 3));
     return <div className="mb-6 grid gap-4 md:grid-cols-3">{products.map((product) => <div key={product.id} className="rounded border bg-white p-4 shadow-sm"><h3 className="font-semibold">{product.name}</h3><p className="mt-1 text-sm text-gray-500">{product.description}</p><p className="mt-3 text-xl font-bold" style={{ color: theme.primaryColor }}>${Number(product.price).toFixed(2)}</p></div>)}</div>;
@@ -1091,8 +1190,14 @@ function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlo
   if (type === 'heading') return { id, type, props: { text: 'New Heading', level: 2, fontSize: 36, align: 'left' } };
   if (type === 'text') return { id, type, props: { text: 'New text block.', fontSize: 16, align: 'left' } };
   if (type === 'image') return { id, type, props: { mediaId: '', src: '', alt: '', width: 100, height: 320, objectFit: 'cover', align: 'center', borderRadius: 8 } };
+  if (type === 'image-slider') return { id, type, props: { mediaIds: [], slides: [], height: 360 } };
+  if (type === 'video') return { id, type, props: { url: '', aspectRatio: '16 / 9' } };
   if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#' } };
+  if (type === 'icon') return { id, type, props: { iconClass: 'fa-solid fa-star', label: 'Icon label', size: 36, color: '#4f46e5' } };
   if (type === 'columns') return { id, type, props: { columns: 2 }, children: [] };
+  if (type === 'grid') return { id, type, props: { columns: 3, itemsText: 'Grid item\nGrid item\nGrid item' } };
+  if (type === 'menu') return { id, type, props: { source: 'header', orientation: 'horizontal', placement: 'header', linksText: 'Home|/\nShop|/shop\nBlog|/blog' } };
+  if (type === 'sidebar-widgets') return { id, type, props: { itemsText: 'Search\nCategories\nRecent posts' } };
   if (type === 'product-grid') return { id, type, props: { limit: 3 } };
   if (type === 'product-categories') return { id, type, props: {} };
   if (type === 'product-tags') return { id, type, props: {} };
@@ -1150,6 +1255,49 @@ function imageAlign(value: unknown) {
   if (value === 'left') return 'flex-start';
   if (value === 'right') return 'flex-end';
   return 'center';
+}
+
+function getLines(value: unknown, fallback: string[]) {
+  const lines = typeof value === 'string'
+    ? value.split('\n').map((line) => line.trim()).filter(Boolean)
+    : [];
+  return lines.length > 0 ? lines : fallback;
+}
+
+function getMenuLinks(block: BuilderBlock) {
+  return getLines(block.props.linksText, ['Home|/', 'Shop|/shop', 'Blog|/blog']).map((line) => {
+    const [label, href] = line.split('|');
+    return { label: label?.trim() || 'Link', href: href?.trim() || '#' };
+  });
+}
+
+function getSlides(block: BuilderBlock) {
+  if (!Array.isArray(block.props.slides)) return [];
+  return block.props.slides
+    .map((slide) => (slide && typeof slide === 'object' ? slide as { src?: unknown; alt?: unknown } : null))
+    .filter((slide): slide is { src?: unknown; alt?: unknown } => Boolean(slide?.src))
+    .map((slide) => ({ src: String(slide.src), alt: String(slide.alt ?? '') }));
+}
+
+function videoEmbed(url: string) {
+  const embedUrl = getVideoEmbedUrl(url);
+  if (embedUrl) return <iframe src={embedUrl} title="Embedded video" className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />;
+  return <video src={url} controls className="h-full w-full" />;
+}
+
+function getVideoEmbedUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes('youtube.com')) {
+      const id = parsed.searchParams.get('v');
+      return id ? `https://www.youtube.com/embed/${id}` : null;
+    }
+    if (parsed.hostname === 'youtu.be') return `https://www.youtube.com/embed/${parsed.pathname.slice(1)}`;
+    if (parsed.hostname.includes('vimeo.com')) return `https://player.vimeo.com/video/${parsed.pathname.split('/').filter(Boolean)[0]}`;
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function pageShellClass(layout?: string) {

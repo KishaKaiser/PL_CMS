@@ -1,5 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { RichContent } from '../../../components/cms/rich-content';
+import { ReviewSection } from '../../../components/reviews/review-section';
+import { getSafeImageSrc } from '../../../lib/public-cms';
 import ProductDetailClient from './ProductDetailClient';
 
 interface Inventory {
@@ -20,7 +23,10 @@ interface ProductVariant {
 interface Product {
   id: string;
   name: string;
+  shortDescription?: string | null;
   description?: string;
+  imageUrl?: string | null;
+  featuredMedia?: { url: string; altText?: string | null; title?: string | null } | null;
   price: string | number;
   currency: string;
   minutesPack: number;
@@ -48,6 +54,7 @@ export default async function ProductDetailPage({ params }: Props) {
   if (!product || !product.isActive) notFound();
 
   const activeVariants = product.variants?.filter((v) => v.isActive) ?? [];
+  const productImage = getSafeImageSrc(product.featuredMedia?.url ?? product.imageUrl);
 
   return (
     <main className="mx-auto max-w-2xl p-8">
@@ -59,8 +66,20 @@ export default async function ProductDetailPage({ params }: Props) {
 
       <h1 className="mb-2 text-3xl font-bold">{product.name}</h1>
 
+      {productImage && (
+        <img
+          src={productImage}
+          alt={product.featuredMedia?.altText || product.featuredMedia?.title || product.name}
+          className="mb-6 max-h-[460px] w-full rounded-lg border object-cover"
+        />
+      )}
+
+      {product.shortDescription && (
+        <p className="mb-4 text-lg text-gray-600">{product.shortDescription}</p>
+      )}
+
       {product.description && (
-        <p className="mb-4 text-gray-600">{product.description}</p>
+        <RichContent html={product.description} className="prose mb-6 max-w-none text-gray-700" />
       )}
 
       {activeVariants.length > 0 ? (
@@ -94,6 +113,12 @@ export default async function ProductDetailPage({ params }: Props) {
           ← Back to Shop
         </Link>
       </div>
+
+      <ReviewSection
+        title="Customer Reviews"
+        endpoint={`/api/proxy/products/${product.id}/reviews`}
+        loginMessage="Log in to review products you purchased."
+      />
     </main>
   );
 }

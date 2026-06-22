@@ -103,6 +103,72 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
       </a>
     );
   }
+  if (block.type === 'icon') {
+    return (
+      <div className="mb-4 flex items-center gap-3">
+        <i
+          className={String(block.props.iconClass ?? 'fa-solid fa-star')}
+          style={{
+            color: String(block.props.color ?? '#4f46e5'),
+            fontSize: `${Number(block.props.size ?? 36)}px`,
+          }}
+        />
+        <span>{String(block.props.label ?? '')}</span>
+      </div>
+    );
+  }
+  if (block.type === 'menu') {
+    const links = getMenuLinks(block);
+    const vertical = block.props.orientation === 'vertical' || block.props.orientation === 'sidebar';
+    return (
+      <nav className={`mb-4 flex ${vertical ? 'flex-col items-start' : 'flex-wrap items-center'} gap-3`}>
+        {links.map((link) => (
+          <a key={`${link.label}-${link.href}`} href={link.href} className="text-sm font-medium text-indigo-700 hover:underline">
+            {link.label}
+          </a>
+        ))}
+      </nav>
+    );
+  }
+  if (block.type === 'grid') {
+    const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 3)));
+    return (
+      <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+        {getLines(block.props.itemsText, ['Grid item', 'Grid item', 'Grid item']).map((item, index) => (
+          <div key={`${item}-${index}`} className="rounded border bg-white p-4 shadow-sm">{item}</div>
+        ))}
+      </div>
+    );
+  }
+  if (block.type === 'image-slider') {
+    const slides = getSlides(block);
+    const height = `${Number(block.props.height ?? 360)}px`;
+    return (
+      <div className="mb-6 overflow-hidden rounded border bg-gray-100" style={{ height }}>
+        {slides.length > 0 ? (
+          <img src={slides[0].src} alt={slides[0].alt} className="h-full w-full object-cover" />
+        ) : null}
+      </div>
+    );
+  }
+  if (block.type === 'video') {
+    const url = String(block.props.url ?? '');
+    if (!url) return null;
+    return (
+      <div className="mb-6 overflow-hidden rounded border bg-black" style={{ aspectRatio: String(block.props.aspectRatio ?? '16 / 9') }}>
+        {videoEmbed(url)}
+      </div>
+    );
+  }
+  if (block.type === 'sidebar-widgets') {
+    return (
+      <aside className="mb-6 rounded border bg-gray-50 p-4">
+        {getLines(block.props.itemsText, ['Search', 'Categories', 'Recent posts']).map((item) => (
+          <div key={item} className="border-b py-2 text-sm last:border-b-0">{item}</div>
+        ))}
+      </aside>
+    );
+  }
   if (block.type === 'columns') {
     return (
       <div className="mb-4 grid gap-4 md:grid-cols-2">
@@ -154,6 +220,51 @@ function imageAlign(value: unknown) {
   if (value === 'left') return 'flex-start';
   if (value === 'right') return 'flex-end';
   return 'center';
+}
+
+function getLines(value: unknown, fallback: string[]) {
+  const lines = typeof value === 'string'
+    ? value.split('\n').map((line) => line.trim()).filter(Boolean)
+    : [];
+  return lines.length > 0 ? lines : fallback;
+}
+
+function getMenuLinks(block: BuilderBlock) {
+  return getLines(block.props.linksText, ['Home|/', 'Shop|/shop', 'Blog|/blog']).map((line) => {
+    const [label, href] = line.split('|');
+    return { label: label?.trim() || 'Link', href: href?.trim() || '#' };
+  });
+}
+
+function getSlides(block: BuilderBlock) {
+  if (!Array.isArray(block.props.slides)) return [];
+  return block.props.slides
+    .map((slide) => (slide && typeof slide === 'object' ? slide as { src?: unknown; alt?: unknown } : null))
+    .filter((slide): slide is { src?: unknown; alt?: unknown } => Boolean(slide?.src))
+    .map((slide) => ({ src: String(slide.src), alt: String(slide.alt ?? '') }));
+}
+
+function videoEmbed(url: string) {
+  const embedUrl = getVideoEmbedUrl(url);
+  if (embedUrl) {
+    return <iframe src={embedUrl} title="Embedded video" className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />;
+  }
+  return <video src={url} controls className="h-full w-full" />;
+}
+
+function getVideoEmbedUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes('youtube.com')) {
+      const id = parsed.searchParams.get('v');
+      return id ? `https://www.youtube.com/embed/${id}` : null;
+    }
+    if (parsed.hostname === 'youtu.be') return `https://www.youtube.com/embed/${parsed.pathname.slice(1)}`;
+    if (parsed.hostname.includes('vimeo.com')) return `https://player.vimeo.com/video/${parsed.pathname.split('/').filter(Boolean)[0]}`;
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function pageShellClass(layout?: string) {

@@ -16,6 +16,7 @@ import {
   type SiteThemeSettings,
 } from '@pl-cms/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import type { CreatePostCommentDto } from './public-content.dto';
 
 type PostQuery = {
   search?: string;
@@ -63,7 +64,7 @@ const POST_SELECT = {
   featuredImageUrl: true,
   publishedAt: true,
   updatedAt: true,
-  author: { select: { id: true, name: true } },
+  author: { select: { id: true, name: true, username: true } },
   categories: { select: { id: true, slug: true, name: true } },
   tags: { select: { id: true, slug: true, name: true } },
 } as const;
@@ -73,6 +74,18 @@ const MIN_ARCHIVE_YEAR = 1970;
 // A small future buffer supports scheduled content while rejecting malformed far-future years.
 const MAX_ARCHIVE_YEARS_AHEAD = 20;
 const MAX_REDIRECT_DEPTH = 5;
+const commentSelect = {
+  id: true,
+  rating: true,
+  comment: true,
+  createdAt: true,
+  user: { select: { id: true, username: true, name: true } },
+} as const;
+
+function normalizeComment(value?: string) {
+  const comment = value?.trim();
+  return comment || null;
+}
 
 @Injectable()
 export class PublicContentService {
@@ -242,6 +255,43 @@ export class PublicContentService {
     return post;
   }
 
+  async findPostComments(slug: string) {
+    const post = await this.prisma.post.findFirst({
+      where: { slug, publishedAt: { not: null, lte: new Date() } },
+      select: { id: true },
+    });
+    if (!post) throw new NotFoundException(`Post ${slug} not found`);
+
+    return this.prisma.postComment.findMany({
+      where: { postId: post.id },
+      orderBy: { createdAt: 'desc' },
+      select: commentSelect,
+    });
+  }
+
+  async createPostComment(slug: string, userId: string, dto: CreatePostCommentDto) {
+    const post = await this.prisma.post.findFirst({
+      where: { slug, publishedAt: { not: null, lte: new Date() } },
+      select: { id: true },
+    });
+    if (!post) throw new NotFoundException(`Post ${slug} not found`);
+
+    return this.prisma.postComment.upsert({
+      where: { postId_userId: { postId: post.id, userId } },
+      create: {
+        postId: post.id,
+        userId,
+        rating: dto.rating,
+        comment: normalizeComment(dto.comment),
+      },
+      update: {
+        rating: dto.rating,
+        comment: normalizeComment(dto.comment),
+      },
+      select: commentSelect,
+    });
+  }
+
   async findPostRedirectBySlug(slug: string) {
     return {
       redirectTo: await this.findPublishedRedirectTarget('POST', slug),
@@ -338,6 +388,7 @@ export class PublicContentService {
       select: {
         id: true,
         name: true,
+        username: true,
         posts: {
           where: { publishedAt: { not: null, lte: now } },
           select: { id: true },
@@ -347,7 +398,7 @@ export class PublicContentService {
 
     return authors.map((author) => ({
       id: author.id,
-      name: author.name,
+      name: author.username || author.name,
       postCount: author.posts.length,
     }));
   }
@@ -355,12 +406,12 @@ export class PublicContentService {
   async findPostsByAuthorId(authorId: string) {
     const author = await this.prisma.user.findUnique({
       where: { id: authorId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, username: true },
     });
     if (!author) throw new NotFoundException(`Author ${authorId} not found`);
 
     const posts = await this.findPublishedPosts({ authorId });
-    return { author, posts };
+    return { author: { ...author, name: author.username || author.name }, posts };
   }
 
   async findRelatedPosts(slug: string) {

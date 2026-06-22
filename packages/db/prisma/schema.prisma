@@ -77,6 +77,7 @@ enum RedirectContentType {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
+  username     String?  @unique
   passwordHash String
   name         String
   role         Role     @default(CLIENT)
@@ -100,6 +101,8 @@ model User {
   walletTransactions WalletTransaction[]
   accountAddresses    AccountAddress[]
   savedPaymentMethods SavedPaymentMethod[]
+  productReviews ProductReview[]
+  postComments   PostComment[]
 
   @@map("users")
 }
@@ -370,6 +373,7 @@ model Post {
   categories Category[]
   featuredMedia MediaAsset? @relation("PostFeaturedMedia", fields: [featuredMediaId], references: [id], onDelete: SetNull)
   tags       Tag[]
+  comments   PostComment[]
 
   @@index([featuredMediaId])
   @@map("posts")
@@ -637,6 +641,7 @@ model Product {
   name        String
   type        ProductType @default(DIGITAL)
   description String?
+  shortDescription String?
   price       Decimal
   regularPrice Decimal?
   salePrice    Decimal?
@@ -661,9 +666,46 @@ model Product {
   featuredMedia MediaAsset? @relation("ProductFeaturedMedia", fields: [featuredMediaId], references: [id], onDelete: SetNull)
   categories Category[]
   tags       Tag[]
+  reviews    ProductReview[]
 
   @@index([featuredMediaId])
   @@map("products")
+}
+
+model ProductReview {
+  id        String   @id @default(cuid())
+  productId String
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, userId])
+  @@index([productId])
+  @@index([userId])
+  @@map("product_reviews")
+}
+
+model PostComment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+  @@map("post_comments")
 }
 
 model ProductVariant {
