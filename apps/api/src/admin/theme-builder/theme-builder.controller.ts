@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   Param,
@@ -127,6 +128,11 @@ export class ThemeBuilderController {
   @Post('themes/:id/activate')
   activateTheme(@Param('id') id: string) {
     return this.themeBuilder.activateTheme(id);
+  }
+
+  @Delete('themes/:id')
+  deleteTheme(@Param('id') id: string) {
+    return this.themeBuilder.deleteTheme(id);
   }
 
   @Post('themes/:id/assets')

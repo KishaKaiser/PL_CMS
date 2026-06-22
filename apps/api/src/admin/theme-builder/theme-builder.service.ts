@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -245,11 +245,22 @@ export class ThemeBuilderService {
   }
 
   async updateTheme(id: string, dto: UpdateThemeDto) {
-    await this.ensureTheme(id);
+    const currentTheme = await this.prisma.cmsTheme.findUnique({ where: { id }, select: { id: true, slug: true } });
+    if (!currentTheme) throw new NotFoundException(`Theme ${id} not found`);
+
+    const nextSlug = dto.slug?.trim();
+    if (nextSlug && nextSlug !== currentTheme.slug) {
+      const existingSlug = await this.prisma.cmsTheme.findUnique({ where: { slug: nextSlug }, select: { id: true } });
+      if (existingSlug && existingSlug.id !== id) {
+        throw new ConflictException(`Theme slug "${nextSlug}" already exists`);
+      }
+    }
+
     return this.prisma.cmsTheme.update({
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(nextSlug !== undefined ? { slug: nextSlug } : {}),
         ...(dto.version !== undefined ? { version: dto.version.trim() || '1.0.0' } : {}),
         ...(dto.description !== undefined ? { description: dto.description?.trim() || null } : {}),
         ...(dto.globalStyles !== undefined ? { globalStyles: toJsonObject(dto.globalStyles) } : {}),
@@ -262,6 +273,20 @@ export class ThemeBuilderService {
       },
       include: { assets: true },
     });
+  }
+
+  async deleteTheme(id: string) {
+    const theme = await this.prisma.cmsTheme.findUnique({
+      where: { id },
+      select: { id: true, isActive: true },
+    });
+    if (!theme) throw new NotFoundException(`Theme ${id} not found`);
+    if (theme.isActive) {
+      throw new BadRequestException('Activate another theme before deleting this active theme');
+    }
+
+    await this.prisma.cmsTheme.delete({ where: { id } });
+    return { success: true };
   }
 
   async saveThemeAssets(themeId: string, dto: SaveThemeAssetsDto) {

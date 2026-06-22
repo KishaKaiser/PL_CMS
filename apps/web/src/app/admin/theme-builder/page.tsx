@@ -258,7 +258,7 @@ export default function ThemeBuilderPage() {
 
   useEffect(() => {
     void fetchResources();
-  }, [fetchResources]);
+  }, []);
 
   async function changeTarget(target: EditorTarget) {
     setEditorTarget(target);
@@ -360,6 +360,26 @@ export default function ThemeBuilderPage() {
       await fetchResources();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Theme activation failed');
+    }
+  }
+
+  async function deleteTheme(theme: CmsTheme) {
+    if (theme.isActive) {
+      setError('Activate another theme before deleting this active theme.');
+      return;
+    }
+    const confirmed = window.confirm(`Delete theme "${theme.name}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setError('');
+    setStatus('');
+    try {
+      const res = await fetch(`/api/proxy/admin/builder/themes/${theme.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await readApiError(res, 'Theme could not be deleted.'));
+      setStatus(`Theme "${theme.name}" deleted.`);
+      await fetchResources();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Theme delete failed');
     }
   }
 
@@ -604,7 +624,10 @@ export default function ThemeBuilderPage() {
                   {theme.isActive ? (
                     <span className="mt-2 inline-block rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-700">Active</span>
                   ) : (
-                    <button onClick={() => void activateTheme(theme.id)} className="mt-2 text-xs text-indigo-600 hover:underline">Activate</button>
+                    <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                      <button onClick={() => void activateTheme(theme.id)} className="text-indigo-600 hover:underline">Activate</button>
+                      <button onClick={() => void deleteTheme(theme)} className="text-red-600 hover:underline">Delete</button>
+                    </div>
                   )}
                 </div>
               ))}
