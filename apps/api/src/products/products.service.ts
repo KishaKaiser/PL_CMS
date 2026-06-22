@@ -3,6 +3,7 @@ import { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto, CreateProductReviewDto, UpdateProductDto } from './products.dto';
 import { sanitizeCmsHtml } from '../admin/admin-content/cms-content.util';
+import { serializeMediaAsset } from '../admin/admin-media/media.util';
 
 @Injectable()
 export class ProductsService {
@@ -12,7 +13,7 @@ export class ProductsService {
     return this.prisma.product.findMany({
       orderBy: { createdAt: 'desc' },
       include: productInclude,
-    });
+    }).then((products) => products.map(serializeProduct));
   }
 
   async findActive() {
@@ -21,7 +22,7 @@ export class ProductsService {
       orderBy: { createdAt: 'desc' },
       include: activeProductInclude,
     });
-    return products.map(applyEffectiveSalePrice);
+    return products.map((product) => applyEffectiveSalePrice(serializeProduct(product)));
   }
 
   async findOne(id: string) {
@@ -30,14 +31,14 @@ export class ProductsService {
       include: productInclude,
     });
     if (!product) throw new NotFoundException(`Product ${id} not found`);
-    return applyEffectiveSalePrice(product);
+    return applyEffectiveSalePrice(serializeProduct(product));
   }
 
   create(dto: CreateProductDto) {
     return this.prisma.product.create({
       data: createProductData(dto),
       include: productInclude,
-    });
+    }).then(serializeProduct);
   }
 
   async update(id: string, dto: UpdateProductDto) {
@@ -46,7 +47,7 @@ export class ProductsService {
       where: { id },
       data: updateProductData(dto),
       include: productInclude,
-    });
+    }).then(serializeProduct);
   }
 
   async remove(id: string) {
@@ -205,4 +206,24 @@ function applyEffectiveSalePrice<
 function normalizeComment(value?: string) {
   const comment = value?.trim();
   return comment || null;
+}
+
+function serializeProduct<
+  T extends {
+    featuredMedia: {
+      id: string;
+      originalName: string;
+      title: string;
+      altText: string | null;
+      mimeType: string;
+      sizeBytes: number;
+      createdAt: Date;
+      updatedAt: Date;
+    } | null;
+  },
+>(product: T) {
+  return {
+    ...product,
+    featuredMedia: product.featuredMedia ? serializeMediaAsset(product.featuredMedia) : null,
+  };
 }
