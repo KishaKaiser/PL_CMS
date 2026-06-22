@@ -32,6 +32,10 @@ export interface PublicSiteConfig {
     footer: SiteMenuItem[];
   };
   theme: SiteThemeSettings;
+  themeLayouts: {
+    header: BuilderLayout | null;
+    footer: BuilderLayout | null;
+  };
   homepageBlocks: SiteHomepageBlock[];
   extensionPoints: SiteExtensionPoints;
 }
@@ -49,6 +53,10 @@ const DEFAULT_PUBLIC_SITE_CONFIG: PublicSiteConfig = {
   },
   menus: DEFAULT_SITE_MENUS,
   theme: { ...DEFAULT_SITE_THEME, heroPrimaryHref: '/blog' },
+  themeLayouts: {
+    header: null,
+    footer: null,
+  },
   homepageBlocks: buildDefaultHomepageBlocks('/blog'),
   extensionPoints: DEFAULT_SITE_EXTENSION_POINTS,
 };

@@ -27,21 +27,27 @@ async function getProducts(): Promise<Product[]> {
   }
 }
 
-export async function BuilderContent({ layout }: { layout: BuilderLayout }) {
+export async function BuilderContent({
+  layout,
+  showChrome = true,
+}: {
+  layout: BuilderLayout;
+  showChrome?: boolean;
+}) {
   const [products, categories, tags] = await Promise.all([getProducts(), getCategories(), getTags()]);
   const storeData = { products, categories, tags };
 
   return (
     <div>
-      {layout.settings?.breadcrumbs !== false && (
+      {showChrome && layout.settings?.breadcrumbs !== false && (
         <nav className="border-b bg-gray-50 px-8 py-3 text-sm text-gray-500">
           <Link href="/">Home</Link>
           <span className="mx-2">/</span>
           <span>Page</span>
         </nav>
       )}
-      <div className={pageShellClass(layout.settings?.layout)}>
-        {layout.settings?.layout === 'sidebar-left' && <DefaultSidebar />}
+      <div className={showChrome ? pageShellClass(layout.settings?.layout) : ''}>
+        {showChrome && layout.settings?.layout === 'sidebar-left' && <DefaultSidebar />}
         <div>
           {layout.sections.map((section) => (
             <section
@@ -59,7 +65,7 @@ export async function BuilderContent({ layout }: { layout: BuilderLayout }) {
             </section>
           ))}
         </div>
-        {layout.settings?.layout === 'sidebar-right' && <DefaultSidebar />}
+        {showChrome && layout.settings?.layout === 'sidebar-right' && <DefaultSidebar />}
       </div>
     </div>
   );

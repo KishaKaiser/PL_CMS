@@ -586,6 +586,8 @@ export default function ThemeBuilderPage() {
           <div className="mx-auto transition-all" style={{ maxWidth: responsiveWidth(responsiveMode) }}>
             <BuilderPreview
               layout={layout}
+              activeTheme={activeTheme}
+              editorTarget={editorTarget}
               components={components}
               theme={previewTheme}
               storePreview={storePreview}
@@ -809,6 +811,8 @@ function BlockEditor({
 
 function BuilderPreview({
   layout,
+  activeTheme,
+  editorTarget,
   components,
   theme,
   storePreview,
@@ -820,6 +824,95 @@ function BuilderPreview({
   onAddBlock,
 }: {
   layout: BuilderLayout;
+  activeTheme: CmsTheme | null;
+  editorTarget: EditorTarget;
+  components: GlobalComponent[];
+  theme: ThemePreviewStyles;
+  storePreview: StorePreviewData;
+  selectedBlockId: string;
+  onSelectBlock: (id: string) => void;
+  onRemoveBlock: (id: string) => void;
+  onDragStart: (id: string) => void;
+  onMoveBlock: (sectionId: string, index: number) => void;
+  onAddBlock: (type: BuilderBlockType, sectionId: string) => void;
+}) {
+  const headerLayout = editorTarget === 'theme-header' ? layout : activeTheme ? getThemeLayout(activeTheme, 'theme-header') : null;
+  const footerLayout = editorTarget === 'theme-footer' ? layout : activeTheme ? getThemeLayout(activeTheme, 'theme-footer') : null;
+  const pageLayout = editorTarget === 'theme-page' || editorTarget === 'page'
+    ? layout
+    : activeTheme
+      ? getThemeLayout(activeTheme, 'theme-page')
+      : emptyLayout;
+
+  return (
+    <div className="min-h-[calc(100vh-112px)] overflow-hidden bg-white shadow-xl" style={{ fontFamily: theme.fontFamily }}>
+      {headerLayout && (
+        <PreviewLayout
+          layout={headerLayout}
+          active={editorTarget === 'theme-header'}
+          showChrome={false}
+          components={components}
+          theme={theme}
+          storePreview={storePreview}
+          selectedBlockId={selectedBlockId}
+          onSelectBlock={onSelectBlock}
+          onRemoveBlock={onRemoveBlock}
+          onDragStart={onDragStart}
+          onMoveBlock={onMoveBlock}
+          onAddBlock={onAddBlock}
+        />
+      )}
+      <PreviewLayout
+        layout={pageLayout}
+        active={editorTarget === 'theme-page' || editorTarget === 'page'}
+        showChrome
+        components={components}
+        theme={theme}
+        storePreview={storePreview}
+        selectedBlockId={selectedBlockId}
+        onSelectBlock={onSelectBlock}
+        onRemoveBlock={onRemoveBlock}
+        onDragStart={onDragStart}
+        onMoveBlock={onMoveBlock}
+        onAddBlock={onAddBlock}
+      />
+      {footerLayout && (
+        <PreviewLayout
+          layout={footerLayout}
+          active={editorTarget === 'theme-footer'}
+          showChrome={false}
+          components={components}
+          theme={theme}
+          storePreview={storePreview}
+          selectedBlockId={selectedBlockId}
+          onSelectBlock={onSelectBlock}
+          onRemoveBlock={onRemoveBlock}
+          onDragStart={onDragStart}
+          onMoveBlock={onMoveBlock}
+          onAddBlock={onAddBlock}
+        />
+      )}
+    </div>
+  );
+}
+
+function PreviewLayout({
+  layout,
+  active,
+  showChrome,
+  components,
+  theme,
+  storePreview,
+  selectedBlockId,
+  onSelectBlock,
+  onRemoveBlock,
+  onDragStart,
+  onMoveBlock,
+  onAddBlock,
+}: {
+  layout: BuilderLayout;
+  active: boolean;
+  showChrome: boolean;
   components: GlobalComponent[];
   theme: ThemePreviewStyles;
   storePreview: StorePreviewData;
@@ -831,33 +924,35 @@ function BuilderPreview({
   onAddBlock: (type: BuilderBlockType, sectionId: string) => void;
 }) {
   return (
-    <div className="min-h-[calc(100vh-112px)] overflow-hidden bg-white shadow-xl" style={{ fontFamily: theme.fontFamily }}>
-      {layout.settings?.breadcrumbs !== false && (
+    <div>
+      {showChrome && layout.settings?.breadcrumbs !== false && (
         <div className="border-b bg-gray-50 px-8 py-3 text-sm text-gray-500">Home / Preview</div>
       )}
-      <div className={pageShellClass(layout.settings?.layout)}>
-        {layout.settings?.layout === 'sidebar-left' && <PreviewSidebar />}
+      <div className={showChrome ? pageShellClass(layout.settings?.layout) : ''}>
+        {showChrome && layout.settings?.layout === 'sidebar-left' && <PreviewSidebar />}
         <div>
           {layout.sections.map((section) => (
-            <section key={section.id} style={{ background: section.settings.background, padding: section.settings.padding }} onDragOver={(event) => event.preventDefault()} onDrop={() => onMoveBlock(section.id, section.blocks.length)} className="group/section relative">
-              <div className="absolute right-3 top-3 z-10 hidden gap-2 rounded bg-white/90 p-2 shadow group-hover/section:flex">
-                <button onClick={() => onAddBlock('heading', section.id)} className="rounded border px-2 py-1 text-xs">Heading</button>
-                <button onClick={() => onAddBlock('text', section.id)} className="rounded border px-2 py-1 text-xs">Text</button>
-                <button onClick={() => onAddBlock('image', section.id)} className="rounded border px-2 py-1 text-xs">Image</button>
-              </div>
+            <section key={section.id} style={{ background: section.settings.background, padding: section.settings.padding }} onDragOver={(event) => event.preventDefault()} onDrop={() => active && onMoveBlock(section.id, section.blocks.length)} className="group/section relative">
+              {active && (
+                <div className="absolute right-3 top-3 z-10 hidden gap-2 rounded bg-white/90 p-2 shadow group-hover/section:flex">
+                  <button onClick={() => onAddBlock('heading', section.id)} className="rounded border px-2 py-1 text-xs">Heading</button>
+                  <button onClick={() => onAddBlock('text', section.id)} className="rounded border px-2 py-1 text-xs">Text</button>
+                  <button onClick={() => onAddBlock('image', section.id)} className="rounded border px-2 py-1 text-xs">Image</button>
+                </div>
+              )}
               <div className={section.settings.layout === 'full' ? '' : 'mx-auto max-w-5xl'}>
                 {section.blocks.length === 0 ? (
-                  <button onClick={() => onAddBlock('heading', section.id)} className="w-full rounded border border-dashed p-10 text-sm text-gray-500">Add content</button>
+                  active ? <button onClick={() => onAddBlock('heading', section.id)} className="w-full rounded border border-dashed p-10 text-sm text-gray-500">Add content</button> : null
                 ) : (
                   section.blocks.map((block, index) => (
-                    <EditableBlock key={block.id} block={block} components={components} theme={theme} storePreview={storePreview} selected={selectedBlockId === block.id} onSelect={() => onSelectBlock(block.id)} onRemove={() => onRemoveBlock(block.id)} onDragStart={() => onDragStart(block.id)} onDrop={() => onMoveBlock(section.id, index)} />
+                    <EditableBlock key={block.id} block={block} components={components} theme={theme} storePreview={storePreview} selected={selectedBlockId === block.id} onSelect={() => active && onSelectBlock(block.id)} onRemove={() => active && onRemoveBlock(block.id)} onDragStart={() => active && onDragStart(block.id)} onDrop={() => active && onMoveBlock(section.id, index)} />
                   ))
                 )}
               </div>
             </section>
           ))}
         </div>
-        {layout.settings?.layout === 'sidebar-right' && <PreviewSidebar />}
+        {showChrome && layout.settings?.layout === 'sidebar-right' && <PreviewSidebar />}
       </div>
     </div>
   );
