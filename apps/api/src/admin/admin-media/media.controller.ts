@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Res, StreamableFile, UploadedFile, UnsupportedMediaTypeException, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Res, StreamableFile, UploadedFile, UnsupportedMediaTypeException, UseGuards, UseInterceptors } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -61,6 +61,13 @@ export class MediaController {
   )
   upload(@UploadedFile() file: Express.Multer.File | undefined, @Body() dto: UploadMediaDto) {
     return this.mediaService.create(file, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  delete(@Param('id') id: string) {
+    return this.mediaService.delete(id);
   }
 
   @Get(':id/file')
