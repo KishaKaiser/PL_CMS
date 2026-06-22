@@ -318,12 +318,29 @@ export default function ThemeBuilderPage() {
   async function createThemeFromCurrentLayout(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     setError('');
-    setStatus('');
+    setStatus('Creating theme...');
     try {
+      const requestedSlug = slugify(themeForm.slug || themeForm.name) || 'custom-theme';
+      const nextSlug = getUniqueThemeSlug(requestedSlug, themes);
+      const nextName = themes.some((theme) => theme.slug === requestedSlug)
+        ? `${themeForm.name} Copy`
+        : themeForm.name;
       const res = await fetch('/api/proxy/admin/builder/themes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildThemePayload(themeForm, layout, widgets, activeTheme, editorTarget)),
+        body: JSON.stringify(
+          buildThemePayload(
+            {
+              ...themeForm,
+              name: nextName,
+              slug: nextSlug,
+            },
+            layout,
+            widgets,
+            activeTheme,
+            editorTarget,
+          ),
+        ),
       });
       if (!res.ok) throw new Error(await readApiError(res, 'Theme could not be created.'));
       setStatus('Theme created and activated.');
@@ -567,7 +584,14 @@ export default function ThemeBuilderPage() {
                 <label className="text-xs font-medium text-gray-600">Accent<input type="color" value={themeForm.accentColor} onChange={(event) => setThemeForm((current) => ({ ...current, accentColor: event.target.value }))} className="mt-1 h-10 w-full rounded border" /></label>
               </div>
               <input value={themeForm.fontFamily} onChange={(event) => setThemeForm((current) => ({ ...current, fontFamily: event.target.value }))} placeholder="Font family" className="w-full rounded border px-3 py-2 text-sm" />
-              <button className="w-full rounded bg-gray-900 px-3 py-2 text-sm text-white">Create New Theme</button>
+              {activeTheme && (
+                <button type="button" onClick={() => void saveCurrentTarget()} className="w-full rounded bg-indigo-600 px-3 py-2 text-sm text-white hover:bg-indigo-700">
+                  Save Active Theme
+                </button>
+              )}
+              <button type="submit" className="w-full rounded bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-800">
+                Duplicate as New Theme
+              </button>
             </form>
           </Panel>
 
@@ -857,6 +881,28 @@ function buildThemePayload(
     widgetRegistry: mergeWidgets(widgets).filter((widget) => widget.enabled).map((widget) => widget.type),
     schemaJson: { builderVersion: 1, supports: ['global-theme', 'pages', 'headers', 'footers', 'store-widgets'] },
   };
+}
+
+function getUniqueThemeSlug(value: string, themes: CmsTheme[]) {
+  const existingSlugs = new Set(themes.map((theme) => theme.slug));
+  const baseSlug = slugify(value) || 'custom-theme';
+  if (!existingSlugs.has(baseSlug)) return baseSlug;
+
+  let index = 2;
+  let nextSlug = `${baseSlug}-${index}`;
+  while (existingSlugs.has(nextSlug)) {
+    index += 1;
+    nextSlug = `${baseSlug}-${index}`;
+  }
+  return nextSlug;
+}
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
 }
 
 function getThemeLayout(theme: CmsTheme, target: EditorTarget): BuilderLayout {
