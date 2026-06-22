@@ -44,6 +44,10 @@ type PublicSiteConfig = {
     footer: SiteMenuItem[];
   };
   theme: SiteThemeSettings;
+  themeLayouts: {
+    header: Prisma.JsonValue | null;
+    footer: Prisma.JsonValue | null;
+  };
   homepageBlocks: SiteHomepageBlock[];
   extensionPoints: SiteExtensionPoints;
 };
@@ -98,7 +102,7 @@ export class PublicContentService {
       this.prisma.cmsTheme.findFirst({
         where: { isActive: true },
         orderBy: { updatedAt: 'desc' },
-        select: { globalStyles: true },
+        select: { globalStyles: true, templates: true },
       }),
     ]);
 
@@ -139,6 +143,10 @@ export class PublicContentService {
       postsPage,
       menus,
       theme,
+      themeLayouts: {
+        header: this.getThemeTemplateLayout(activeCmsTheme?.templates, 'header'),
+        footer: this.getThemeTemplateLayout(activeCmsTheme?.templates, 'footer'),
+      },
       homepageBlocks,
       extensionPoints,
     };
@@ -699,12 +707,23 @@ export class PublicContentService {
   }
 
   private getThemePageLayout(value: Prisma.JsonValue | undefined) {
+    const pageLayout = this.getThemeTemplateLayout(value, 'page');
+    return pageLayout;
+  }
+
+  private getThemeTemplateLayout(value: Prisma.JsonValue | undefined, template: 'header' | 'footer' | 'page') {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    if (template === 'header' || template === 'footer') {
+      const layout = (value as Record<string, unknown>)[template];
+      if (!layout || typeof layout !== 'object' || Array.isArray(layout)) return null;
+      return Array.isArray((layout as Record<string, unknown>).sections) ? (layout as Prisma.JsonValue) : null;
+    }
+
     const pageTypes = (value as Record<string, unknown>).pageTypes;
     if (!pageTypes || typeof pageTypes !== 'object' || Array.isArray(pageTypes)) return null;
     const pageLayout = (pageTypes as Record<string, unknown>).page;
     if (!pageLayout || typeof pageLayout !== 'object' || Array.isArray(pageLayout)) return null;
-    return Array.isArray((pageLayout as Record<string, unknown>).sections) ? pageLayout : null;
+    return Array.isArray((pageLayout as Record<string, unknown>).sections) ? (pageLayout as Prisma.JsonValue) : null;
   }
 
   private normalizeMenuItems(value: unknown): SiteMenuItem[] {
