@@ -7,6 +7,7 @@ import {
   LatestPostsBlock,
 } from '../components/public-content-blocks';
 import { PublicSiteShell } from '../components/public-site-shell';
+import { BuilderContent } from '../components/cms/builder-content';
 import { RichContent } from '../components/cms/rich-content';
 import {
   getPublishedPage,
@@ -76,7 +77,18 @@ export default async function HomePage({ searchParams }: Props) {
     .slice(0, MAX_FEATURED_PAGES);
   const featuredPosts = posts.slice(0, MAX_FEATURED_POSTS);
   const homePageImageSrc = getSafeImageSrc(homePage?.featuredImageUrl);
-  const showHomePageTitle = homePage?.builderLayout?.settings?.showTitle !== false;
+  const builderLayout = homePage?.builderLayout;
+  const showHomePageTitle = builderLayout?.settings?.showTitle !== false;
+
+  if (homePage && builderLayout) {
+    return (
+      <PublicSiteShell siteConfig={siteConfig}>
+        <main>
+          <BuilderContent layout={builderLayout} />
+        </main>
+      </PublicSiteShell>
+    );
+  }
 
   if (managedHomepageSlug && homePage) {
     return (
