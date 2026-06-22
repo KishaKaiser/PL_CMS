@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 interface User {
   id: string;
   email: string;
+  username?: string | null;
   name: string;
   role: string;
   createdAt: string;
@@ -12,6 +13,7 @@ interface User {
 
 interface CreateUserForm {
   name: string;
+  username: string;
   email: string;
   role: string;
   password: string;
@@ -20,6 +22,7 @@ interface CreateUserForm {
 const ROLES = ['ADMIN', 'EDITOR', 'ADVISOR', 'CLIENT'];
 const emptyCreateForm: CreateUserForm = {
   name: '',
+  username: '',
   email: '',
   role: 'CLIENT',
   password: '',
@@ -152,6 +155,18 @@ export default function AdminUsersPage() {
               />
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700">Username</label>
+              <input
+                required
+                value={createForm.username}
+                onChange={(event) =>
+                  setCreateForm((currentForm) => ({ ...currentForm, username: event.target.value }))
+                }
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                placeholder="client123"
+              />
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700">Email</label>
               <input
                 required
@@ -213,8 +228,9 @@ export default function AdminUsersPage() {
             <div key={user.id} className="rounded-lg border bg-white shadow-sm">
               <div className="flex items-center justify-between px-4 py-3">
                 <div>
-                  <span className="font-medium">{user.name}</span>
+                  <span className="font-medium">{user.username || user.name}</span>
                   <span className="ml-3 text-sm text-gray-500">{user.email}</span>
+                  {user.username && <span className="ml-3 text-xs text-gray-400">{user.name}</span>}
                 </div>
                 <div className="flex items-center gap-3">
                   <select

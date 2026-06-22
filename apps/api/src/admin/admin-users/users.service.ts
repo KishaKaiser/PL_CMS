@@ -17,14 +17,14 @@ export class AdminUsersService {
   findAll() {
     return this.prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      select: userSelect,
     });
   }
 
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      select: userSelect,
     });
     if (!user) throw new NotFoundException(`User ${id} not found`);
     return user;
@@ -32,22 +32,28 @@ export class AdminUsersService {
 
   async create(dto: CreateUserDto) {
     const email = normalizeEmailInput(dto.email);
+    const username = normalizeUsername(dto.username);
     const name = dto.name.trim();
     if (!name) throw new BadRequestException('Name is required');
 
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) throw new ConflictException(`User with email "${email}" already exists`);
+    if (username) {
+      const existingUsername = await this.prisma.user.findUnique({ where: { username } });
+      if (existingUsername) throw new ConflictException(`Username "${username}" already exists`);
+    }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           email,
+          username,
           name,
           role: dto.role,
           passwordHash,
         },
-        select: { id: true, email: true, name: true, role: true, createdAt: true },
+        select: userSelect,
       });
 
       if (dto.role === Role.CLIENT) {
@@ -71,7 +77,7 @@ export class AdminUsersService {
     return this.prisma.user.update({
       where: { id },
       data: { role: dto.role },
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      select: userSelect,
     });
   }
 
@@ -81,4 +87,11 @@ export class AdminUsersService {
     await this.prisma.user.update({ where: { id }, data: { passwordHash } });
     return { message: 'Password reset successfully' };
   }
+}
+
+const userSelect = { id: true, email: true, username: true, name: true, role: true, createdAt: true } as const;
+
+function normalizeUsername(value?: string) {
+  const username = value?.trim().toLowerCase();
+  return username || null;
 }

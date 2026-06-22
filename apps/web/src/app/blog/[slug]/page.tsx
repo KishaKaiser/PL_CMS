@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { PublicSiteShell } from '../../../components/public-site-shell';
 import { RichContent } from '../../../components/cms/rich-content';
+import { ReviewSection } from '../../../components/reviews/review-section';
 import { getPublishedPost, getPublicSiteConfig, getRelatedPosts, resolvePostRedirect, toPlainText } from '../../../lib/public-cms';
 import { buildSeoMetadata, getSeoDescription, getSeoTitle } from '../../../lib/seo';
 
@@ -77,6 +78,8 @@ export default async function BlogPostPage({ params }: Props) {
             {post.excerpt && <p className="mt-6 text-lg text-gray-600">{toPlainText(post.excerpt)}</p>}
 
             <RichContent html={post.content} className="prose mt-6 max-w-none text-gray-800" />
+
+            <ReviewSection title="Comments and Ratings" endpoint={`/api/proxy/public/posts/${post.slug}/comments`} />
 
             {relatedPosts.length > 0 && (
               <section className="mt-10 border-t pt-8">

@@ -1,6 +1,8 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { PublicContentService } from './public-content.service';
 import {
+  CreatePostCommentDto,
   PublicAuthorParamDto,
   PublicPagesQueryDto,
   PublicPostsQueryDto,
@@ -51,6 +53,21 @@ export class PublicContentController {
   @Get('posts/:slug')
   findPostBySlug(@Param() params: PublicSlugParamDto) {
     return this.publicContentService.findPublishedPostBySlug(params.slug);
+  }
+
+  @Get('posts/:slug/comments')
+  findPostComments(@Param() params: PublicSlugParamDto) {
+    return this.publicContentService.findPostComments(params.slug);
+  }
+
+  @Post('posts/:slug/comments')
+  @UseGuards(AuthGuard('jwt'))
+  createPostComment(
+    @Param() params: PublicSlugParamDto,
+    @Request() req: { user: { id: string } },
+    @Body() dto: CreatePostCommentDto,
+  ) {
+    return this.publicContentService.createPostComment(params.slug, req.user.id, dto);
   }
 
   @Get('posts/:slug/redirect')

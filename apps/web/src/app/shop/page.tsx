@@ -1,9 +1,13 @@
 import Link from 'next/link';
+import { getSafeImageSrc } from '../../lib/public-cms';
 
 interface Product {
   id: string;
   name: string;
+  shortDescription?: string | null;
   description?: string;
+  imageUrl?: string | null;
+  featuredMedia?: { url: string; altText?: string | null; title?: string | null } | null;
   price: string | number;
   currency: string;
   minutesPack: number;
@@ -48,9 +52,16 @@ export default async function ShopPage() {
               key={p.id}
               className="flex flex-col rounded-lg border bg-white p-5 shadow-sm"
             >
+              {getSafeImageSrc(p.featuredMedia?.url ?? p.imageUrl) && (
+                <img
+                  src={getSafeImageSrc(p.featuredMedia?.url ?? p.imageUrl) ?? ''}
+                  alt={p.featuredMedia?.altText || p.featuredMedia?.title || p.name}
+                  className="mb-4 h-44 w-full rounded-md object-cover"
+                />
+              )}
               <h2 className="text-lg font-semibold">{p.name}</h2>
-              {p.description && (
-                <p className="mt-1 flex-1 text-sm text-gray-500">{p.description}</p>
+              {(p.shortDescription || p.description) && (
+                <p className="mt-1 flex-1 text-sm text-gray-500">{p.shortDescription || p.description}</p>
               )}
               <div className="mt-3 flex items-baseline gap-1">
                 <span className="text-2xl font-bold text-indigo-700">
@@ -82,4 +93,3 @@ export default async function ShopPage() {
     </main>
   );
 }
-

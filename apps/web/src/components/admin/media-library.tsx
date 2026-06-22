@@ -196,12 +196,12 @@ export function MediaLibrary({
             <div>
               <label className="block text-xs font-medium text-gray-700">Upload file</label>
               <input
-                key={uploadFile?.name ?? 'empty'}
                 type="file"
                 accept={ACCEPTED_UPLOAD_TYPES}
                 onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
                 className="mt-1 block w-full text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-indigo-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-indigo-700"
               />
+              {uploadFile && <p className="mt-1 truncate text-xs text-gray-500">{uploadFile.name}</p>}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700">Title</label>

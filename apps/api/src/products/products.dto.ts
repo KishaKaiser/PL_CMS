@@ -2,10 +2,12 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
   Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -16,6 +18,10 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  shortDescription?: string;
 
   @IsNumber()
   @Min(0.01)
@@ -116,6 +122,10 @@ export class UpdateProductDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  shortDescription?: string;
+
+  @IsOptional()
   @IsNumber()
   @Min(0.01)
   @Type(() => Number)
@@ -204,4 +214,16 @@ export class UpdateProductDto {
   @IsArray()
   @IsString({ each: true })
   tagIds?: string[];
+}
+
+export class CreateProductReviewDto {
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  @Type(() => Number)
+  rating!: number;
+
+  @IsOptional()
+  @IsString()
+  comment?: string;
 }

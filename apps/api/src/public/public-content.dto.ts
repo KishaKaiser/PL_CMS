@@ -84,3 +84,17 @@ export class PublicPostsQueryDto {
   @Max(12)
   month?: number;
 }
+
+export class CreatePostCommentDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  rating!: number;
+
+  @Transform(trimValue)
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  comment?: string;
+}

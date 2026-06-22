@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateProductDto, UpdateProductDto } from './products.dto';
+import { CreateProductDto, CreateProductReviewDto, UpdateProductDto } from './products.dto';
+import { sanitizeCmsHtml } from '../admin/admin-content/cms-content.util';
 
 @Injectable()
 export class ProductsService {
@@ -52,6 +53,45 @@ export class ProductsService {
     await this.findOne(id);
     return this.prisma.product.delete({ where: { id } });
   }
+
+  async listReviews(productId: string) {
+    await this.findOne(productId);
+    return this.prisma.productReview.findMany({
+      where: { productId },
+      orderBy: { createdAt: 'desc' },
+      select: reviewSelect,
+    });
+  }
+
+  async createReview(productId: string, userId: string, dto: CreateProductReviewDto) {
+    await this.findOne(productId);
+    const purchased = await this.prisma.order.findFirst({
+      where: {
+        userId,
+        status: { in: ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'COMPLETED'] },
+        items: { some: { productId } },
+      },
+      select: { id: true },
+    });
+    if (!purchased) {
+      throw new ForbiddenException('Only customers who purchased this product can leave a review.');
+    }
+
+    return this.prisma.productReview.upsert({
+      where: { productId_userId: { productId, userId } },
+      create: {
+        productId,
+        userId,
+        rating: dto.rating,
+        comment: normalizeComment(dto.comment),
+      },
+      update: {
+        rating: dto.rating,
+        comment: normalizeComment(dto.comment),
+      },
+      select: reviewSelect,
+    });
+  }
 }
 
 const productInclude = {
@@ -70,11 +110,20 @@ const activeProductInclude = {
   },
 };
 
+const reviewSelect = {
+  id: true,
+  rating: true,
+  comment: true,
+  createdAt: true,
+  user: { select: { id: true, username: true, name: true } },
+} as const;
+
 function createProductData(dto: CreateProductDto): Prisma.ProductCreateInput {
   const regularPrice = dto.regularPrice ?? dto.price;
   return {
     name: dto.name,
-    description: dto.description,
+    description: dto.description ? sanitizeCmsHtml(dto.description) : null,
+    shortDescription: dto.shortDescription ?? null,
     price: dto.price,
     regularPrice,
     salePrice: dto.salePrice ?? null,
@@ -101,7 +150,8 @@ function createProductData(dto: CreateProductDto): Prisma.ProductCreateInput {
 function updateProductData(dto: UpdateProductDto): Prisma.ProductUpdateInput {
   return {
     ...(dto.name !== undefined ? { name: dto.name } : {}),
-    ...(dto.description !== undefined ? { description: dto.description || null } : {}),
+    ...(dto.description !== undefined ? { description: dto.description ? sanitizeCmsHtml(dto.description) : null } : {}),
+    ...(dto.shortDescription !== undefined ? { shortDescription: dto.shortDescription || null } : {}),
     ...(dto.price !== undefined ? { price: dto.price } : {}),
     ...(dto.regularPrice !== undefined ? { regularPrice: dto.regularPrice } : {}),
     ...(dto.salePrice !== undefined ? { salePrice: dto.salePrice } : {}),
@@ -150,4 +200,9 @@ function applyEffectiveSalePrice<
     return { ...product, price: product.salePrice };
   }
   return product;
+}
+
+function normalizeComment(value?: string) {
+  const comment = value?.trim();
+  return comment || null;
 }
