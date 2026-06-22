@@ -128,6 +128,13 @@ export class UpdateThemeDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^[a-z0-9][a-z0-9-]*$/i, {
+    message: 'slug must use letters, numbers, and hyphens',
+  })
+  slug?: string;
+
+  @IsOptional()
+  @IsString()
   version?: string;
 
   @IsOptional()
