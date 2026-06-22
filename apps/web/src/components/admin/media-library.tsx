@@ -148,6 +148,27 @@ export function MediaLibrary({
     }
   }
 
+  async function handleDelete(asset: MediaAsset) {
+    const confirmed = window.confirm(`Delete "${asset.title}" from the media library? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setError('');
+    setNotice('');
+
+    try {
+      const response = await fetch(`/api/proxy/media/${asset.id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? 'Delete failed.');
+      }
+
+      setAssets((currentAssets) => currentAssets.filter((currentAsset) => currentAsset.id !== asset.id));
+      setNotice(`Deleted ${asset.title}.`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Delete failed.');
+    }
+  }
+
   return (
     <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
       <div className="border-b border-gray-200 px-4 py-4">
@@ -302,6 +323,13 @@ export function MediaLibrary({
                         className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                       >
                         Copy URL
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(asset)}
+                        className="rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                      >
+                        Delete
                       </button>
                     </div>
                   </div>

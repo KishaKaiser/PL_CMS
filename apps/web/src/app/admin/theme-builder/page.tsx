@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import type { MediaAsset } from '../../../components/admin/media-library';
 
 type BuilderBlockType =
   | 'heading'
@@ -158,6 +159,7 @@ export default function ThemeBuilderPage() {
   const [themes, setThemes] = useState<CmsTheme[]>([]);
   const [widgets, setWidgets] = useState<BuilderWidget[]>(defaultWidgets);
   const [storePreview, setStorePreview] = useState<StorePreviewData>(emptyStorePreview);
+  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [layout, setLayout] = useState<BuilderLayout>(emptyLayout);
   const [editorTarget, setEditorTarget] = useState<EditorTarget>('theme-page');
   const [selectedPageId, setSelectedPageId] = useState('');
@@ -194,8 +196,14 @@ export default function ThemeBuilderPage() {
         }
         const res = await fetch(`/api/proxy/admin/builder/layouts/page/${pageId}`);
         if (!res.ok) throw new Error('Unable to load page layout');
-        const data = (await res.json()) as { draftJson?: BuilderLayout };
-        setLayout(normalizeLayout(data.draftJson));
+        const data = (await res.json()) as { draftJson?: BuilderLayout; version?: number };
+        setLayout(
+          data.version && data.version > 0 && data.draftJson
+            ? normalizeLayout(data.draftJson)
+            : theme
+              ? getThemeLayout(theme, 'theme-page')
+              : emptyLayout,
+        );
         return;
       }
       if (!theme) {
@@ -211,11 +219,12 @@ export default function ThemeBuilderPage() {
     setError('');
     try {
       await fetch('/api/proxy/admin/builder/defaults/ensure', { method: 'POST' });
-      const [pagesRes, componentsRes, themesRes, widgetsRes, productsRes, categoriesRes, tagsRes] = await Promise.all([
+      const [pagesRes, componentsRes, themesRes, widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes] = await Promise.all([
         fetch('/api/proxy/pages'),
         fetch('/api/proxy/admin/builder/components'),
         fetch('/api/proxy/admin/builder/themes'),
         fetch('/api/proxy/admin/builder/widgets'),
+        fetch('/api/proxy/media'),
         fetch('/api/proxy/products/all'),
         fetch('/api/proxy/admin/categories'),
         fetch('/api/proxy/admin/tags'),
@@ -234,6 +243,7 @@ export default function ThemeBuilderPage() {
       setComponents((await componentsRes.json()) as GlobalComponent[]);
       setThemes(nextThemes);
       setWidgets(nextWidgets.length > 0 ? mergeWidgets(nextWidgets) : defaultWidgets);
+      setMediaAssets(mediaRes.ok ? ((await mediaRes.json()) as MediaAsset[]).filter((asset) => asset.isImage) : []);
       setStorePreview({
         products: productsRes.ok ? ((await productsRes.json()) as ProductPreview[]) : [],
         categories: categoriesRes.ok ? ((await categoriesRes.json()) as TaxonomyPreview[]) : [],
@@ -670,7 +680,12 @@ export default function ThemeBuilderPage() {
 
           <Panel title="Selected Block">
             {selectedBlock ? (
-              <BlockEditor block={selectedBlock} onChange={(props) => updateBlock(selectedBlock.id, props)} theme={previewTheme} />
+              <BlockEditor
+                block={selectedBlock}
+                onChange={(props) => updateBlock(selectedBlock.id, props)}
+                theme={previewTheme}
+                mediaAssets={mediaAssets}
+              />
             ) : (
               <p className="text-sm text-gray-500">Select content in the live preview.</p>
             )}
@@ -690,10 +705,22 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function BlockEditor({ block, onChange, theme }: { block: BuilderBlock; onChange: (props: Record<string, unknown>) => void; theme: ThemePreviewStyles }) {
+function BlockEditor({
+  block,
+  onChange,
+  theme,
+  mediaAssets,
+}: {
+  block: BuilderBlock;
+  onChange: (props: Record<string, unknown>) => void;
+  theme: ThemePreviewStyles;
+  mediaAssets: MediaAsset[];
+}) {
   const text = String(block.props.text ?? block.props.label ?? '');
   const href = String(block.props.href ?? '');
   const imageUrl = String(block.props.src ?? '');
+  const mediaId = String(block.props.mediaId ?? '');
+  const selectedMedia = mediaAssets.find((asset) => asset.id === mediaId) ?? mediaAssets.find((asset) => asset.url === imageUrl) ?? null;
   const fontFamily = String(block.props.fontFamily ?? theme.fontFamily);
   const fontSize = Number(block.props.fontSize ?? (block.type === 'heading' ? 42 : 16));
   const color = String(block.props.color ?? (block.type === 'heading' ? theme.primaryColor : '#374151'));
@@ -726,7 +753,34 @@ function BlockEditor({ block, onChange, theme }: { block: BuilderBlock; onChange
       )}
       {block.type === 'image' && (
         <>
-          <label className="block text-sm font-medium text-gray-700">Image URL<input value={imageUrl} onChange={(event) => onChange({ src: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">
+            Image
+            <select
+              value={selectedMedia?.id ?? ''}
+              onChange={(event) => {
+                const asset = mediaAssets.find((item) => item.id === event.target.value);
+                onChange(asset ? { mediaId: asset.id, src: asset.url, alt: asset.altText || asset.title || asset.originalName } : { mediaId: '', src: '', alt: '' });
+              }}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            >
+              <option value="">Choose from media library</option>
+              {mediaAssets.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.title || asset.originalName}
+                </option>
+              ))}
+            </select>
+          </label>
+          {selectedMedia ? (
+            <div className="overflow-hidden rounded border bg-gray-50">
+              <img src={selectedMedia.url} alt={selectedMedia.altText || selectedMedia.title} className="h-32 w-full object-cover" />
+              <p className="truncate px-3 py-2 text-xs text-gray-600">{selectedMedia.originalName}</p>
+            </div>
+          ) : (
+            <p className="rounded border border-dashed px-3 py-2 text-xs text-gray-500">
+              Upload images in Media Library, then refresh Theme Builder to select them here.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <input type="number" value={Number(block.props.width ?? 100)} onChange={(event) => onChange({ width: Number(event.target.value) })} className="rounded border px-3 py-2 text-sm" placeholder="Width %" />
             <input type="number" value={Number(block.props.height ?? 320)} onChange={(event) => onChange({ height: Number(event.target.value) })} className="rounded border px-3 py-2 text-sm" placeholder="Height px" />
@@ -941,7 +995,7 @@ function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlo
   if (widget?.defaultJson && Object.keys(widget.defaultJson).length > 0) return { ...JSON.parse(JSON.stringify(widget.defaultJson)), id, type };
   if (type === 'heading') return { id, type, props: { text: 'New Heading', level: 2, fontSize: 36, align: 'left' } };
   if (type === 'text') return { id, type, props: { text: 'New text block.', fontSize: 16, align: 'left' } };
-  if (type === 'image') return { id, type, props: { src: '', alt: '', width: 100, height: 320, objectFit: 'cover', align: 'center', borderRadius: 8 } };
+  if (type === 'image') return { id, type, props: { mediaId: '', src: '', alt: '', width: 100, height: 320, objectFit: 'cover', align: 'center', borderRadius: 8 } };
   if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#' } };
   if (type === 'columns') return { id, type, props: { columns: 2 }, children: [] };
   if (type === 'product-grid') return { id, type, props: { limit: 3 } };

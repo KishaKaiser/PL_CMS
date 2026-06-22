@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { createReadStream, existsSync } from 'fs';
+import { unlink } from 'fs/promises';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ListMediaDto, UploadMediaDto } from './media.dto';
 import {
@@ -62,4 +63,24 @@ export class MediaService {
       stream: createReadStream(filePath),
     };
   }
+
+  async delete(id: string) {
+    const asset = await this.findOne(id);
+    const filePath = resolveMediaStoragePath(asset.storageKey);
+
+    await this.prisma.mediaAsset.delete({ where: { id } });
+
+    try {
+      await unlink(filePath);
+    } catch (error: unknown) {
+      if (!isMissingFileError(error)) throw error;
+    }
+
+    return { success: true };
+  }
+}
+
+function isMissingFileError(error: unknown) {
+  if (!error || typeof error !== 'object' || !('code' in error)) return false;
+  return error.code === 'ENOENT';
 }
