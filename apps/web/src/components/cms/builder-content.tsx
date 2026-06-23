@@ -130,6 +130,26 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
       </nav>
     );
   }
+  if (block.type === 'announcement-bar') {
+    return (
+      <div
+        className="text-center text-sm font-semibold"
+        style={{
+          background: String(block.props.background ?? '#6f21b6'),
+          color: String(block.props.color ?? '#ffffff'),
+          padding: '12px 20px',
+        }}
+      >
+        {String(block.props.text ?? 'Free shipping on all domestic orders over $35')}
+      </div>
+    );
+  }
+  if (block.type === 'store-header') {
+    return <StoreHeaderView block={block} />;
+  }
+  if (block.type === 'hero-slider') {
+    return <HeroSliderView block={block} />;
+  }
   if (block.type === 'grid') {
     const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 3)));
     const children = block.children ?? [];
@@ -218,10 +238,71 @@ function textStyle(block: BuilderBlock, fallbackSize: number) {
   };
 }
 
+function StoreHeaderView({ block }: { block: BuilderBlock }) {
+  const topLinks = getLinksFromText(block.props.topLinksText, ['About Us|/about-us', 'Contact|/contact', 'Wishlist|/wishlist']);
+  const navLinks = getLinksFromText(block.props.navLinksText, ['Home|/', 'Blog|/blog', 'Shop|/shop', 'Horoscopes|/horoscopes', 'Phone Readings|/phone-readings']);
+  return (
+    <header className="bg-white">
+      <div className="flex flex-wrap items-center gap-7 bg-neutral-900 px-6 py-5 text-sm font-medium text-white lg:px-12">
+        <i className="fa-brands fa-instagram" />
+        <i className="fa-brands fa-facebook-f" />
+        <i className="fa-brands fa-pinterest-p" />
+        {topLinks.map((link) => <a key={link.href} href={link.href} className="hover:underline">{link.label}</a>)}
+      </div>
+      <div className="grid gap-4 px-6 py-8 lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:px-12">
+        <nav className="flex flex-wrap items-center gap-6 text-base text-neutral-800">
+          <i className="fa-solid fa-bars text-2xl" />
+          {navLinks.map((link) => <a key={link.href} href={link.href} className="hover:text-purple-700">{link.label}</a>)}
+        </nav>
+        <div className="text-center font-serif text-3xl italic text-black">{String(block.props.logoText ?? 'The Psychic Link')}</div>
+        {block.props.showActions !== false && (
+          <div className="flex items-center gap-7 text-neutral-900 lg:justify-end">
+            <a href="/login" className="text-base">Login</a>
+            <i className="fa-solid fa-magnifying-glass text-2xl" />
+            <i className="fa-regular fa-heart text-2xl" />
+            <i className="fa-solid fa-bag-shopping text-2xl" />
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
+
+function HeroSliderView({ block }: { block: BuilderBlock }) {
+  const src = String(block.props.src ?? '');
+  const height = `${Number(block.props.height ?? 610)}px`;
+  return (
+    <section className="relative mx-auto mb-8 max-w-[1696px] overflow-hidden bg-neutral-900" style={{ height }}>
+      {src ? (
+        <img src={src} alt={String(block.props.alt ?? '')} className="h-full w-full object-cover" />
+      ) : null}
+      <div className="absolute inset-y-0 left-[10%] flex flex-col justify-center text-white">
+        <h1 className="mb-8 text-5xl font-light lg:text-6xl">{String(block.props.heading ?? 'Welcome')}</h1>
+        <a href={String(block.props.buttonHref ?? '/shop')} className="w-fit border-2 border-white/80 px-10 py-5 text-lg font-semibold tracking-wide text-white hover:bg-white hover:text-neutral-900 lg:text-xl">
+          {String(block.props.buttonLabel ?? 'SHOP NOW')}
+        </a>
+      </div>
+      <button className="absolute left-8 top-1/2 grid h-14 w-14 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-3xl text-white">‹</button>
+      <button className="absolute right-8 top-1/2 grid h-14 w-14 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-3xl text-white">›</button>
+      <div className="absolute bottom-10 left-12 flex gap-3">
+        <span className="h-3 w-3 rounded-full bg-purple-700" />
+        <span className="h-3 w-3 rounded-full bg-white/50" />
+      </div>
+    </section>
+  );
+}
+
 function imageAlign(value: unknown) {
   if (value === 'left') return 'flex-start';
   if (value === 'right') return 'flex-end';
   return 'center';
+}
+
+function getLinksFromText(value: unknown, fallback: string[]) {
+  return getLines(value, fallback).map((line) => {
+    const [label, href] = line.split('|');
+    return { label: label?.trim() || 'Link', href: href?.trim() || '#' };
+  });
 }
 
 function getLines(value: unknown, fallback: string[]) {
