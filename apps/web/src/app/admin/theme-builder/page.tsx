@@ -14,6 +14,9 @@ type BuilderBlockType =
   | 'grid'
   | 'icon'
   | 'menu'
+  | 'announcement-bar'
+  | 'store-header'
+  | 'hero-slider'
   | 'image-slider'
   | 'video'
   | 'sidebar-widgets'
@@ -148,6 +151,9 @@ const defaultWidgets: BuilderWidget[] = [
   { type: 'video', label: 'Video Embed', category: 'media', enabled: true },
   { type: 'button', label: 'Button', category: 'content', enabled: true },
   { type: 'icon', label: 'Font Awesome Icon', category: 'content', enabled: true },
+  { type: 'announcement-bar', label: 'Announcement Bar', category: 'storefront', enabled: true },
+  { type: 'store-header', label: 'Store Header', category: 'storefront', enabled: true },
+  { type: 'hero-slider', label: 'Hero Slider', category: 'storefront', enabled: true },
   { type: 'columns', label: 'Columns', category: 'layout', enabled: true },
   { type: 'grid', label: 'Grid', category: 'layout', enabled: true },
   { type: 'menu', label: 'Menu', category: 'navigation', enabled: true },
@@ -444,6 +450,22 @@ export default function ThemeBuilderPage() {
     }));
   }
 
+  function loadPsychicLinkPreset() {
+    const presetLayout = createPsychicLinkPresetLayout(mediaAssets);
+    setLayout(presetLayout);
+    setThemeForm((current) => ({
+      ...current,
+      name: 'Psychic Link Storefront',
+      slug: 'psychic-link-storefront',
+      primaryColor: '#6f21b6',
+      accentColor: '#111111',
+      fontFamily: 'Inter, Arial, sans-serif',
+    }));
+    setSelectedBlockId(presetLayout.sections[0]?.blocks[0]?.id ?? '');
+    setStatus('Psychic Link storefront preset loaded. Save current to publish it.');
+    setError('');
+  }
+
   function addBlock(type: BuilderBlockType, sectionId?: string) {
     const targetSectionId = sectionId ?? layout.sections[0]?.id;
     if (!targetSectionId) return;
@@ -589,6 +611,13 @@ export default function ThemeBuilderPage() {
           </Panel>
 
           <Panel title="Widgets">
+            <button
+              type="button"
+              onClick={loadPsychicLinkPreset}
+              className="mb-4 w-full rounded bg-purple-700 px-3 py-2 text-sm font-medium text-white hover:bg-purple-800"
+            >
+              Load Psychic Link Preset
+            </button>
             {Object.entries(groupedWidgets).map(([category, categoryWidgets]) => (
               <div key={category} className="mb-4">
                 <h3 className="mb-2 text-xs font-semibold uppercase text-gray-400">{category}</h3>
@@ -863,6 +892,42 @@ function BlockEditor({
             <option value="content">Content</option>
           </select>
           <label className="block text-sm font-medium text-gray-700">Custom Links (label|url per line)<textarea value={String(block.props.linksText ?? '')} rows={4} onChange={(event) => onChange({ linksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+        </>
+      )}
+      {block.type === 'announcement-bar' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Message<textarea value={String(block.props.text ?? '')} rows={2} onChange={(event) => onChange({ text: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Background<input type="color" value={String(block.props.background ?? '#6f21b6')} onChange={(event) => onChange({ background: event.target.value })} className="mt-1 h-10 w-full rounded border" /></label>
+          <label className="block text-sm font-medium text-gray-700">Text Color<input type="color" value={String(block.props.color ?? '#ffffff')} onChange={(event) => onChange({ color: event.target.value })} className="mt-1 h-10 w-full rounded border" /></label>
+        </>
+      )}
+      {block.type === 'store-header' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Logo Text<input value={String(block.props.logoText ?? 'The Psychic Link')} onChange={(event) => onChange({ logoText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Top Links (label|url per line)<textarea value={String(block.props.topLinksText ?? '')} rows={3} onChange={(event) => onChange({ topLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Main Nav (label|url per line)<textarea value={String(block.props.navLinksText ?? '')} rows={5} onChange={(event) => onChange({ navLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={block.props.showActions !== false} onChange={(event) => onChange({ showActions: event.target.checked })} /> Show login/search/wishlist/cart icons</label>
+        </>
+      )}
+      {block.type === 'hero-slider' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Hero Image
+            <select
+              value={String(block.props.mediaId ?? '')}
+              onChange={(event) => {
+                const asset = mediaAssets.find((item) => item.id === event.target.value);
+                onChange(asset ? { mediaId: asset.id, src: asset.url, alt: asset.altText || asset.title || asset.originalName } : { mediaId: '', src: '', alt: '' });
+              }}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            >
+              <option value="">Choose from media library</option>
+              {mediaAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.title || asset.originalName}</option>)}
+            </select>
+          </label>
+          <label className="block text-sm font-medium text-gray-700">Heading<input value={String(block.props.heading ?? 'Welcome')} onChange={(event) => onChange({ heading: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Button Label<input value={String(block.props.buttonLabel ?? 'SHOP NOW')} onChange={(event) => onChange({ buttonLabel: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Button Link<input value={String(block.props.buttonHref ?? '/shop')} onChange={(event) => onChange({ buttonHref: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Height<input type="number" min="320" max="900" value={Number(block.props.height ?? 610)} onChange={(event) => onChange({ height: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
         </>
       )}
       {block.type === 'grid' && (
@@ -1188,6 +1253,15 @@ function PreviewBlock({
     const vertical = block.props.orientation === 'vertical' || block.props.orientation === 'sidebar';
     return <nav className={`mb-4 flex ${vertical ? 'flex-col items-start' : 'flex-wrap items-center'} gap-3`}>{links.map((link) => <a key={`${link.label}-${link.href}`} href={link.href} className="text-sm font-medium hover:underline" style={{ color: theme.primaryColor }}>{link.label}</a>)}</nav>;
   }
+  if (block.type === 'announcement-bar') {
+    return <div className="text-center text-sm font-semibold" style={{ background: String(block.props.background ?? '#6f21b6'), color: String(block.props.color ?? '#ffffff'), padding: '12px 20px' }}>{String(block.props.text ?? 'Free shipping on all domestic orders over $35')}</div>;
+  }
+  if (block.type === 'store-header') {
+    return <StoreHeaderPreview block={block} />;
+  }
+  if (block.type === 'hero-slider') {
+    return <HeroSliderPreview block={block} theme={theme} />;
+  }
   if (block.type === 'grid') {
     const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 3)));
     const children = block.children ?? [];
@@ -1253,6 +1327,62 @@ function buildThemePayload(
   };
 }
 
+function StoreHeaderPreview({ block }: { block: BuilderBlock }) {
+  const topLinks = getLinksFromText(block.props.topLinksText, ['About Us|/about-us', 'Contact|/contact', 'Wishlist|/wishlist']);
+  const navLinks = getLinksFromText(block.props.navLinksText, ['Home|/', 'Blog|/blog', 'Shop|/shop', 'Horoscopes|/horoscopes', 'Phone Readings|/phone-readings']);
+  return (
+    <header className="bg-white">
+      <div className="flex items-center gap-7 bg-neutral-900 px-12 py-5 text-sm font-medium text-white">
+        <i className="fa-brands fa-instagram" />
+        <i className="fa-brands fa-facebook-f" />
+        <i className="fa-brands fa-pinterest-p" />
+        {topLinks.map((link) => <a key={link.href} href={link.href} className="hover:underline">{link.label}</a>)}
+      </div>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-12 py-9">
+        <nav className="flex items-center gap-7 text-base text-neutral-800">
+          <i className="fa-solid fa-bars text-2xl" />
+          {navLinks.map((link) => <a key={link.href} href={link.href} className="hover:text-purple-700">{link.label}</a>)}
+        </nav>
+        <div className="font-serif text-3xl italic text-black">{String(block.props.logoText ?? 'The Psychic Link')}</div>
+        {block.props.showActions !== false && (
+          <div className="flex items-center justify-end gap-7 text-neutral-900">
+            <a href="/login" className="text-base">Login</a>
+            <i className="fa-solid fa-magnifying-glass text-2xl" />
+            <i className="fa-regular fa-heart text-2xl" />
+            <i className="fa-solid fa-bag-shopping text-2xl" />
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
+
+function HeroSliderPreview({ block, theme }: { block: BuilderBlock; theme: ThemePreviewStyles }) {
+  const src = String(block.props.src ?? '');
+  const height = `${Number(block.props.height ?? 610)}px`;
+  return (
+    <section className="relative mx-auto mb-8 max-w-[1696px] overflow-hidden bg-neutral-900" style={{ height }}>
+      {src ? (
+        <img src={src} alt={String(block.props.alt ?? '')} className="h-full w-full object-cover" />
+      ) : (
+        <div className="flex h-full items-center justify-center bg-gradient-to-br from-indigo-950 via-purple-800 to-orange-400 text-white">Choose a hero image from Media Library</div>
+      )}
+      <div className="absolute inset-y-0 left-[10%] flex flex-col justify-center text-white">
+        <h1 className="mb-8 text-6xl font-light">{String(block.props.heading ?? 'Welcome')}</h1>
+        <a href={String(block.props.buttonHref ?? '/shop')} className="w-fit border-2 border-white/80 px-10 py-5 text-xl font-semibold tracking-wide text-white hover:bg-white hover:text-neutral-900">
+          {String(block.props.buttonLabel ?? 'SHOP NOW')}
+        </a>
+      </div>
+      <button className="absolute left-12 top-1/2 grid h-14 w-14 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-3xl text-white">‹</button>
+      <button className="absolute right-12 top-1/2 grid h-14 w-14 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-3xl text-white">›</button>
+      <div className="absolute bottom-10 left-12 flex gap-3">
+        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: theme.primaryColor }} />
+        <span className="h-3 w-3 rounded-full bg-white/50" />
+      </div>
+    </section>
+  );
+}
+
 function getUniqueThemeSlug(value: string, themes: CmsTheme[]) {
   const existingSlugs = new Set(themes.map((theme) => theme.slug));
   const baseSlug = slugify(value) || 'custom-theme';
@@ -1293,6 +1423,9 @@ function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlo
   if (type === 'video') return { id, type, props: { url: '', aspectRatio: '16 / 9' } };
   if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#' } };
   if (type === 'icon') return { id, type, props: { iconClass: 'fa-solid fa-star', label: 'Icon label', size: 36, color: '#4f46e5' } };
+  if (type === 'announcement-bar') return { id, type, props: { text: 'Free shipping on all domestic orders over $35', background: '#6f21b6', color: '#ffffff' } };
+  if (type === 'store-header') return { id, type, props: { logoText: 'The Psychic Link', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', showActions: true } };
+  if (type === 'hero-slider') return { id, type, props: { mediaId: '', src: '', alt: '', heading: 'Welcome', buttonLabel: 'SHOP NOW', buttonHref: '/shop', height: 610 } };
   if (type === 'columns') return { id, type, props: { columns: 2 }, children: [] };
   if (type === 'grid') return { id, type, props: { columns: 3, itemsText: 'Grid item\nGrid item\nGrid item' } };
   if (type === 'menu') return { id, type, props: { source: 'header', orientation: 'horizontal', placement: 'header', linksText: 'Home|/\nShop|/shop\nBlog|/blog' } };
@@ -1301,6 +1434,39 @@ function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlo
   if (type === 'product-categories') return { id, type, props: {} };
   if (type === 'product-tags') return { id, type, props: {} };
   return { id, type: 'global', props: {} };
+}
+
+function createPsychicLinkPresetLayout(mediaAssets: MediaAsset[]): BuilderLayout {
+  const heroImage = mediaAssets[0] ?? null;
+  return {
+    version: 1,
+    type: 'page',
+    settings: { layout: 'full', breadcrumbs: false, showTitle: false },
+    sections: [
+      {
+        id: createId('section'),
+        type: 'section',
+        settings: { layout: 'full', background: '#ffffff', padding: '0' },
+        blocks: [
+          createBlock('announcement-bar'),
+          createBlock('store-header'),
+          {
+            id: createId('hero-slider'),
+            type: 'hero-slider',
+            props: {
+              mediaId: heroImage?.id ?? '',
+              src: heroImage?.url ?? '',
+              alt: heroImage?.altText || heroImage?.title || heroImage?.originalName || '',
+              heading: 'Welcome',
+              buttonLabel: 'SHOP NOW',
+              buttonHref: '/shop',
+              height: 610,
+            },
+          },
+        ],
+      },
+    ],
+  };
 }
 
 function normalizeLayout(value: unknown): BuilderLayout {
@@ -1397,7 +1563,11 @@ function getLines(value: unknown, fallback: string[]) {
 }
 
 function getMenuLinks(block: BuilderBlock) {
-  return getLines(block.props.linksText, ['Home|/', 'Shop|/shop', 'Blog|/blog']).map((line) => {
+  return getLinksFromText(block.props.linksText, ['Home|/', 'Shop|/shop', 'Blog|/blog']);
+}
+
+function getLinksFromText(value: unknown, fallback: string[]) {
+  return getLines(value, fallback).map((line) => {
     const [label, href] = line.split('|');
     return { label: label?.trim() || 'Link', href: href?.trim() || '#' };
   });
