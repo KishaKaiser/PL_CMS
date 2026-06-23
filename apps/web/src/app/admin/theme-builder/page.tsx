@@ -743,6 +743,7 @@ export default function ThemeBuilderPage() {
                 block={selectedBlock}
                 onChange={(props) => updateBlock(selectedBlock.id, props)}
                 onAddChild={(type) => addChildBlock(selectedBlock.id, type)}
+                onRemove={() => removeBlock(selectedBlock.id)}
                 theme={previewTheme}
                 mediaAssets={mediaAssets}
                 widgets={mergeWidgets(widgets)}
@@ -770,6 +771,7 @@ function BlockEditor({
   block,
   onChange,
   onAddChild,
+  onRemove,
   theme,
   mediaAssets,
   widgets,
@@ -777,6 +779,7 @@ function BlockEditor({
   block: BuilderBlock;
   onChange: (props: Record<string, unknown>) => void;
   onAddChild: (type: BuilderBlockType) => void;
+  onRemove: () => void;
   theme: ThemePreviewStyles;
   mediaAssets: MediaAsset[];
   widgets: BuilderWidget[];
@@ -792,6 +795,13 @@ function BlockEditor({
   return (
     <div className="space-y-3">
       <div className="rounded bg-gray-50 px-3 py-2 text-xs text-gray-500">{block.type}</div>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="w-full rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+      >
+        Delete Selected Block
+      </button>
       {['heading', 'text', 'button'].includes(block.type) && (
         <label className="block text-sm font-medium text-gray-700">
           Text
@@ -904,30 +914,21 @@ function BlockEditor({
       {block.type === 'store-header' && (
         <>
           <label className="block text-sm font-medium text-gray-700">Logo Text<input value={String(block.props.logoText ?? 'The Psychic Link')} onChange={(event) => onChange({ logoText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Social Icons (icon class|url|label per line)<textarea value={String(block.props.socialLinksText ?? '')} rows={4} onChange={(event) => onChange({ socialLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="block text-sm font-medium text-gray-700">Top Links (label|url per line)<textarea value={String(block.props.topLinksText ?? '')} rows={3} onChange={(event) => onChange({ topLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="block text-sm font-medium text-gray-700">Main Nav (label|url per line)<textarea value={String(block.props.navLinksText ?? '')} rows={5} onChange={(event) => onChange({ navLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Action Icons (icon class|url|label per line)<textarea value={String(block.props.actionLinksText ?? '')} rows={4} onChange={(event) => onChange({ actionLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={block.props.showActions !== false} onChange={(event) => onChange({ showActions: event.target.checked })} /> Show login/search/wishlist/cart icons</label>
         </>
       )}
       {block.type === 'hero-slider' && (
         <>
-          <label className="block text-sm font-medium text-gray-700">Hero Image
-            <select
-              value={String(block.props.mediaId ?? '')}
-              onChange={(event) => {
-                const asset = mediaAssets.find((item) => item.id === event.target.value);
-                onChange(asset ? { mediaId: asset.id, src: asset.url, alt: asset.altText || asset.title || asset.originalName } : { mediaId: '', src: '', alt: '' });
-              }}
-              className="mt-1 w-full rounded border px-3 py-2 text-sm"
-            >
-              <option value="">Choose from media library</option>
-              {mediaAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.title || asset.originalName}</option>)}
-            </select>
-          </label>
+          <MediaSlidePicker block={block} mediaAssets={mediaAssets} onChange={onChange} />
           <label className="block text-sm font-medium text-gray-700">Heading<input value={String(block.props.heading ?? 'Welcome')} onChange={(event) => onChange({ heading: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="block text-sm font-medium text-gray-700">Button Label<input value={String(block.props.buttonLabel ?? 'SHOP NOW')} onChange={(event) => onChange({ buttonLabel: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="block text-sm font-medium text-gray-700">Button Link<input value={String(block.props.buttonHref ?? '/shop')} onChange={(event) => onChange({ buttonHref: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="block text-sm font-medium text-gray-700">Height<input type="number" min="320" max="900" value={Number(block.props.height ?? 610)} onChange={(event) => onChange({ height: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Slide Speed (seconds)<input type="number" min="2" max="20" value={Number(block.props.slideSeconds ?? 5)} onChange={(event) => onChange({ slideSeconds: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
         </>
       )}
       {block.type === 'grid' && (
@@ -944,35 +945,9 @@ function BlockEditor({
       )}
       {block.type === 'image-slider' && (
         <>
-          <div className="rounded border p-3">
-            <p className="mb-2 text-sm font-medium text-gray-700">Slides</p>
-            <div className="max-h-48 space-y-2 overflow-y-auto">
-              {mediaAssets.map((asset) => {
-                const selectedIds = Array.isArray(block.props.mediaIds) ? block.props.mediaIds.map(String) : [];
-                const checked = selectedIds.includes(asset.id);
-                return (
-                  <label key={asset.id} className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(event) => {
-                        const nextIds = event.target.checked
-                          ? [...selectedIds, asset.id]
-                          : selectedIds.filter((id) => id !== asset.id);
-                        const slides = nextIds
-                          .map((id) => mediaAssets.find((item) => item.id === id))
-                          .filter(Boolean)
-                          .map((item) => ({ id: item!.id, src: item!.url, alt: item!.altText || item!.title || item!.originalName }));
-                        onChange({ mediaIds: nextIds, slides });
-                      }}
-                    />
-                    <span className="truncate">{asset.title || asset.originalName}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
+          <MediaSlidePicker block={block} mediaAssets={mediaAssets} onChange={onChange} />
           <label className="block text-sm font-medium text-gray-700">Height<input type="number" min="120" max="800" value={Number(block.props.height ?? 360)} onChange={(event) => onChange({ height: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Slide Speed (seconds)<input type="number" min="2" max="20" value={Number(block.props.slideSeconds ?? 5)} onChange={(event) => onChange({ slideSeconds: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
         </>
       )}
       {block.type === 'video' && (
@@ -1020,6 +995,66 @@ function ContainerChildControls({
             </button>
           ))}
       </div>
+    </div>
+  );
+}
+
+function MediaSlidePicker({
+  block,
+  mediaAssets,
+  onChange,
+}: {
+  block: BuilderBlock;
+  mediaAssets: MediaAsset[];
+  onChange: (props: Record<string, unknown>) => void;
+}) {
+  const selectedIds = Array.isArray(block.props.mediaIds)
+    ? block.props.mediaIds.map(String)
+    : String(block.props.mediaId ?? '')
+      ? [String(block.props.mediaId)]
+      : [];
+
+  return (
+    <div className="rounded border p-3">
+      <p className="mb-2 text-sm font-medium text-gray-700">Slides</p>
+      <div className="max-h-48 space-y-2 overflow-y-auto">
+        {mediaAssets.map((asset) => {
+          const checked = selectedIds.includes(asset.id);
+          return (
+            <label key={asset.id} className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(event) => {
+                  const nextIds = event.target.checked
+                    ? [...selectedIds, asset.id]
+                    : selectedIds.filter((id) => id !== asset.id);
+                  const slides = nextIds
+                    .map((id) => mediaAssets.find((item) => item.id === id))
+                    .filter(Boolean)
+                    .map((item) => ({
+                      id: item!.id,
+                      src: item!.url,
+                      alt: item!.altText || item!.title || item!.originalName,
+                    }));
+                  const firstSlide = slides[0];
+                  onChange({
+                    mediaIds: nextIds,
+                    mediaId: firstSlide?.id ?? '',
+                    src: firstSlide?.src ?? '',
+                    alt: firstSlide?.alt ?? '',
+                    slides,
+                  });
+                }}
+              />
+              <span className="truncate">{asset.title || asset.originalName}</span>
+            </label>
+          );
+        })}
+      </div>
+      {mediaAssets.length === 0 && (
+        <p className="text-xs text-gray-500">Upload images in Media Library, then refresh Theme Builder.</p>
+      )}
     </div>
   );
 }
@@ -1270,7 +1305,7 @@ function PreviewBlock({
   if (block.type === 'image-slider') {
     const slides = getSlides(block);
     const height = `${Number(block.props.height ?? 360)}px`;
-    return <div className="mb-6 overflow-hidden rounded border bg-gray-100" style={{ height }}>{slides.length > 0 ? <div className="flex h-full w-full overflow-x-auto">{slides.map((slide) => <img key={slide.src} src={slide.src} alt={slide.alt} className="h-full min-w-full object-cover" />)}</div> : <div className="flex h-full items-center justify-center text-sm text-gray-500">Select images for this slider.</div>}</div>;
+    return <AnimatedSlider slides={slides} height={height} seconds={Number(block.props.slideSeconds ?? 5)} fallback="Select images for this slider." />;
   }
   if (block.type === 'video') {
     const url = String(block.props.url ?? '');
@@ -1328,14 +1363,27 @@ function buildThemePayload(
 }
 
 function StoreHeaderPreview({ block }: { block: BuilderBlock }) {
+  const socialLinks = getIconLinksFromText(block.props.socialLinksText, [
+    'fa-brands fa-instagram|https://instagram.com|Instagram',
+    'fa-brands fa-facebook-f|https://facebook.com|Facebook',
+    'fa-brands fa-pinterest-p|https://pinterest.com|Pinterest',
+  ]);
   const topLinks = getLinksFromText(block.props.topLinksText, ['About Us|/about-us', 'Contact|/contact', 'Wishlist|/wishlist']);
   const navLinks = getLinksFromText(block.props.navLinksText, ['Home|/', 'Blog|/blog', 'Shop|/shop', 'Horoscopes|/horoscopes', 'Phone Readings|/phone-readings']);
+  const actionLinks = getIconLinksFromText(block.props.actionLinksText, [
+    'text|/login|Login',
+    'fa-solid fa-magnifying-glass|/search|Search',
+    'fa-regular fa-heart|/wishlist|Wishlist',
+    'fa-solid fa-bag-shopping|/shop/cart|Cart',
+  ]);
   return (
     <header className="bg-white">
       <div className="flex items-center gap-7 bg-neutral-900 px-12 py-5 text-sm font-medium text-white">
-        <i className="fa-brands fa-instagram" />
-        <i className="fa-brands fa-facebook-f" />
-        <i className="fa-brands fa-pinterest-p" />
+        {socialLinks.map((link) => (
+          <a key={`${link.iconClass}-${link.href}`} href={link.href} aria-label={link.label} className="hover:text-purple-200">
+            <i className={link.iconClass} />
+          </a>
+        ))}
         {topLinks.map((link) => <a key={link.href} href={link.href} className="hover:underline">{link.label}</a>)}
       </div>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-12 py-9">
@@ -1346,10 +1394,11 @@ function StoreHeaderPreview({ block }: { block: BuilderBlock }) {
         <div className="font-serif text-3xl italic text-black">{String(block.props.logoText ?? 'The Psychic Link')}</div>
         {block.props.showActions !== false && (
           <div className="flex items-center justify-end gap-7 text-neutral-900">
-            <a href="/login" className="text-base">Login</a>
-            <i className="fa-solid fa-magnifying-glass text-2xl" />
-            <i className="fa-regular fa-heart text-2xl" />
-            <i className="fa-solid fa-bag-shopping text-2xl" />
+            {actionLinks.map((link) => (
+              <a key={`${link.iconClass}-${link.href}`} href={link.href} aria-label={link.label} className="hover:text-purple-700">
+                {link.iconClass === 'text' ? <span className="text-base">{link.label}</span> : <i className={`${link.iconClass} text-2xl`} />}
+              </a>
+            ))}
           </div>
         )}
       </div>
@@ -1358,12 +1407,12 @@ function StoreHeaderPreview({ block }: { block: BuilderBlock }) {
 }
 
 function HeroSliderPreview({ block, theme }: { block: BuilderBlock; theme: ThemePreviewStyles }) {
-  const src = String(block.props.src ?? '');
+  const slides = getSlides(block);
   const height = `${Number(block.props.height ?? 610)}px`;
   return (
     <section className="relative mx-auto mb-8 max-w-[1696px] overflow-hidden bg-neutral-900" style={{ height }}>
-      {src ? (
-        <img src={src} alt={String(block.props.alt ?? '')} className="h-full w-full object-cover" />
+      {slides.length > 0 ? (
+        <AnimatedSlider slides={slides} height="100%" seconds={Number(block.props.slideSeconds ?? 5)} fallback="" />
       ) : (
         <div className="flex h-full items-center justify-center bg-gradient-to-br from-indigo-950 via-purple-800 to-orange-400 text-white">Choose a hero image from Media Library</div>
       )}
@@ -1380,6 +1429,34 @@ function HeroSliderPreview({ block, theme }: { block: BuilderBlock; theme: Theme
         <span className="h-3 w-3 rounded-full bg-white/50" />
       </div>
     </section>
+  );
+}
+
+function AnimatedSlider({ slides, height, seconds, fallback }: { slides: Array<{ src: string; alt: string }>; height: string; seconds: number; fallback: string }) {
+  const end = slides.length > 1 ? `-${((slides.length - 1) / slides.length) * 100}%` : '0%';
+  const duration = `${Math.max(2, seconds) * Math.max(1, slides.length)}s`;
+  return (
+    <div className="h-full w-full overflow-hidden rounded border bg-gray-100" style={{ height }}>
+      {slides.length > 0 ? (
+        <>
+          <style>{`@keyframes plCmsAutoSlide { 0%, 18% { transform: translateX(0); } 100% { transform: translateX(var(--slide-end)); } }`}</style>
+          <div
+            className="flex h-full"
+            style={{
+              width: `${slides.length * 100}%`,
+              animation: slides.length > 1 ? `plCmsAutoSlide ${duration} ease-in-out infinite alternate` : undefined,
+              ['--slide-end' as string]: end,
+            }}
+          >
+            {slides.map((slide) => (
+              <img key={slide.src} src={slide.src} alt={slide.alt} className="h-full object-cover" style={{ width: `${100 / slides.length}%` }} />
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="flex h-full items-center justify-center text-sm text-gray-500">{fallback}</div>
+      )}
+    </div>
   );
 }
 
@@ -1424,8 +1501,8 @@ function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlo
   if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#' } };
   if (type === 'icon') return { id, type, props: { iconClass: 'fa-solid fa-star', label: 'Icon label', size: 36, color: '#4f46e5' } };
   if (type === 'announcement-bar') return { id, type, props: { text: 'Free shipping on all domestic orders over $35', background: '#6f21b6', color: '#ffffff' } };
-  if (type === 'store-header') return { id, type, props: { logoText: 'The Psychic Link', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', showActions: true } };
-  if (type === 'hero-slider') return { id, type, props: { mediaId: '', src: '', alt: '', heading: 'Welcome', buttonLabel: 'SHOP NOW', buttonHref: '/shop', height: 610 } };
+  if (type === 'store-header') return { id, type, props: { logoText: 'The Psychic Link', socialLinksText: 'fa-brands fa-instagram|https://instagram.com|Instagram\nfa-brands fa-facebook-f|https://facebook.com|Facebook\nfa-brands fa-pinterest-p|https://pinterest.com|Pinterest', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', actionLinksText: 'text|/login|Login\nfa-solid fa-magnifying-glass|/search|Search\nfa-regular fa-heart|/wishlist|Wishlist\nfa-solid fa-bag-shopping|/shop/cart|Cart', showActions: true } };
+  if (type === 'hero-slider') return { id, type, props: { mediaIds: [], slides: [], mediaId: '', src: '', alt: '', heading: 'Welcome', buttonLabel: 'SHOP NOW', buttonHref: '/shop', height: 610, slideSeconds: 5 } };
   if (type === 'columns') return { id, type, props: { columns: 2 }, children: [] };
   if (type === 'grid') return { id, type, props: { columns: 3, itemsText: 'Grid item\nGrid item\nGrid item' } };
   if (type === 'menu') return { id, type, props: { source: 'header', orientation: 'horizontal', placement: 'header', linksText: 'Home|/\nShop|/shop\nBlog|/blog' } };
@@ -1455,12 +1532,15 @@ function createPsychicLinkPresetLayout(mediaAssets: MediaAsset[]): BuilderLayout
             type: 'hero-slider',
             props: {
               mediaId: heroImage?.id ?? '',
+              mediaIds: heroImage ? [heroImage.id] : [],
+              slides: heroImage ? [{ id: heroImage.id, src: heroImage.url, alt: heroImage.altText || heroImage.title || heroImage.originalName }] : [],
               src: heroImage?.url ?? '',
               alt: heroImage?.altText || heroImage?.title || heroImage?.originalName || '',
               heading: 'Welcome',
               buttonLabel: 'SHOP NOW',
               buttonHref: '/shop',
               height: 610,
+              slideSeconds: 5,
             },
           },
         ],
@@ -1570,6 +1650,17 @@ function getLinksFromText(value: unknown, fallback: string[]) {
   return getLines(value, fallback).map((line) => {
     const [label, href] = line.split('|');
     return { label: label?.trim() || 'Link', href: href?.trim() || '#' };
+  });
+}
+
+function getIconLinksFromText(value: unknown, fallback: string[]) {
+  return getLines(value, fallback).map((line) => {
+    const [iconClass, href, label] = line.split('|');
+    return {
+      iconClass: iconClass?.trim() || 'fa-solid fa-link',
+      href: href?.trim() || '#',
+      label: label?.trim() || 'Link',
+    };
   });
 }
 

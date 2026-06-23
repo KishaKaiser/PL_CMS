@@ -163,13 +163,7 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
     const slides = getSlides(block);
     const height = `${Number(block.props.height ?? 360)}px`;
     return (
-      <div className="mb-6 overflow-hidden rounded border bg-gray-100" style={{ height }}>
-        {slides.length > 0 ? (
-          <div className="flex h-full w-full overflow-x-auto">
-            {slides.map((slide) => <img key={slide.src} src={slide.src} alt={slide.alt} className="h-full min-w-full object-cover" />)}
-          </div>
-        ) : null}
-      </div>
+      <AnimatedSlider slides={slides} height={height} seconds={Number(block.props.slideSeconds ?? 5)} />
     );
   }
   if (block.type === 'video') {
@@ -239,14 +233,27 @@ function textStyle(block: BuilderBlock, fallbackSize: number) {
 }
 
 function StoreHeaderView({ block }: { block: BuilderBlock }) {
+  const socialLinks = getIconLinksFromText(block.props.socialLinksText, [
+    'fa-brands fa-instagram|https://instagram.com|Instagram',
+    'fa-brands fa-facebook-f|https://facebook.com|Facebook',
+    'fa-brands fa-pinterest-p|https://pinterest.com|Pinterest',
+  ]);
   const topLinks = getLinksFromText(block.props.topLinksText, ['About Us|/about-us', 'Contact|/contact', 'Wishlist|/wishlist']);
   const navLinks = getLinksFromText(block.props.navLinksText, ['Home|/', 'Blog|/blog', 'Shop|/shop', 'Horoscopes|/horoscopes', 'Phone Readings|/phone-readings']);
+  const actionLinks = getIconLinksFromText(block.props.actionLinksText, [
+    'text|/login|Login',
+    'fa-solid fa-magnifying-glass|/search|Search',
+    'fa-regular fa-heart|/wishlist|Wishlist',
+    'fa-solid fa-bag-shopping|/shop/cart|Cart',
+  ]);
   return (
     <header className="bg-white">
       <div className="flex flex-wrap items-center gap-7 bg-neutral-900 px-6 py-5 text-sm font-medium text-white lg:px-12">
-        <i className="fa-brands fa-instagram" />
-        <i className="fa-brands fa-facebook-f" />
-        <i className="fa-brands fa-pinterest-p" />
+        {socialLinks.map((link) => (
+          <a key={`${link.iconClass}-${link.href}`} href={link.href} aria-label={link.label} className="hover:text-purple-200">
+            <i className={link.iconClass} />
+          </a>
+        ))}
         {topLinks.map((link) => <a key={link.href} href={link.href} className="hover:underline">{link.label}</a>)}
       </div>
       <div className="grid gap-4 px-6 py-8 lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:px-12">
@@ -257,10 +264,11 @@ function StoreHeaderView({ block }: { block: BuilderBlock }) {
         <div className="text-center font-serif text-3xl italic text-black">{String(block.props.logoText ?? 'The Psychic Link')}</div>
         {block.props.showActions !== false && (
           <div className="flex items-center gap-7 text-neutral-900 lg:justify-end">
-            <a href="/login" className="text-base">Login</a>
-            <i className="fa-solid fa-magnifying-glass text-2xl" />
-            <i className="fa-regular fa-heart text-2xl" />
-            <i className="fa-solid fa-bag-shopping text-2xl" />
+            {actionLinks.map((link) => (
+              <a key={`${link.iconClass}-${link.href}`} href={link.href} aria-label={link.label} className="hover:text-purple-700">
+                {link.iconClass === 'text' ? <span className="text-base">{link.label}</span> : <i className={`${link.iconClass} text-2xl`} />}
+              </a>
+            ))}
           </div>
         )}
       </div>
@@ -269,13 +277,11 @@ function StoreHeaderView({ block }: { block: BuilderBlock }) {
 }
 
 function HeroSliderView({ block }: { block: BuilderBlock }) {
-  const src = String(block.props.src ?? '');
+  const slides = getSlides(block);
   const height = `${Number(block.props.height ?? 610)}px`;
   return (
     <section className="relative mx-auto mb-8 max-w-[1696px] overflow-hidden bg-neutral-900" style={{ height }}>
-      {src ? (
-        <img src={src} alt={String(block.props.alt ?? '')} className="h-full w-full object-cover" />
-      ) : null}
+      <AnimatedSlider slides={slides} height="100%" seconds={Number(block.props.slideSeconds ?? 5)} />
       <div className="absolute inset-y-0 left-[10%] flex flex-col justify-center text-white">
         <h1 className="mb-8 text-5xl font-light lg:text-6xl">{String(block.props.heading ?? 'Welcome')}</h1>
         <a href={String(block.props.buttonHref ?? '/shop')} className="w-fit border-2 border-white/80 px-10 py-5 text-lg font-semibold tracking-wide text-white hover:bg-white hover:text-neutral-900 lg:text-xl">
@@ -292,6 +298,29 @@ function HeroSliderView({ block }: { block: BuilderBlock }) {
   );
 }
 
+function AnimatedSlider({ slides, height, seconds }: { slides: Array<{ src: string; alt: string }>; height: string; seconds: number }) {
+  if (slides.length === 0) return <div className="h-full w-full bg-neutral-900" style={{ height }} />;
+  const end = slides.length > 1 ? `-${((slides.length - 1) / slides.length) * 100}%` : '0%';
+  const duration = `${Math.max(2, seconds) * Math.max(1, slides.length)}s`;
+  return (
+    <div className="h-full w-full overflow-hidden bg-gray-100" style={{ height }}>
+      <style>{`@keyframes plCmsAutoSlide { 0%, 18% { transform: translateX(0); } 100% { transform: translateX(var(--slide-end)); } }`}</style>
+      <div
+        className="flex h-full"
+        style={{
+          width: `${slides.length * 100}%`,
+          animation: slides.length > 1 ? `plCmsAutoSlide ${duration} ease-in-out infinite alternate` : undefined,
+          ['--slide-end' as string]: end,
+        }}
+      >
+        {slides.map((slide) => (
+          <img key={slide.src} src={slide.src} alt={slide.alt} className="h-full object-cover" style={{ width: `${100 / slides.length}%` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function imageAlign(value: unknown) {
   if (value === 'left') return 'flex-start';
   if (value === 'right') return 'flex-end';
@@ -302,6 +331,17 @@ function getLinksFromText(value: unknown, fallback: string[]) {
   return getLines(value, fallback).map((line) => {
     const [label, href] = line.split('|');
     return { label: label?.trim() || 'Link', href: href?.trim() || '#' };
+  });
+}
+
+function getIconLinksFromText(value: unknown, fallback: string[]) {
+  return getLines(value, fallback).map((line) => {
+    const [iconClass, href, label] = line.split('|');
+    return {
+      iconClass: iconClass?.trim() || 'fa-solid fa-link',
+      href: href?.trim() || '#',
+      label: label?.trim() || 'Link',
+    };
   });
 }
 
