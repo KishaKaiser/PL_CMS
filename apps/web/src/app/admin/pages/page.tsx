@@ -10,6 +10,12 @@ import {
 } from '../../../components/admin/media-library';
 import { RichTextEditor } from '../../../components/admin/rich-text-editor';
 import {
+  BuilderLayoutPreview,
+  PageDesignCanvas,
+  type BuilderBlock,
+  type BuilderLayout,
+} from '../../../components/cms/page-builder-canvas';
+import {
   type EditorialStatus,
   fromDatetimeLocalValue,
   getEditorialStatus,
@@ -50,38 +56,6 @@ interface PageForm {
 type StatusFilter = 'all' | 'published' | 'scheduled' | 'draft';
 type AutosaveState = 'idle' | 'unsaved' | 'saving' | 'saved';
 type EditorTab = 'content' | 'layout' | 'design' | 'preview';
-type BuilderBlockType = 'heading' | 'text' | 'image' | 'button' | 'columns' | 'product-grid';
-
-interface BuilderBlock {
-  id: string;
-  type: BuilderBlockType;
-  props: Record<string, unknown>;
-  children?: BuilderBlock[];
-}
-
-interface BuilderSection {
-  id: string;
-  type: 'section';
-  settings: {
-    layout?: string;
-    background?: string;
-    padding?: string;
-  };
-  blocks: BuilderBlock[];
-}
-
-interface BuilderLayout {
-  version: number;
-  type: string;
-  settings: {
-    layout?: string;
-    breadcrumbs?: boolean;
-    showTitle?: boolean;
-    showHeader?: boolean;
-    showFooter?: boolean;
-  };
-  sections: BuilderSection[];
-}
 
 const FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: 'all', label: 'All' },
@@ -181,62 +155,6 @@ function normalizeBuilderLayout(value: unknown): BuilderLayout {
   };
 }
 
-function createDesignBlock(type: BuilderBlockType, title: string, featuredImageUrl: string): BuilderBlock {
-  const id = createId(type);
-  switch (type) {
-    case 'heading':
-      return { id, type, props: { text: title || 'Page heading', fontSize: 40, align: 'left' } };
-    case 'text':
-      return { id, type, props: { text: 'Add your text here.', fontSize: 16 } };
-    case 'image':
-      return {
-        id,
-        type,
-        props: { src: featuredImageUrl, alt: title, height: 320, objectFit: 'cover', borderRadius: 8 },
-      };
-    case 'button':
-      return { id, type, props: { label: 'Learn More', href: '#', align: 'left' } };
-    case 'columns':
-      return { id, type, props: { columns: 2 }, children: [] };
-    case 'product-grid':
-      return { id, type, props: { limit: 3 } };
-    default:
-      return { id, type: 'text', props: { text: 'Add your text here.', fontSize: 16 } };
-  }
-}
-
-function blockTypeLabel(type: BuilderBlockType) {
-  switch (type) {
-    case 'heading':
-      return 'Heading';
-    case 'text':
-      return 'Text';
-    case 'image':
-      return 'Image';
-    case 'button':
-      return 'Button';
-    case 'columns':
-      return 'Columns';
-    case 'product-grid':
-      return 'Products';
-    default:
-      return 'Block';
-  }
-}
-
-function pageShellClass(layout?: string) {
-  switch (layout) {
-    case 'full':
-      return 'space-y-4';
-    case 'sidebar-left':
-      return 'grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]';
-    case 'sidebar-right':
-      return 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]';
-    default:
-      return 'mx-auto max-w-4xl space-y-4';
-  }
-}
-
 function getPrimaryAction(status: EditorialStatus) {
   switch (status) {
     case 'published':
@@ -299,7 +217,6 @@ export default function AdminPagesPage() {
   const [revisionRefreshKey, setRevisionRefreshKey] = useState(0);
   const [editorTab, setEditorTab] = useState<EditorTab>('content');
   const [builderLayout, setBuilderLayout] = useState<BuilderLayout>(emptyBuilderLayout);
-  const [selectedDesignBlockId, setSelectedDesignBlockId] = useState('');
   const [builderSaving, setBuilderSaving] = useState(false);
   const [builderStatus, setBuilderStatus] = useState('');
   const [builderError, setBuilderError] = useState('');
@@ -430,7 +347,6 @@ export default function AdminPagesPage() {
       const data = (await res.json()) as { draftJson?: unknown; publishedJson?: unknown; status?: string };
       const source = data.status === 'PUBLISHED' && data.publishedJson ? data.publishedJson : data.draftJson;
       setBuilderLayout(normalizeBuilderLayout(source));
-      setSelectedDesignBlockId('');
     } catch (err: unknown) {
       setBuilderError(err instanceof Error ? err.message : 'Could not load page design');
       setBuilderLayout(cloneDefaultBuilderLayout());
@@ -590,7 +506,6 @@ export default function AdminPagesPage() {
     setShowEditor(false);
     setEditorTab('content');
     setBuilderLayout(cloneDefaultBuilderLayout());
-    setSelectedDesignBlockId('');
     setBuilderStatus('');
     setBuilderError('');
   }
@@ -612,51 +527,6 @@ export default function AdminPagesPage() {
       settings: { ...current.settings, ...settings },
     }));
     setBuilderStatus('');
-  }
-
-  function addDesignBlock(type: BuilderBlockType) {
-    const block = createDesignBlock(type, form.title || 'Page heading', featuredMedia?.url ?? form.featuredImageUrl);
-    setBuilderLayout((current) => ({
-      ...current,
-      sections: current.sections.length > 0
-        ? current.sections.map((section, index) => index === 0 ? { ...section, blocks: [...section.blocks, block] } : section)
-        : [{ id: createId('section'), type: 'section', settings: { layout: 'contained', background: '#ffffff', padding: '48px 24px' }, blocks: [block] }],
-    }));
-    setSelectedDesignBlockId(block.id);
-    setBuilderStatus('');
-  }
-
-  function updateDesignBlock(blockId: string, props: Record<string, unknown>) {
-    setBuilderLayout((current) => ({
-      ...current,
-      sections: current.sections.map((section) => ({
-        ...section,
-        blocks: section.blocks.map((block) => block.id === blockId ? { ...block, props: { ...block.props, ...props } } : block),
-      })),
-    }));
-    setBuilderStatus('');
-  }
-
-  function removeDesignBlock(blockId: string) {
-    setBuilderLayout((current) => ({
-      ...current,
-      sections: current.sections.map((section) => ({
-        ...section,
-        blocks: section.blocks.filter((block) => block.id !== blockId),
-      })),
-    }));
-    setSelectedDesignBlockId('');
-    setBuilderStatus('');
-  }
-
-  function addDesignSection() {
-    setBuilderLayout((current) => ({
-      ...current,
-      sections: [
-        ...current.sections,
-        { id: createId('section'), type: 'section', settings: { layout: 'contained', background: '#ffffff', padding: '48px 24px' }, blocks: [] },
-      ],
-    }));
   }
 
   return (
@@ -873,20 +743,20 @@ export default function AdminPagesPage() {
             )}
 
             {editorTab === 'design' && (
-              <PageDesignPanel
-                layout={builderLayout}
-                selectedBlockId={selectedDesignBlockId}
-                featuredImageUrl={featuredMedia?.url ?? form.featuredImageUrl}
-                builderSaving={builderSaving}
-                builderStatus={builderStatus}
-                builderError={builderError}
-                onSelectBlock={setSelectedDesignBlockId}
-                onAddBlock={addDesignBlock}
-                onAddSection={addDesignSection}
-                onUpdateBlock={updateDesignBlock}
-                onRemoveBlock={removeDesignBlock}
-                onSave={() => void savePageLayout()}
-              />
+              editingId ? (
+                <PageDesignCanvas
+                  layout={builderLayout}
+                  onChange={setBuilderLayout}
+                  saving={builderSaving}
+                  status={builderStatus}
+                  error={builderError}
+                  onSave={() => void savePageLayout()}
+                />
+              ) : (
+                <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
+                  Save the page before designing its layout.
+                </p>
+              )
             )}
 
             {editorTab === 'preview' && (
@@ -1272,7 +1142,7 @@ function PageLayoutPanel({
         <label className="block text-sm font-medium text-gray-700">
           Page width
           <select
-            value={layout.settings.layout ?? 'default'}
+            value={layout.settings?.layout ?? 'default'}
             onChange={(event) => onChange({ layout: event.target.value })}
             className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
           >
@@ -1283,16 +1153,18 @@ function PageLayoutPanel({
           </select>
         </label>
 
-        {[
-          ['showTitle', 'Show page title'],
-          ['breadcrumbs', 'Show breadcrumbs'],
-          ['showHeader', 'Show site header'],
-          ['showFooter', 'Show site footer'],
-        ].map(([key, label]) => (
+        {(
+          [
+            ['showTitle', 'Show page title'],
+            ['breadcrumbs', 'Show breadcrumbs'],
+            ['showHeader', 'Show site header'],
+            ['showFooter', 'Show site footer'],
+          ] as const
+        ).map(([key, label]) => (
           <label key={key} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
             <input
               type="checkbox"
-              checked={layout.settings[key as keyof BuilderLayout['settings']] !== false}
+              checked={layout.settings?.[key] !== false}
               onChange={(event) => onChange({ [key]: event.target.checked } as Partial<BuilderLayout['settings']>)}
             />
             {label}
@@ -1305,141 +1177,14 @@ function PageLayoutPanel({
   );
 }
 
-function PageDesignPanel({
-  layout,
-  selectedBlockId,
-  featuredImageUrl,
-  builderSaving,
-  builderStatus,
-  builderError,
-  onSelectBlock,
-  onAddBlock,
-  onAddSection,
-  onUpdateBlock,
-  onRemoveBlock,
-  onSave,
-}: {
-  layout: BuilderLayout;
-  selectedBlockId: string;
-  featuredImageUrl: string;
-  builderSaving: boolean;
-  builderStatus: string;
-  builderError: string;
-  onSelectBlock: (id: string) => void;
-  onAddBlock: (type: BuilderBlockType) => void;
-  onAddSection: () => void;
-  onUpdateBlock: (id: string, props: Record<string, unknown>) => void;
-  onRemoveBlock: (id: string) => void;
-  onSave: () => void;
-}) {
-  const selectedBlock = layout.sections.flatMap((section) => section.blocks).find((block) => block.id === selectedBlockId);
-
+function SaveDesignFooter({ saving, status, error, onSave }: { saving: boolean; status: string; error: string; onSave: () => void }) {
   return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Visual Design</h3>
-            <p className="text-sm text-gray-500">Add simple page sections and blocks without leaving Pages.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(['heading', 'text', 'image', 'button', 'columns', 'product-grid'] as BuilderBlockType[]).map((type) => (
-              <button key={type} type="button" onClick={() => onAddBlock(type)} className="rounded border bg-white px-3 py-1.5 text-xs font-medium hover:bg-indigo-50">
-                {blockTypeLabel(type)}
-              </button>
-            ))}
-            <button type="button" onClick={onAddSection} className="rounded bg-gray-900 px-3 py-1.5 text-xs font-medium text-white">
-              Add section
-            </button>
-          </div>
-        </div>
-
-        <div className={pageShellClass(layout.settings.layout)}>
-          {layout.settings.layout === 'sidebar-left' && <DesignSidebar />}
-          <div className="space-y-4">
-            {layout.sections.map((section) => (
-              <section key={section.id} className="rounded-lg border border-dashed border-gray-300 bg-white p-4" style={{ background: section.settings.background }}>
-                <div className="space-y-3">
-                  {section.blocks.length === 0 ? (
-                    <p className="rounded border border-dashed p-8 text-center text-sm text-gray-500">Add a block to this section.</p>
-                  ) : (
-                    section.blocks.map((block) => (
-                      <button
-                        key={block.id}
-                        type="button"
-                        onClick={() => onSelectBlock(block.id)}
-                        className={`block w-full rounded border p-3 text-left ${selectedBlockId === block.id ? 'border-indigo-500 ring-2 ring-indigo-100' : 'border-gray-200 hover:border-indigo-300'}`}
-                      >
-                        <DesignBlockView block={block} featuredImageUrl={featuredImageUrl} />
-                      </button>
-                    ))
-                  )}
-                </div>
-              </section>
-            ))}
-          </div>
-          {layout.settings.layout === 'sidebar-right' && <DesignSidebar />}
-        </div>
-      </div>
-
-      <aside className="rounded-lg border border-gray-200 bg-white p-4">
-        <h3 className="text-sm font-semibold text-gray-900">Selected Block</h3>
-        {selectedBlock ? (
-          <BlockOptionsPanel
-            block={selectedBlock}
-            featuredImageUrl={featuredImageUrl}
-            onUpdate={(props) => onUpdateBlock(selectedBlock.id, props)}
-            onRemove={() => onRemoveBlock(selectedBlock.id)}
-          />
-        ) : (
-          <p className="mt-3 text-sm text-gray-500">Select a block to edit it.</p>
-        )}
-        <SaveDesignFooter saving={builderSaving} status={builderStatus} error={builderError} onSave={onSave} />
-      </aside>
-    </section>
-  );
-}
-
-function BlockOptionsPanel({
-  block,
-  featuredImageUrl,
-  onUpdate,
-  onRemove,
-}: {
-  block: BuilderBlock;
-  featuredImageUrl: string;
-  onUpdate: (props: Record<string, unknown>) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="mt-3 space-y-3">
-      <p className="rounded bg-gray-50 px-3 py-2 text-xs text-gray-500">{blockTypeLabel(block.type)}</p>
-      {['heading', 'text'].includes(block.type) && (
-        <>
-          <label className="block text-sm font-medium text-gray-700">Text<textarea value={String(block.props.text ?? '')} rows={4} onChange={(event) => onUpdate({ text: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
-          <label className="block text-sm font-medium text-gray-700">Font size<input type="number" value={Number(block.props.fontSize ?? (block.type === 'heading' ? 40 : 16))} onChange={(event) => onUpdate({ fontSize: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
-        </>
-      )}
-      {block.type === 'image' && (
-        <>
-          <label className="block text-sm font-medium text-gray-700">Image URL<input value={String(block.props.src ?? '')} onChange={(event) => onUpdate({ src: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
-          {featuredImageUrl && <button type="button" onClick={() => onUpdate({ src: featuredImageUrl })} className="rounded border px-3 py-1.5 text-xs hover:bg-gray-50">Use featured image</button>}
-          <label className="block text-sm font-medium text-gray-700">Height<input type="number" value={Number(block.props.height ?? 320)} onChange={(event) => onUpdate({ height: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
-        </>
-      )}
-      {block.type === 'button' && (
-        <>
-          <label className="block text-sm font-medium text-gray-700">Label<input value={String(block.props.label ?? '')} onChange={(event) => onUpdate({ label: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
-          <label className="block text-sm font-medium text-gray-700">Link<input value={String(block.props.href ?? '')} onChange={(event) => onUpdate({ href: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
-        </>
-      )}
-      {block.type === 'columns' && (
-        <label className="block text-sm font-medium text-gray-700">Columns<input type="number" min="2" max="4" value={Number(block.props.columns ?? 2)} onChange={(event) => onUpdate({ columns: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
-      )}
-      {block.type === 'product-grid' && (
-        <label className="block text-sm font-medium text-gray-700">Products to show<input type="number" min="1" max="12" value={Number(block.props.limit ?? 3)} onChange={(event) => onUpdate({ limit: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
-      )}
-      <button type="button" onClick={onRemove} className="w-full rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100">Delete block</button>
+    <div className="mt-5 space-y-2">
+      {status && <p className="rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{status}</p>}
+      {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      <button type="button" onClick={onSave} disabled={saving} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+        {saving ? 'Saving design...' : 'Save page layout/design'}
+      </button>
     </div>
   );
 }
@@ -1466,111 +1211,10 @@ function PageCombinedPreview({
       <EditorPreview title={title} content={content} featuredImageUrl={featuredImageUrl} permalink={permalink} status={status} publishedAt={publishedAt} />
       <section className="rounded-lg border bg-white p-4">
         <h3 className="text-sm font-semibold text-gray-900">Layout preview</h3>
-        <div className="mt-4 rounded border bg-gray-50 p-4">
-          {layout.sections.map((section) => (
-            <div key={section.id} className="mb-4 rounded bg-white p-4 last:mb-0">
-              {section.blocks.map((block) => <DesignBlockView key={block.id} block={block} featuredImageUrl={featuredImageUrl} />)}
-            </div>
-          ))}
+        <div className="mt-4 overflow-hidden rounded border bg-gray-50">
+          <BuilderLayoutPreview layout={layout} />
         </div>
       </section>
-    </div>
-  );
-}
-
-function DesignSidebar() {
-  return (
-    <aside className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
-      Sidebar widgets
-    </aside>
-  );
-}
-
-function DesignBlockView({ block, featuredImageUrl }: { block: BuilderBlock; featuredImageUrl: string }) {
-  const text = String(block.props.text ?? '');
-  const fontSize = Number(block.props.fontSize ?? (block.type === 'heading' ? 40 : 16));
-
-  if (block.type === 'heading') {
-    return (
-      <h2 className="font-semibold leading-tight text-gray-950" style={{ fontSize }}>
-        {text || 'Page heading'}
-      </h2>
-    );
-  }
-
-  if (block.type === 'text') {
-    return (
-      <p className="leading-7 text-gray-700" style={{ fontSize }}>
-        {text || 'Add your text here.'}
-      </p>
-    );
-  }
-
-  if (block.type === 'image') {
-    const src = String(block.props.src ?? featuredImageUrl);
-    const height = Number(block.props.height ?? 320);
-    const borderRadius = Number(block.props.borderRadius ?? 8);
-    return src ? (
-      <img
-        src={src}
-        alt={String(block.props.alt ?? '')}
-        className="w-full object-cover"
-        style={{ height, borderRadius }}
-      />
-    ) : (
-      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-sm text-gray-500">
-        Choose an image
-      </div>
-    );
-  }
-
-  if (block.type === 'button') {
-    return (
-      <span className="inline-flex rounded bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white">
-        {String(block.props.label ?? 'Learn More')}
-      </span>
-    );
-  }
-
-  if (block.type === 'columns') {
-    const columns = Math.min(4, Math.max(2, Number(block.props.columns ?? 2)));
-    return (
-      <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-        {Array.from({ length: columns }).map((_, index) => (
-          <div key={index} className="rounded border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-500">
-            Column {index + 1}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (block.type === 'product-grid') {
-    const limit = Math.min(12, Math.max(1, Number(block.props.limit ?? 3)));
-    return (
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: Math.min(limit, 3) }).map((_, index) => (
-          <div key={index} className="rounded-lg border border-gray-200 bg-white p-3">
-            <div className="mb-3 aspect-square rounded bg-gray-100" />
-            <p className="text-sm font-medium text-gray-900">Product preview</p>
-            <p className="text-xs text-gray-500">Store item</p>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return <p className="text-sm text-gray-500">Unsupported block</p>;
-}
-
-function SaveDesignFooter({ saving, status, error, onSave }: { saving: boolean; status: string; error: string; onSave: () => void }) {
-  return (
-    <div className="mt-5 space-y-2">
-      {status && <p className="rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{status}</p>}
-      {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-      <button type="button" onClick={onSave} disabled={saving} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-        {saving ? 'Saving design...' : 'Save page layout/design'}
-      </button>
     </div>
   );
 }
