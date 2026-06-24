@@ -654,6 +654,25 @@ model CmsFormSubmission {
 }
 
 // ──────────────────────────────────────────────
+// Sliders
+// ──────────────────────────────────────────────
+
+model CmsSlider {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String?
+  status      String   @default("DRAFT")
+  slides      Json     @default("[]")
+  settings    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@map("cms_sliders")
+}
+
+// ──────────────────────────────────────────────
 // Audit Log
 // ──────────────────────────────────────────────
 

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { BuilderBlock, BuilderLayout } from '../../lib/public-cms';
 import { getCategories, getTags } from '../../lib/public-cms';
 import { PublicFormEmbed } from './public-form-embed';
+import { PublicSliderEmbed } from './public-slider-embed';
 
 interface Product {
   id: string;
@@ -161,6 +162,19 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
     );
   }
   if (block.type === 'image-slider') {
+    const mode = String(block.props.mode ?? (block.props.sliderSlug ? 'saved-slider' : 'legacy-images'));
+    if (mode === 'saved-slider') {
+      return <PublicSliderEmbed slug={String(block.props.sliderSlug ?? '')} />;
+    }
+    if (mode === 'video') {
+      const url = String(block.props.videoUrl ?? '');
+      if (!url) return null;
+      return (
+        <div className="mb-6 overflow-hidden rounded border bg-black" style={{ aspectRatio: String(block.props.aspectRatio ?? '16 / 9') }}>
+          {videoEmbed(url)}
+        </div>
+      );
+    }
     const slides = getSlides(block);
     const height = `${Number(block.props.height ?? 360)}px`;
     return (
