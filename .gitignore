@@ -35,3 +35,4 @@ packages/db/generated/
 
 # test coverage
 coverage
+.claude/

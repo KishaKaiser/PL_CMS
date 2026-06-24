@@ -614,6 +614,46 @@ model Module {
 }
 
 // ──────────────────────────────────────────────
+// Forms
+// ──────────────────────────────────────────────
+
+model CmsForm {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  title          String
+  description    String?
+  type           String   @default("CONTACT")
+  status         String   @default("DRAFT")
+  fields         Json     @default("[]")
+  settings       Json     @default("{}")
+  successMessage String   @default("Thank you. Your submission has been received.")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  submissions CmsFormSubmission[]
+
+  @@index([type, status])
+  @@map("cms_forms")
+}
+
+model CmsFormSubmission {
+  id        String   @id @default(cuid())
+  formId    String
+  data      Json
+  status    String   @default("NEW")
+  userId    String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  form CmsForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId, createdAt])
+  @@index([status])
+  @@map("cms_form_submissions")
+}
+
+// ──────────────────────────────────────────────
 // Audit Log
 // ──────────────────────────────────────────────
 

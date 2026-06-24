@@ -199,6 +199,7 @@ export class InstallService {
       { name: 'checkout', version: '1.0.0', enabled: true },
       { name: 'fulfillment', version: '1.0.0', enabled: true },
       { name: 'private-messages', version: '1.0.0', enabled: true },
+      { name: 'forms', version: '1.0.0', enabled: true },
     ];
 
     for (const m of modules) {

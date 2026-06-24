@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { BuilderBlock, BuilderLayout } from '../../lib/public-cms';
 import { getCategories, getTags } from '../../lib/public-cms';
+import { PublicFormEmbed } from './public-form-embed';
 
 interface Product {
   id: string;
@@ -182,6 +183,15 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
           <div key={item} className="border-b py-2 text-sm last:border-b-0">{item}</div>
         ))}
       </aside>
+    );
+  }
+  if (block.type === 'saved-form') {
+    return (
+      <PublicFormEmbed
+        slug={String(block.props.formSlug ?? '')}
+        fallbackTitle={String(block.props.formTitle ?? 'Form')}
+        showTitle={block.props.displayTitle !== false}
+      />
     );
   }
   if (block.type === 'columns') {
