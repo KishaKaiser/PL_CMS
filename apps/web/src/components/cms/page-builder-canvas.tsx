@@ -159,12 +159,12 @@ export function createBlock(type: BuilderBlockType, widget?: BuilderWidget): Bui
   if (type === 'heading') return { id, type, props: { text: 'New Heading', level: 2, fontSize: 36, align: 'left' } };
   if (type === 'text') return { id, type, props: { text: 'New text block.', fontSize: 16, align: 'left' } };
   if (type === 'image') return { id, type, props: { mediaId: '', src: '', alt: '', width: 100, height: 320, objectFit: 'cover', align: 'center', borderRadius: 8 } };
-  if (type === 'image-slider') return { id, type, props: { mode: 'saved-slider', sliderId: '', sliderSlug: '', sliderTitle: '', videoUrl: '', height: 420 } };
+  if (type === 'image-slider') return { id, type, props: { mode: 'saved-slider', sliderId: '', sliderSlug: '', sliderTitle: '', videoUrl: '', height: 420, displayWidth: 'content' } };
   if (type === 'video') return { id, type, props: { url: '', aspectRatio: '16 / 9' } };
   if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#' } };
   if (type === 'icon') return { id, type, props: { iconClass: 'fa-solid fa-star', label: 'Icon label', size: 36, color: '#4f46e5' } };
   if (type === 'announcement-bar') return { id, type, props: { text: 'Free shipping on all domestic orders over $35', background: '#6f21b6', color: '#ffffff' } };
-  if (type === 'store-header') return { id, type, props: { logoMode: 'text', logoText: 'The Psychic Link', logoMediaId: '', logoSrc: '', logoAlt: 'The Psychic Link', socialLinksText: 'fa-brands fa-instagram|https://instagram.com|Instagram\nfa-brands fa-facebook-f|https://facebook.com|Facebook\nfa-brands fa-pinterest-p|https://pinterest.com|Pinterest', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', actionLinksText: 'text|/login|Login\nfa-solid fa-magnifying-glass|/search|Search\nfa-regular fa-heart|/wishlist|Wishlist\nfa-solid fa-bag-shopping|/shop/cart|Cart', showActions: true } };
+  if (type === 'store-header') return { id, type, props: { logoMode: 'text', logoText: 'The Psychic Link', logoMediaId: '', logoSrc: '', logoAlt: 'The Psychic Link', socialLinksText: 'fa-brands fa-instagram|https://instagram.com|Instagram\nfa-brands fa-facebook-f|https://facebook.com|Facebook\nfa-brands fa-pinterest-p|https://pinterest.com|Pinterest', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', actionLinksText: 'text|/login|Login\nfa-solid fa-magnifying-glass|/search|Search\nfa-regular fa-heart|/wishlist|Wishlist\nfa-solid fa-bag-shopping|/shop/cart|Cart', showActions: true, stickyMain: false } };
   if (type === 'hero-slider') return { id, type, props: { mediaIds: [], slides: [], mediaId: '', src: '', alt: '', heading: 'Welcome', buttonLabel: 'SHOP NOW', buttonHref: '/shop', height: 610, slideSeconds: 5 } };
   if (type === 'columns') return { id, type, props: { columns: 2 }, children: [] };
   if (type === 'grid') return { id, type, props: { columns: 3, itemsText: 'Grid item\nGrid item\nGrid item' } };
@@ -538,21 +538,23 @@ export function PreviewBlock({
   }
   if (block.type === 'image-slider') {
     const mode = String(block.props.mode ?? (block.props.sliderSlug ? 'saved-slider' : 'legacy-images'));
+    const wide = block.props.displayWidth === 'wide';
+    const wrap = (content: React.ReactNode) => wide ? <div className="relative left-1/2 mb-6 w-screen -translate-x-1/2">{content}</div> : content;
     if (mode === 'saved-slider') {
       const selectedSlider = savedSliders.find((item) => item.id === block.props.sliderId || item.slug === block.props.sliderSlug);
-      return selectedSlider ? (
+      return wrap(selectedSlider ? (
         <PublicSliderEmbed slider={selectedSlider} />
       ) : (
-        <div className="mb-6 rounded border border-dashed p-6 text-sm text-gray-500">Choose a saved slider in the block options.</div>
-      );
+        <div className="rounded border border-dashed p-6 text-sm text-gray-500">Choose a saved slider in the block options.</div>
+      ));
     }
     if (mode === 'video') {
       const url = String(block.props.videoUrl ?? '');
-      return <div className="mb-6 overflow-hidden rounded border bg-black" style={{ aspectRatio: String(block.props.aspectRatio ?? '16 / 9') }}>{url ? videoEmbed(url) : <div className="flex h-full min-h-64 items-center justify-center text-sm text-white">Video widget</div>}</div>;
+      return wrap(<div className="overflow-hidden rounded border bg-black" style={{ aspectRatio: String(block.props.aspectRatio ?? '16 / 9') }}>{url ? videoEmbed(url) : <div className="flex h-full min-h-64 items-center justify-center text-sm text-white">Video widget</div>}</div>);
     }
     const slides = getSlides(block);
     const height = `${Number(block.props.height ?? 360)}px`;
-    return <AnimatedSlider slides={slides} height={height} seconds={Number(block.props.slideSeconds ?? 5)} fallback="Select images for this slider." />;
+    return wrap(<AnimatedSlider slides={slides} height={height} seconds={Number(block.props.slideSeconds ?? 5)} fallback="Select images for this slider." />);
   }
   if (block.type === 'video') {
     const url = String(block.props.url ?? '');
@@ -1019,6 +1021,7 @@ export function BlockEditor({
           <label className="block text-sm font-medium text-gray-700">Main Nav (label|url per line)<textarea value={String(block.props.navLinksText ?? '')} rows={5} onChange={(event) => onChange({ navLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="block text-sm font-medium text-gray-700">Action Icons (icon class|url|label per line)<textarea value={String(block.props.actionLinksText ?? '')} rows={4} onChange={(event) => onChange({ actionLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={block.props.showActions !== false} onChange={(event) => onChange({ showActions: event.target.checked })} /> Show login/search/wishlist/cart icons</label>
+          <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={block.props.stickyMain === true} onChange={(event) => onChange({ stickyMain: event.target.checked })} /> Sticky main nav and action icons</label>
         </>
       )}
       {block.type === 'hero-slider' && (
@@ -1045,6 +1048,13 @@ export function BlockEditor({
       )}
       {block.type === 'image-slider' && (
         <>
+          <label className="block text-sm font-medium text-gray-700">
+            Width
+            <select value={String(block.props.displayWidth ?? 'content')} onChange={(event) => onChange({ displayWidth: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+              <option value="content">Content width</option>
+              <option value="wide">Wide full browser width</option>
+            </select>
+          </label>
           <label className="block text-sm font-medium text-gray-700">
             Widget Mode
             <select value={String(block.props.mode ?? 'saved-slider')} onChange={(event) => onChange({ mode: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm">

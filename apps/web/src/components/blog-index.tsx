@@ -63,6 +63,7 @@ export async function BlogIndex({
   ]);
 
   const activeFilterCount = [search, category, tag, authorId, year, month].filter(Boolean).length;
+  const sidebar = config.theme.blogSidebar;
 
   return (
     <PublicSiteShell siteConfig={config}>
@@ -162,62 +163,76 @@ export async function BlogIndex({
         </section>
 
         <aside className="space-y-6">
-          <section className="rounded-lg border bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">Categories</h2>
-            <ul className="mt-3 space-y-2 text-sm">
-              {categories.map((item) => (
-                <li key={item.id}>
-                  <Link href={`/blog/categories/${item.slug}`} className="hover:underline" style={{ color: config.theme.accentColor }}>
-                    {item.name} ({item.postCount})
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
+          {sidebar.search.enabled && (
+            <section className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{sidebar.search.title}</h2>
+              <form action={blogPath} className="mt-3 flex gap-2">
+                <input name="search" defaultValue={search} className="w-full rounded border border-gray-200 px-3 py-2 text-sm" placeholder="Search posts" />
+                <button className="rounded px-3 py-2 text-sm font-medium text-white" style={{ backgroundColor: config.theme.primaryColor }}>Go</button>
+              </form>
+            </section>
+          )}
 
-          <section className="rounded-lg border bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">Tags</h2>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              {tags.map((item) => (
-                <Link key={item.id} href={`/blog/tags/${item.slug}`} className="rounded bg-gray-100 px-2 py-1 text-gray-700 hover:bg-gray-200">
-                  #{item.name} ({item.postCount})
-                </Link>
-              ))}
-            </div>
-          </section>
+          {sidebar.categories.enabled && (
+            <section className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{sidebar.categories.title}</h2>
+              <ul className="mt-3 space-y-2 text-sm">
+                {categories.map((item) => (
+                  <li key={item.id}>
+                    <Link href={`/blog/categories/${item.slug}`} className="hover:underline" style={{ color: config.theme.accentColor }}>
+                      {item.name} ({item.postCount})
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-          <section className="rounded-lg border bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">Authors</h2>
-            <ul className="mt-3 space-y-2 text-sm">
-              {authors.map((item) => (
-                <li key={item.id}>
-                  <Link href={`/blog/authors/${item.id}`} className="hover:underline" style={{ color: config.theme.accentColor }}>
-                    {item.name} ({item.postCount})
+          {sidebar.tags.enabled && (
+            <section className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{sidebar.tags.title}</h2>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                {tags.map((item) => (
+                  <Link key={item.id} href={`/blog/tags/${item.slug}`} className="rounded bg-gray-100 px-2 py-1 text-gray-700 hover:bg-gray-200">
+                    #{item.name} ({item.postCount})
                   </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
+                ))}
+              </div>
+            </section>
+          )}
 
-          <section className="rounded-lg border bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">Archives</h2>
-            <ul className="mt-3 space-y-2 text-sm">
-              {archives.slice(0, 6).map((archive) => (
-                <li key={archive.key}>
-                  <Link
-                    href={`/blog/archive/${archive.year}/${String(archive.month).padStart(2, '0')}`}
-                    className="hover:underline"
-                    style={{ color: config.theme.accentColor }}
-                  >
-                    {monthLabel(archive.year, archive.month)} ({archive.count})
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <Link href="/blog/archive" className="mt-3 inline-block text-xs font-medium hover:underline" style={{ color: config.theme.primaryColor }}>
-              View all archives
-            </Link>
-          </section>
+          {sidebar.authors.enabled && (
+            <section className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{sidebar.authors.title}</h2>
+              <ul className="mt-3 space-y-2 text-sm">
+                {authors.map((item) => (
+                  <li key={item.id}>
+                    <Link href={`/blog/authors/${item.id}`} className="hover:underline" style={{ color: config.theme.accentColor }}>
+                      {item.name} ({item.postCount})
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {sidebar.archives.enabled && (
+            <section className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{sidebar.archives.title}</h2>
+              <ul className="mt-3 space-y-2 text-sm">
+                {archives.slice(0, 6).map((archive) => (
+                  <li key={archive.key}>
+                    <Link href={`/blog/archive/${archive.year}/${String(archive.month).padStart(2, '0')}`} className="hover:underline" style={{ color: config.theme.accentColor }}>
+                      {monthLabel(archive.year, archive.month)} ({archive.count})
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <Link href="/blog/archive" className="mt-3 inline-block text-xs font-medium hover:underline" style={{ color: config.theme.primaryColor }}>
+                View all archives
+              </Link>
+            </section>
+          )}
         </aside>
       </main>
     </PublicSiteShell>

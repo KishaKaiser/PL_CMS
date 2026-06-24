@@ -159,23 +159,23 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
   }
   if (block.type === 'image-slider') {
     const mode = String(block.props.mode ?? (block.props.sliderSlug ? 'saved-slider' : 'legacy-images'));
+    const wide = block.props.displayWidth === 'wide';
+    const wrap = (content: React.ReactNode) => wide ? <div className="relative left-1/2 mb-6 w-screen -translate-x-1/2">{content}</div> : content;
     if (mode === 'saved-slider') {
-      return <PublicSliderEmbed slug={String(block.props.sliderSlug ?? '')} />;
+      return wrap(<PublicSliderEmbed slug={String(block.props.sliderSlug ?? '')} />);
     }
     if (mode === 'video') {
       const url = String(block.props.videoUrl ?? '');
       if (!url) return null;
-      return (
-        <div className="mb-6 overflow-hidden rounded border bg-black" style={{ aspectRatio: String(block.props.aspectRatio ?? '16 / 9') }}>
+      return wrap(
+        <div className="overflow-hidden rounded border bg-black" style={{ aspectRatio: String(block.props.aspectRatio ?? '16 / 9') }}>
           {videoEmbed(url)}
-        </div>
+        </div>,
       );
     }
     const slides = getSlides(block);
     const height = `${Number(block.props.height ?? 360)}px`;
-    return (
-      <AnimatedSlider slides={slides} height={height} seconds={Number(block.props.slideSeconds ?? 5)} />
-    );
+    return wrap(<AnimatedSlider slides={slides} height={height} seconds={Number(block.props.slideSeconds ?? 5)} />);
   }
   if (block.type === 'video') {
     const url = String(block.props.url ?? '');
@@ -276,6 +276,7 @@ function StoreHeaderView({ block }: { block: BuilderBlock }) {
       navLinks={navLinks}
       actionLinks={actionLinks}
       showActions={block.props.showActions !== false}
+      stickyMain={block.props.stickyMain === true}
     />
   );
 }
