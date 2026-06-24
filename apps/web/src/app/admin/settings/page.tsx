@@ -6,7 +6,6 @@ import {
   DEFAULT_POSTS_PAGE_SETTINGS,
   DEFAULT_SITE_EXTENSION_POINTS,
   DEFAULT_SITE_IDENTITY,
-  DEFAULT_SITE_MENUS,
   DEFAULT_SITE_THEME,
   SITE_SETTING_KEYS,
   buildDefaultHomepageBlocks,
@@ -22,12 +21,6 @@ interface PageSummary {
   slug: string;
   title: string;
   publishedAt: string | null;
-}
-
-interface MenuItem {
-  id: string;
-  label: string;
-  href: string;
 }
 
 interface SiteIdentityForm {
@@ -87,15 +80,9 @@ interface SiteThemeForm {
   };
 }
 
-interface SiteMenusForm {
-  header: MenuItem[];
-  footer: MenuItem[];
-}
-
 const SITE_IDENTITY_KEY = SITE_SETTING_KEYS.SITE_IDENTITY;
 const SITE_HOMEPAGE_KEY = SITE_SETTING_KEYS.SITE_HOMEPAGE;
 const SITE_POSTS_PAGE_KEY = SITE_SETTING_KEYS.SITE_POSTS_PAGE;
-const SITE_MENUS_KEY = SITE_SETTING_KEYS.SITE_MENUS;
 const SITE_THEME_KEY = SITE_SETTING_KEYS.SITE_THEME;
 const SITE_HOMEPAGE_BLOCKS_KEY = SITE_SETTING_KEYS.SITE_HOMEPAGE_BLOCKS;
 const SITE_EXTENSION_POINTS_KEY = SITE_SETTING_KEYS.SITE_EXTENSION_POINTS;
@@ -137,19 +124,6 @@ const defaultThemeForm: SiteThemeForm = {
   ...DEFAULT_SITE_THEME,
 };
 
-const defaultMenusForm: SiteMenusForm = {
-  header: DEFAULT_SITE_MENUS.header.map((item, index) => ({
-    id: `header-${index + 1}`,
-    label: item.label,
-    href: item.href,
-  })),
-  footer: DEFAULT_SITE_MENUS.footer.map((item, index) => ({
-    id: `footer-${index + 1}`,
-    label: item.label,
-    href: item.href,
-  })),
-};
-
 const defaultHomepageBlocks = buildDefaultHomepageBlocks('/blog');
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -178,94 +152,8 @@ function readOption<T extends string>(value: unknown, options: readonly T[], fal
   return typeof value === 'string' && options.includes(value as T) ? (value as T) : fallback;
 }
 
-function createMenuItemId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-
-  return `menu-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function normalizeMenuItems(value: unknown, fallback: MenuItem[]) {
-  if (!Array.isArray(value)) return fallback;
-
-  const items = value
-    .map((item) => {
-      if (!isRecord(item)) return null;
-
-      const label = readString(item.label).trim();
-      const href = readString(item.href ?? item.url).trim();
-
-      if (!label || !href) return null;
-      return { id: createMenuItemId(), label, href };
-    })
-    .filter((item): item is MenuItem => item !== null);
-
-  return items.length > 0 ? items : fallback;
-}
-
 function findSetting(settings: Setting[], key: string) {
   return settings.find((setting) => setting.key === key)?.value;
-}
-
-function MenuEditor({
-  title,
-  items,
-  onChange,
-}: {
-  title: string;
-  items: MenuItem[];
-  onChange: (items: MenuItem[]) => void;
-}) {
-  function updateItem(id: string, field: 'label' | 'href', value: string) {
-    onChange(items.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
-  }
-
-  function removeItem(id: string) {
-    onChange(items.filter((item) => item.id !== id));
-  }
-
-  return (
-    <div className="rounded-lg border border-gray-200 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
-        <button
-          type="button"
-          onClick={() => onChange([...items, { id: createMenuItemId(), label: '', href: '' }])}
-          className="rounded border border-gray-200 px-3 py-1 text-xs font-medium hover:bg-gray-50"
-        >
-          Add item
-        </button>
-      </div>
-
-      <div className="space-y-3">
-        {items.map((item) => (
-          <div key={item.id} className="grid gap-3 rounded-lg border border-dashed border-gray-200 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-            <input
-              value={item.label}
-              onChange={(event) => updateItem(item.id, 'label', event.target.value)}
-              placeholder="Label"
-              className="rounded border px-3 py-2 text-sm"
-            />
-            <input
-              value={item.href}
-              onChange={(event) => updateItem(item.id, 'href', event.target.value)}
-              placeholder="/path or https://example.com"
-              className="rounded border px-3 py-2 text-sm"
-            />
-            <button
-              type="button"
-              onClick={() => removeItem(item.id)}
-              aria-label={`Remove ${item.label || 'menu item'}`}
-              className="rounded border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 export default function AdminSettingsPage() {
@@ -282,7 +170,6 @@ export default function AdminSettingsPage() {
   const [homepageForm, setHomepageForm] = useState<SiteHomepageForm>(defaultHomepageForm);
   const [postsPageForm, setPostsPageForm] = useState<SitePostsPageForm>(defaultPostsPageForm);
   const [themeForm, setThemeForm] = useState<SiteThemeForm>(defaultThemeForm);
-  const [menusForm, setMenusForm] = useState<SiteMenusForm>(defaultMenusForm);
   const [billingApiForm, setBillingApiForm] = useState<BillingApiForm>(defaultBillingApiForm);
   const [shippingApiForm, setShippingApiForm] = useState<ShippingApiForm>(defaultShippingApiForm);
 
@@ -296,7 +183,6 @@ export default function AdminSettingsPage() {
     const homepage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_HOMEPAGE_KEY));
     const postsPage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_POSTS_PAGE_KEY));
     const theme = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_THEME_KEY));
-    const menus = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_MENUS_KEY));
     const billingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, BILLING_API_SETTINGS_KEY));
     const shippingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SHIPPING_API_SETTINGS_KEY));
     const homepageSections = isRecord(theme?.homepageSections) ? theme.homepageSections : null;
@@ -340,10 +226,6 @@ export default function AdminSettingsPage() {
           title: readString(postSection?.title, defaultThemeForm.homepageSections.posts.title),
         },
       },
-    });
-    setMenusForm({
-      header: normalizeMenuItems(menus?.header, defaultMenusForm.header),
-      footer: normalizeMenuItems(menus?.footer, defaultMenusForm.footer),
     });
     setBillingApiForm({
       provider: readOption(billingApi?.provider, ['manual', 'paypal', 'stripe'] as const, defaultBillingApiForm.provider),
@@ -748,42 +630,6 @@ export default function AdminSettingsPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </section>
-
-        <section className="rounded-xl border bg-white p-6 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold">Navigation menus</h2>
-            <p className="text-sm text-gray-500">Manage the links shown in the public header and footer.</p>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <MenuEditor
-              title="Header menu"
-              items={menusForm.header}
-              onChange={(header) => setMenusForm((currentForm) => ({ ...currentForm, header }))}
-            />
-            <MenuEditor
-              title="Footer menu"
-              items={menusForm.footer}
-              onChange={(footer) => setMenusForm((currentForm) => ({ ...currentForm, footer }))}
-            />
-          </div>
-
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              onClick={() =>
-                void saveManagedSetting(SITE_MENUS_KEY, {
-                  header: menusForm.header.map(({ label, href }) => ({ label, href })),
-                  footer: menusForm.footer.map(({ label, href }) => ({ label, href })),
-                })
-              }
-              disabled={saving[SITE_MENUS_KEY] || loading}
-              className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {saving[SITE_MENUS_KEY] ? 'Saving…' : 'Save menus'}
-            </button>
           </div>
         </section>
 
