@@ -25,7 +25,7 @@ type BuilderBlockType =
   | 'product-categories'
   | 'product-tags';
 type ResponsiveMode = 'desktop' | 'tablet' | 'mobile';
-type EditorTarget = 'theme-page' | 'theme-header' | 'theme-footer' | 'page';
+type EditorTarget = 'theme-header' | 'theme-footer';
 
 interface BuilderBlock {
   id: string;
@@ -54,12 +54,6 @@ interface BuilderLayout {
     showTitle?: boolean;
   };
   sections: BuilderSection[];
-}
-
-interface PageOption {
-  id: string;
-  title: string;
-  slug: string;
 }
 
 interface GlobalComponent {
@@ -135,7 +129,7 @@ const emptyLayout: BuilderLayout = {
         {
           id: 'text-1',
           type: 'text',
-          props: { text: 'Edit global templates or individual pages with live preview controls.', fontSize: 18 },
+          props: { text: 'Edit the global header and footer used across the site.', fontSize: 18 },
         },
         { id: 'button-1', type: 'button', props: { label: 'Get Started', href: '#' } },
       ],
@@ -172,15 +166,13 @@ async function readApiError(res: Response, fallback: string) {
 }
 
 export default function ThemeBuilderPage() {
-  const [pages, setPages] = useState<PageOption[]>([]);
   const [components, setComponents] = useState<GlobalComponent[]>([]);
   const [themes, setThemes] = useState<CmsTheme[]>([]);
   const [widgets, setWidgets] = useState<BuilderWidget[]>(defaultWidgets);
   const [storePreview, setStorePreview] = useState<StorePreviewData>(emptyStorePreview);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [layout, setLayout] = useState<BuilderLayout>(emptyLayout);
-  const [editorTarget, setEditorTarget] = useState<EditorTarget>('theme-page');
-  const [selectedPageId, setSelectedPageId] = useState('');
+  const [editorTarget, setEditorTarget] = useState<EditorTarget>('theme-header');
   const [selectedBlockId, setSelectedBlockId] = useState('');
   const [dragBlockId, setDragBlockId] = useState('');
   const [responsiveMode, setResponsiveMode] = useState<ResponsiveMode>('desktop');
@@ -202,43 +194,23 @@ export default function ThemeBuilderPage() {
   );
   const previewTheme = useMemo(() => getThemePreviewStyles(activeTheme, themeForm), [activeTheme, themeForm]);
   const groupedWidgets = useMemo(() => groupWidgets(mergeWidgets(widgets)), [widgets]);
-  const selectedPage = useMemo(() => pages.find((page) => page.id === selectedPageId) ?? null, [pages, selectedPageId]);
-
   const loadTargetLayout = useCallback(
-    async (target: EditorTarget, pageId = selectedPageId, theme = activeTheme) => {
+    async (target: EditorTarget, theme = activeTheme) => {
       setSelectedBlockId('');
-      if (target === 'page') {
-        if (!pageId) {
-          setLayout(emptyLayout);
-          return;
-        }
-        const res = await fetch(`/api/proxy/admin/builder/layouts/page/${pageId}`);
-        if (!res.ok) throw new Error('Unable to load page layout');
-        const data = (await res.json()) as { draftJson?: BuilderLayout; version?: number };
-        setLayout(
-          data.version && data.version > 0 && data.draftJson
-            ? normalizeLayout(data.draftJson)
-            : theme
-              ? getThemeLayout(theme, 'theme-page')
-              : emptyLayout,
-        );
-        return;
-      }
       if (!theme) {
         setLayout(emptyLayout);
         return;
       }
       setLayout(getThemeLayout(theme, target));
     },
-    [activeTheme, selectedPageId],
+    [activeTheme],
   );
 
   const fetchResources = useCallback(async () => {
     setError('');
     try {
       await fetch('/api/proxy/admin/builder/defaults/ensure', { method: 'POST' });
-      const [pagesRes, componentsRes, themesRes, widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes] = await Promise.all([
-        fetch('/api/proxy/pages'),
+      const [componentsRes, themesRes, widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes] = await Promise.all([
         fetch('/api/proxy/admin/builder/components'),
         fetch('/api/proxy/admin/builder/themes'),
         fetch('/api/proxy/admin/builder/widgets'),
@@ -247,17 +219,14 @@ export default function ThemeBuilderPage() {
         fetch('/api/proxy/admin/categories'),
         fetch('/api/proxy/admin/tags'),
       ]);
-      if (!pagesRes.ok) throw new Error('Unable to load pages');
       if (!componentsRes.ok) throw new Error('Unable to load global components');
       if (!themesRes.ok) throw new Error('Unable to load themes');
       if (!widgetsRes.ok) throw new Error('Unable to load widgets');
 
-      const nextPages = (await pagesRes.json()) as PageOption[];
       const nextThemes = (await themesRes.json()) as CmsTheme[];
       const nextWidgets = (await widgetsRes.json()) as BuilderWidget[];
       const nextActiveTheme = nextThemes.find((theme) => theme.isActive) ?? null;
 
-      setPages(nextPages);
       setComponents((await componentsRes.json()) as GlobalComponent[]);
       setThemes(nextThemes);
       setWidgets(nextWidgets.length > 0 ? mergeWidgets(nextWidgets) : defaultWidgets);
@@ -267,7 +236,6 @@ export default function ThemeBuilderPage() {
         categories: categoriesRes.ok ? ((await categoriesRes.json()) as TaxonomyPreview[]) : [],
         tags: tagsRes.ok ? ((await tagsRes.json()) as TaxonomyPreview[]) : [],
       });
-      if (!selectedPageId && nextPages[0]) setSelectedPageId(nextPages[0].id);
       if (nextActiveTheme) {
         setThemeForm({
           name: nextActiveTheme.name,
@@ -278,11 +246,11 @@ export default function ThemeBuilderPage() {
           fontFamily: getStringStyle(nextActiveTheme.globalStyles.fontFamily, 'Inter, Arial, sans-serif'),
         });
       }
-      await loadTargetLayout(editorTarget, selectedPageId || nextPages[0]?.id || '', nextActiveTheme);
+      await loadTargetLayout(editorTarget, nextActiveTheme);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error loading builder');
     }
-  }, [editorTarget, loadTargetLayout, selectedPageId]);
+  }, [editorTarget, loadTargetLayout]);
 
   useEffect(() => {
     void fetchResources();
@@ -297,34 +265,10 @@ export default function ThemeBuilderPage() {
     }
   }
 
-  async function changePage(pageId: string) {
-    setSelectedPageId(pageId);
-    if (editorTarget !== 'page') return;
-    try {
-      await loadTargetLayout('page', pageId);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unable to load page');
-    }
-  }
-
   async function saveCurrentTarget() {
     setError('');
     setStatus('');
     try {
-      if (editorTarget === 'page') {
-        if (!selectedPageId) throw new Error('Choose a page first.');
-        const saveRes = await fetch('/api/proxy/admin/builder/layouts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entityType: 'page', entityId: selectedPageId, layout }),
-        });
-        if (!saveRes.ok) throw new Error(await readApiError(saveRes, 'Page layout could not be saved.'));
-        const publishRes = await fetch(`/api/proxy/admin/builder/layouts/page/${selectedPageId}/publish`, { method: 'POST' });
-        if (!publishRes.ok) throw new Error(await readApiError(publishRes, 'Page layout could not be published.'));
-        setStatus(`${selectedPage?.title ?? 'Page'} layout saved.`);
-        return;
-      }
-
       if (!activeTheme) {
         await createThemeFromCurrentLayout();
         return;
@@ -590,7 +534,7 @@ export default function ThemeBuilderPage() {
         <aside className="min-h-0 overflow-y-auto border-r bg-white p-3">
           <Panel title="Edit">
             <div className="grid gap-2">
-              {(['theme-page', 'theme-header', 'theme-footer', 'page'] as EditorTarget[]).map((target) => (
+              {(['theme-header', 'theme-footer'] as EditorTarget[]).map((target) => (
                 <button
                   key={target}
                   type="button"
@@ -603,11 +547,6 @@ export default function ThemeBuilderPage() {
                 </button>
               ))}
             </div>
-            {editorTarget === 'page' && (
-              <select value={selectedPageId} onChange={(event) => void changePage(event.target.value)} className="mt-3 w-full rounded border px-3 py-2 text-sm">
-                {pages.map((page) => <option key={page.id} value={page.id}>{page.title}</option>)}
-              </select>
-            )}
           </Panel>
 
           <Panel title="Widgets">
@@ -1088,11 +1027,6 @@ function BuilderPreview({
 }) {
   const headerLayout = editorTarget === 'theme-header' ? layout : activeTheme ? getThemeLayout(activeTheme, 'theme-header') : null;
   const footerLayout = editorTarget === 'theme-footer' ? layout : activeTheme ? getThemeLayout(activeTheme, 'theme-footer') : null;
-  const pageLayout = editorTarget === 'theme-page' || editorTarget === 'page'
-    ? layout
-    : activeTheme
-      ? getThemeLayout(activeTheme, 'theme-page')
-      : emptyLayout;
 
   return (
     <div className="min-h-[calc(100vh-112px)] overflow-hidden bg-white shadow-xl" style={{ fontFamily: theme.fontFamily }}>
@@ -1112,20 +1046,11 @@ function BuilderPreview({
           onAddBlock={onAddBlock}
         />
       )}
-      <PreviewLayout
-        layout={pageLayout}
-        active={editorTarget === 'theme-page' || editorTarget === 'page'}
-        showChrome
-        components={components}
-        theme={theme}
-        storePreview={storePreview}
-        selectedBlockId={selectedBlockId}
-        onSelectBlock={onSelectBlock}
-        onRemoveBlock={onRemoveBlock}
-        onDragStart={onDragStart}
-        onMoveBlock={onMoveBlock}
-        onAddBlock={onAddBlock}
-      />
+      <main className="mx-auto max-w-5xl px-8 py-16">
+        <div className="rounded border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
+          Page content is edited from Pages. The header and footer shown here are the global templates used across the site.
+        </div>
+      </main>
       {footerLayout && (
         <PreviewLayout
           layout={footerLayout}
@@ -1343,9 +1268,6 @@ function buildThemePayload(
   const templates = { ...getObject(activeTheme?.templates) };
   if (editorTarget === 'theme-header') templates.header = layout;
   if (editorTarget === 'theme-footer') templates.footer = layout;
-  if (editorTarget === 'theme-page' || editorTarget === 'page') {
-    templates.pageTypes = { ...getObject(templates.pageTypes), page: layout };
-  }
   return {
     name: themeForm.name,
     slug: themeForm.slug,
@@ -1358,7 +1280,7 @@ function buildThemePayload(
     templates,
     components: { widgets: widgets.map((widget) => widget.type) },
     widgetRegistry: mergeWidgets(widgets).filter((widget) => widget.enabled).map((widget) => widget.type),
-    schemaJson: { builderVersion: 1, supports: ['global-theme', 'pages', 'headers', 'footers', 'store-widgets'] },
+    schemaJson: { builderVersion: 1, supports: ['global-theme', 'headers', 'footers', 'store-widgets'] },
   };
 }
 
@@ -1486,8 +1408,7 @@ function getThemeLayout(theme: CmsTheme, target: EditorTarget): BuilderLayout {
   const templates = getObject(theme.templates);
   if (target === 'theme-header') return normalizeLayout(templates.header);
   if (target === 'theme-footer') return normalizeLayout(templates.footer);
-  const pageLayout = getObject(templates.pageTypes).page;
-  return normalizeLayout(pageLayout);
+  return emptyLayout;
 }
 
 function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlock {
@@ -1610,8 +1531,7 @@ function groupWidgets(widgets: BuilderWidget[]) {
 function editorTargetLabel(target: EditorTarget) {
   if (target === 'theme-header') return 'Header';
   if (target === 'theme-footer') return 'Footer';
-  if (target === 'page') return 'Individual Page';
-  return 'Global Page Template';
+  return 'Header';
 }
 
 function responsiveWidth(mode: ResponsiveMode) {

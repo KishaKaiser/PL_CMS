@@ -214,16 +214,10 @@ export class PublicContentService {
       where: { entityType_entityId: { entityType: 'page', entityId: page.id } },
       select: { publishedJson: true, status: true },
     });
-    const activeCmsTheme = await this.prisma.cmsTheme.findFirst({
-      where: { isActive: true },
-      orderBy: { updatedAt: 'desc' },
-      select: { templates: true },
-    });
-    const themeLayout = this.getThemePageLayout(activeCmsTheme?.templates);
     return {
       ...page,
       builderLayout:
-        builderLayout?.status === 'PUBLISHED' ? builderLayout.publishedJson : themeLayout,
+        builderLayout?.status === 'PUBLISHED' ? builderLayout.publishedJson : null,
     };
   }
 
@@ -755,11 +749,6 @@ export class PublicContentService {
       heroSecondaryLabel: this.getString(styles.heroSecondaryLabel, theme.heroSecondaryLabel),
       heroSecondaryHref: this.getString(styles.heroSecondaryHref, theme.heroSecondaryHref),
     };
-  }
-
-  private getThemePageLayout(value: Prisma.JsonValue | undefined) {
-    const pageLayout = this.getThemeTemplateLayout(value, 'page');
-    return pageLayout;
   }
 
   private getThemeTemplateLayout(value: Prisma.JsonValue | undefined, template: 'header' | 'footer' | 'page') {
