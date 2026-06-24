@@ -16,6 +16,7 @@ const NAV_GROUPS = [
     items: [
       { href: '/admin/pages', label: 'Pages' },
       { href: '/admin/posts', label: 'Posts' },
+      { href: '/admin/forms', label: 'Forms' },
       { href: '/admin/taxonomies', label: 'Categories & Tags' },
       { href: '/admin/media', label: 'Media Library' },
       { href: '/admin/theme-builder', label: 'Theme Builder' },

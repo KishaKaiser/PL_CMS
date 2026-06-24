@@ -19,6 +19,7 @@ export type BuilderBlockType =
   | 'video'
   | 'sidebar-widgets'
   | 'global'
+  | 'saved-form'
   | 'product-grid'
   | 'product-categories'
   | 'product-tags';
@@ -81,6 +82,14 @@ interface TaxonomyPreview {
   postCount?: number;
 }
 
+interface SavedFormLite {
+  id: string;
+  slug: string;
+  title: string;
+  type: string;
+  status: string;
+}
+
 export type StorePreviewData = {
   products: ProductPreview[];
   categories: TaxonomyPreview[];
@@ -114,6 +123,7 @@ export const defaultWidgets: BuilderWidget[] = [
   { type: 'grid', label: 'Grid', category: 'layout', enabled: true },
   { type: 'menu', label: 'Menu', category: 'navigation', enabled: true },
   { type: 'sidebar-widgets', label: 'Sidebar Widgets', category: 'layout', enabled: true },
+  { type: 'saved-form', label: 'Saved Form', category: 'forms', enabled: true },
   { type: 'product-grid', label: 'Products', category: 'store', enabled: true },
   { type: 'product-categories', label: 'Product Categories', category: 'store', enabled: true },
   { type: 'product-tags', label: 'Product Tags', category: 'store', enabled: true },
@@ -142,6 +152,7 @@ export function createBlock(type: BuilderBlockType, widget?: BuilderWidget): Bui
   if (type === 'grid') return { id, type, props: { columns: 3, itemsText: 'Grid item\nGrid item\nGrid item' } };
   if (type === 'menu') return { id, type, props: { source: 'header', orientation: 'horizontal', placement: 'header', linksText: 'Home|/\nShop|/shop\nBlog|/blog' } };
   if (type === 'sidebar-widgets') return { id, type, props: { itemsText: 'Search\nCategories\nRecent posts' } };
+  if (type === 'saved-form') return { id, type, props: { formId: '', formSlug: '', formTitle: '', displayTitle: true } };
   if (type === 'product-grid') return { id, type, props: { limit: 3 } };
   if (type === 'product-categories') return { id, type, props: {} };
   if (type === 'product-tags') return { id, type, props: {} };
@@ -385,6 +396,7 @@ export function HeroSliderPreview({ block, theme }: { block: BuilderBlock; theme
 export function PreviewBlock({
   block,
   components,
+  savedForms = [],
   theme,
   storePreview,
   selectedBlockId,
@@ -394,6 +406,7 @@ export function PreviewBlock({
 }: {
   block: BuilderBlock;
   components: Array<{ id: string; schemaJson: BuilderBlock }>;
+  savedForms?: SavedFormLite[];
   theme: ThemePreviewStyles;
   storePreview: StorePreviewData;
   selectedBlockId?: string;
@@ -440,7 +453,7 @@ export function PreviewBlock({
   if (block.type === 'grid') {
     const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 3)));
     const children = block.children ?? [];
-    return <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this grid and add widgets from the right panel.</div>}</div>;
+    return <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} savedForms={savedForms} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this grid and add widgets from the right panel.</div>}</div>;
   }
   if (block.type === 'image-slider') {
     const slides = getSlides(block);
@@ -454,6 +467,26 @@ export function PreviewBlock({
   if (block.type === 'sidebar-widgets') {
     return <aside className="mb-6 rounded border bg-gray-50 p-4">{getLines(block.props.itemsText, ['Search', 'Categories', 'Recent posts']).map((item) => <div key={item} className="border-b py-2 text-sm last:border-b-0">{item}</div>)}</aside>;
   }
+  if (block.type === 'saved-form') {
+    const selectedForm = savedForms.find((item) => item.id === block.props.formId || item.slug === block.props.formSlug);
+    const title = String(block.props.formTitle || selectedForm?.title || 'Saved form');
+    const slug = String(block.props.formSlug || selectedForm?.slug || '');
+    return (
+      <div className="mb-6 rounded-lg border border-dashed border-indigo-200 bg-indigo-50 p-5">
+        {block.props.displayTitle !== false && <h3 className="text-lg font-semibold text-indigo-950">{title}</h3>}
+        <p className="mt-1 text-sm text-indigo-700">
+          {slug ? `Embedded form: /forms/${slug}` : 'Choose a saved form in the block options.'}
+        </p>
+        <div className="mt-4 space-y-2">
+          <div className="h-10 rounded border bg-white" />
+          <div className="h-24 rounded border bg-white" />
+          <span className="inline-block rounded px-4 py-2 text-sm font-medium text-white" style={{ backgroundColor: theme.primaryColor }}>
+            Submit
+          </span>
+        </div>
+      </div>
+    );
+  }
   if (block.type === 'product-grid') {
     const products = storePreview.products.slice(0, Number(block.props.limit ?? 3));
     return <div className="mb-6 grid gap-4 md:grid-cols-3">{products.map((product) => <div key={product.id} className="rounded border bg-white p-4 shadow-sm"><h3 className="font-semibold">{product.name}</h3><p className="mt-1 text-sm text-gray-500">{product.description}</p><p className="mt-3 text-xl font-bold" style={{ color: theme.primaryColor }}>${Number(product.price).toFixed(2)}</p></div>)}</div>;
@@ -466,16 +499,17 @@ export function PreviewBlock({
   }
   if (block.type === 'global') {
     const component = components.find((item) => item.id === block.props.componentId);
-    return component ? <PreviewBlock block={component.schemaJson} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} /> : <div className="rounded border p-3 text-sm text-gray-500">Global component</div>;
+    return component ? <PreviewBlock block={component.schemaJson} components={components} savedForms={savedForms} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} /> : <div className="rounded border p-3 text-sm text-gray-500">Global component</div>;
   }
   const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 2)));
   const children = block.children ?? [];
-  return <div className="mb-4 grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this container and add widgets from the right panel.</div>}</div>;
+  return <div className="mb-4 grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} savedForms={savedForms} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this container and add widgets from the right panel.</div>}</div>;
 }
 
 export function EditableBlock({
   block,
   components,
+  savedForms,
   theme,
   storePreview,
   selectedBlockId,
@@ -487,6 +521,7 @@ export function EditableBlock({
 }: {
   block: BuilderBlock;
   components: Array<{ id: string; schemaJson: BuilderBlock }>;
+  savedForms: SavedFormLite[];
   theme: ThemePreviewStyles;
   storePreview: StorePreviewData;
   selectedBlockId: string;
@@ -502,7 +537,7 @@ export function EditableBlock({
       <div className="absolute right-2 top-2 z-20 hidden rounded bg-white shadow group-hover/block:block">
         <button onClick={(event) => { event.stopPropagation(); onRemoveBlock(block.id); }} className="px-2 py-1 text-xs text-red-600">Remove</button>
       </div>
-      <PreviewBlock block={block} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} />
+      <PreviewBlock block={block} components={components} savedForms={savedForms} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} />
     </div>
   );
 }
@@ -520,6 +555,7 @@ export function PreviewLayout({
   active,
   showChrome,
   components,
+  savedForms,
   theme,
   storePreview,
   selectedBlockId,
@@ -533,6 +569,7 @@ export function PreviewLayout({
   active: boolean;
   showChrome: boolean;
   components: Array<{ id: string; schemaJson: BuilderBlock }>;
+  savedForms: SavedFormLite[];
   theme: ThemePreviewStyles;
   storePreview: StorePreviewData;
   selectedBlockId: string;
@@ -564,7 +601,7 @@ export function PreviewLayout({
                   active ? <button onClick={() => onAddBlock('heading', section.id)} className="w-full rounded border border-dashed p-10 text-sm text-gray-500">Add content</button> : null
                 ) : (
                   section.blocks.map((block, index) => (
-                    <EditableBlock key={block.id} block={block} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} onDragStart={() => active && onDragStart(block.id)} onDrop={() => active && onMoveBlock(section.id, index)} active={active} />
+                    <EditableBlock key={block.id} block={block} components={components} savedForms={savedForms} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} onDragStart={() => active && onDragStart(block.id)} onDrop={() => active && onMoveBlock(section.id, index)} active={active} />
                   ))
                 )}
               </div>
@@ -677,6 +714,7 @@ export function BlockEditor({
   onRemove,
   theme,
   mediaAssets,
+  savedForms,
   widgets,
 }: {
   block: BuilderBlock;
@@ -685,6 +723,7 @@ export function BlockEditor({
   onRemove: () => void;
   theme: ThemePreviewStyles;
   mediaAssets: MediaAsset[];
+  savedForms: SavedFormLite[];
   widgets: BuilderWidget[];
 }) {
   const text = String(block.props.text ?? block.props.label ?? '');
@@ -865,6 +904,45 @@ export function BlockEditor({
       {block.type === 'product-grid' && (
         <label className="block text-sm font-medium text-gray-700">Products to Show<input type="number" min="1" max="12" value={Number(block.props.limit ?? 3)} onChange={(event) => onChange({ limit: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
       )}
+      {block.type === 'saved-form' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">
+            Saved Form
+            <select
+              value={String(block.props.formId ?? '')}
+              onChange={(event) => {
+                const selectedForm = savedForms.find((item) => item.id === event.target.value);
+                onChange({
+                  formId: selectedForm?.id ?? '',
+                  formSlug: selectedForm?.slug ?? '',
+                  formTitle: selectedForm?.title ?? '',
+                });
+              }}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            >
+              <option value="">Choose a saved form</option>
+              {savedForms.map((savedForm) => (
+                <option key={savedForm.id} value={savedForm.id}>
+                  {savedForm.title} ({savedForm.status.toLowerCase()})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={block.props.displayTitle !== false}
+              onChange={(event) => onChange({ displayTitle: event.target.checked })}
+            />
+            Show form title
+          </label>
+          {savedForms.length === 0 && (
+            <p className="rounded border border-dashed px-3 py-2 text-xs text-gray-500">
+              Create a form under Admin Forms, then refresh this editor to select it.
+            </p>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -900,19 +978,21 @@ export function PageDesignCanvas({
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [storePreview, setStorePreview] = useState<StorePreviewData>(emptyStorePreview);
   const [components, setComponents] = useState<GlobalComponentLite[]>([]);
+  const [savedForms, setSavedForms] = useState<SavedFormLite[]>([]);
   const [selectedBlockId, setSelectedBlockId] = useState('');
   const [dragBlockId, setDragBlockId] = useState('');
   const [responsiveMode, setResponsiveMode] = useState<ResponsiveMode>('desktop');
 
   const fetchResources = useCallback(async () => {
     try {
-      const [widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes, componentsRes] = await Promise.all([
+      const [widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes, componentsRes, formsRes] = await Promise.all([
         fetch('/api/proxy/admin/builder/widgets'),
         fetch('/api/proxy/media'),
         fetch('/api/proxy/products/all'),
         fetch('/api/proxy/admin/categories'),
         fetch('/api/proxy/admin/tags'),
         fetch('/api/proxy/admin/builder/components'),
+        fetch('/api/proxy/admin/forms'),
       ]);
       if (widgetsRes.ok) {
         const nextWidgets = (await widgetsRes.json()) as BuilderWidget[];
@@ -926,6 +1006,7 @@ export function PageDesignCanvas({
       ]);
       setStorePreview({ products, categories, tags });
       if (componentsRes.ok) setComponents((await componentsRes.json()) as GlobalComponentLite[]);
+      if (formsRes.ok) setSavedForms((await formsRes.json()) as SavedFormLite[]);
     } catch {
       // Resource loading failures degrade gracefully — palette/preview just show fewer options.
     }
@@ -1059,6 +1140,7 @@ export function PageDesignCanvas({
             active
             showChrome
             components={components}
+            savedForms={savedForms}
             theme={theme}
             storePreview={storePreview}
             selectedBlockId={selectedBlockId}
@@ -1081,6 +1163,7 @@ export function PageDesignCanvas({
             onRemove={() => removeBlock(selectedBlock.id)}
             theme={theme}
             mediaAssets={mediaAssets}
+            savedForms={savedForms}
             widgets={mergeWidgets(widgets)}
           />
         ) : (
@@ -1106,6 +1189,7 @@ export function BuilderLayoutPreview({ layout, theme = DEFAULT_THEME_PREVIEW_STY
       active={false}
       showChrome
       components={[]}
+      savedForms={[]}
       theme={theme}
       storePreview={emptyStorePreview}
       selectedBlockId=""

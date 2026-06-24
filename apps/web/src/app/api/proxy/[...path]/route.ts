@@ -23,6 +23,7 @@ const ALLOWED_PATH_PREFIXES = [
   'modules',
   'media',
   'messages',
+  'forms',
   'public',
 ];
 
