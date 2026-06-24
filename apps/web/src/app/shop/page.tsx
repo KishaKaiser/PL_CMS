@@ -39,7 +39,7 @@ export default async function ShopPage() {
           href="/shop/cart"
           className="rounded border border-indigo-300 px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50"
         >
-          🛒 View Cart
+          View Cart
         </Link>
       </div>
 
@@ -87,7 +87,7 @@ export default async function ShopPage() {
 
       <div className="mt-8">
         <Link href="/" className="text-sm text-indigo-600 hover:underline">
-          ← Back to Home
+          Back to Home
         </Link>
       </div>
     </main>

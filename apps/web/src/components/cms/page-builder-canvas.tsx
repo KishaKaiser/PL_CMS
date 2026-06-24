@@ -164,7 +164,7 @@ export function createBlock(type: BuilderBlockType, widget?: BuilderWidget): Bui
   if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#' } };
   if (type === 'icon') return { id, type, props: { iconClass: 'fa-solid fa-star', label: 'Icon label', size: 36, color: '#4f46e5' } };
   if (type === 'announcement-bar') return { id, type, props: { text: 'Free shipping on all domestic orders over $35', background: '#6f21b6', color: '#ffffff' } };
-  if (type === 'store-header') return { id, type, props: { logoText: 'The Psychic Link', socialLinksText: 'fa-brands fa-instagram|https://instagram.com|Instagram\nfa-brands fa-facebook-f|https://facebook.com|Facebook\nfa-brands fa-pinterest-p|https://pinterest.com|Pinterest', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', actionLinksText: 'text|/login|Login\nfa-solid fa-magnifying-glass|/search|Search\nfa-regular fa-heart|/wishlist|Wishlist\nfa-solid fa-bag-shopping|/shop/cart|Cart', showActions: true } };
+  if (type === 'store-header') return { id, type, props: { logoMode: 'text', logoText: 'The Psychic Link', logoMediaId: '', logoSrc: '', logoAlt: 'The Psychic Link', socialLinksText: 'fa-brands fa-instagram|https://instagram.com|Instagram\nfa-brands fa-facebook-f|https://facebook.com|Facebook\nfa-brands fa-pinterest-p|https://pinterest.com|Pinterest', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', actionLinksText: 'text|/login|Login\nfa-solid fa-magnifying-glass|/search|Search\nfa-regular fa-heart|/wishlist|Wishlist\nfa-solid fa-bag-shopping|/shop/cart|Cart', showActions: true } };
   if (type === 'hero-slider') return { id, type, props: { mediaIds: [], slides: [], mediaId: '', src: '', alt: '', heading: 'Welcome', buttonLabel: 'SHOP NOW', buttonHref: '/shop', height: 610, slideSeconds: 5 } };
   if (type === 'columns') return { id, type, props: { columns: 2 }, children: [] };
   if (type === 'grid') return { id, type, props: { columns: 3, itemsText: 'Grid item\nGrid item\nGrid item' } };
@@ -425,7 +425,13 @@ export function StoreHeaderPreview({ block }: { block: BuilderBlock }) {
           <i className="fa-solid fa-bars text-2xl" />
           {navLinks.map((link) => <a key={link.href} href={link.href} className="hover:text-purple-700">{link.label}</a>)}
         </nav>
-        <div className="font-serif text-3xl italic text-black">{String(block.props.logoText ?? 'The Psychic Link')}</div>
+        <div className="justify-self-center">
+          {block.props.logoMode === 'image' && block.props.logoSrc ? (
+            <img src={String(block.props.logoSrc)} alt={String(block.props.logoAlt ?? block.props.logoText ?? 'The Psychic Link')} className="max-h-16 max-w-[220px] object-contain" />
+          ) : (
+            <div className="font-serif text-3xl italic text-black">{String(block.props.logoText ?? 'The Psychic Link')}</div>
+          )}
+        </div>
         {block.props.showActions !== false && (
           <div className="flex items-center justify-end gap-7 text-neutral-900">
             {actionLinks.map((link) => (
@@ -980,7 +986,34 @@ export function BlockEditor({
       )}
       {block.type === 'store-header' && (
         <>
+          <label className="block text-sm font-medium text-gray-700">
+            Logo Type
+            <select value={String(block.props.logoMode ?? 'text')} onChange={(event) => onChange({ logoMode: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+              <option value="text">Text logo</option>
+              <option value="image">Image logo</option>
+            </select>
+          </label>
           <label className="block text-sm font-medium text-gray-700">Logo Text<input value={String(block.props.logoText ?? 'The Psychic Link')} onChange={(event) => onChange({ logoText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          {String(block.props.logoMode ?? 'text') === 'image' && (
+            <label className="block text-sm font-medium text-gray-700">
+              Logo Image
+              <select
+                value={String(block.props.logoMediaId ?? '')}
+                onChange={(event) => {
+                  const asset = mediaAssets.find((item) => item.id === event.target.value);
+                  onChange(asset ? { logoMediaId: asset.id, logoSrc: asset.url, logoAlt: asset.altText || asset.title || asset.originalName } : { logoMediaId: '', logoSrc: '', logoAlt: '' });
+                }}
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              >
+                <option value="">Choose from media library</option>
+                {mediaAssets.map((asset) => (
+                  <option key={asset.id} value={asset.id}>
+                    {asset.title || asset.originalName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="block text-sm font-medium text-gray-700">Social Icons (icon class|url|label per line)<textarea value={String(block.props.socialLinksText ?? '')} rows={4} onChange={(event) => onChange({ socialLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="block text-sm font-medium text-gray-700">Top Links (label|url per line)<textarea value={String(block.props.topLinksText ?? '')} rows={3} onChange={(event) => onChange({ topLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="block text-sm font-medium text-gray-700">Main Nav (label|url per line)<textarea value={String(block.props.navLinksText ?? '')} rows={5} onChange={(event) => onChange({ navLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>

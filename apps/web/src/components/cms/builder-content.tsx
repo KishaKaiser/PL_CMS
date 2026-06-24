@@ -3,6 +3,7 @@ import type { BuilderBlock, BuilderLayout } from '../../lib/public-cms';
 import { getCategories, getTags } from '../../lib/public-cms';
 import { PublicFormEmbed } from './public-form-embed';
 import { PublicSliderEmbed } from './public-slider-embed';
+import { AnnouncementBar, StorefrontHeader } from './storefront-header';
 
 interface Product {
   id: string;
@@ -134,16 +135,11 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
   }
   if (block.type === 'announcement-bar') {
     return (
-      <div
-        className="text-center text-sm font-semibold"
-        style={{
-          background: String(block.props.background ?? '#6f21b6'),
-          color: String(block.props.color ?? '#ffffff'),
-          padding: '12px 20px',
-        }}
-      >
-        {String(block.props.text ?? 'Free shipping on all domestic orders over $35')}
-      </div>
+      <AnnouncementBar
+        text={String(block.props.text ?? 'Free shipping on all domestic orders over $35')}
+        background={String(block.props.background ?? '#6f21b6')}
+        color={String(block.props.color ?? '#ffffff')}
+      />
     );
   }
   if (block.type === 'store-header') {
@@ -271,32 +267,16 @@ function StoreHeaderView({ block }: { block: BuilderBlock }) {
     'fa-solid fa-bag-shopping|/shop/cart|Cart',
   ]);
   return (
-    <header className="bg-white">
-      <div className="flex flex-wrap items-center gap-7 bg-neutral-900 px-6 py-5 text-sm font-medium text-white lg:px-12">
-        {socialLinks.map((link) => (
-          <a key={`${link.iconClass}-${link.href}`} href={link.href} aria-label={link.label} className="hover:text-purple-200">
-            <i className={link.iconClass} />
-          </a>
-        ))}
-        {topLinks.map((link) => <a key={link.href} href={link.href} className="hover:underline">{link.label}</a>)}
-      </div>
-      <div className="grid gap-4 px-6 py-8 lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:px-12">
-        <nav className="flex flex-wrap items-center gap-6 text-base text-neutral-800">
-          <i className="fa-solid fa-bars text-2xl" />
-          {navLinks.map((link) => <a key={link.href} href={link.href} className="hover:text-purple-700">{link.label}</a>)}
-        </nav>
-        <div className="text-center font-serif text-3xl italic text-black">{String(block.props.logoText ?? 'The Psychic Link')}</div>
-        {block.props.showActions !== false && (
-          <div className="flex items-center gap-7 text-neutral-900 lg:justify-end">
-            {actionLinks.map((link) => (
-              <a key={`${link.iconClass}-${link.href}`} href={link.href} aria-label={link.label} className="hover:text-purple-700">
-                {link.iconClass === 'text' ? <span className="text-base">{link.label}</span> : <i className={`${link.iconClass} text-2xl`} />}
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
-    </header>
+    <StorefrontHeader
+      logoText={String(block.props.logoText ?? 'The Psychic Link')}
+      logoSrc={block.props.logoMode === 'image' ? String(block.props.logoSrc ?? '') : ''}
+      logoAlt={String(block.props.logoAlt ?? block.props.logoText ?? 'The Psychic Link')}
+      socialLinks={socialLinks}
+      topLinks={topLinks}
+      navLinks={navLinks}
+      actionLinks={actionLinks}
+      showActions={block.props.showActions !== false}
+    />
   );
 }
 
