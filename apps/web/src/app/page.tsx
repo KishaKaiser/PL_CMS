@@ -79,10 +79,12 @@ export default async function HomePage({ searchParams }: Props) {
   const homePageImageSrc = getSafeImageSrc(homePage?.featuredImageUrl);
   const builderLayout = homePage?.builderLayout;
   const showHomePageTitle = builderLayout?.settings?.showTitle !== false;
+  const showSiteHeader = builderLayout?.settings?.showHeader !== false;
+  const showSiteFooter = builderLayout?.settings?.showFooter !== false;
 
   if (homePage && builderLayout) {
     return (
-      <PublicSiteShell siteConfig={siteConfig}>
+      <PublicSiteShell siteConfig={siteConfig} showHeader={showSiteHeader} showFooter={showSiteFooter}>
         <main>
           <BuilderContent layout={builderLayout} />
         </main>
