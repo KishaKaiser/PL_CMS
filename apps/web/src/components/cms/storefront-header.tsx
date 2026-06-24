@@ -50,6 +50,7 @@ export function StorefrontHeader({
   navLinks,
   actionLinks,
   showActions,
+  stickyMain,
 }: {
   logoText: string;
   logoSrc?: string;
@@ -59,6 +60,7 @@ export function StorefrontHeader({
   navLinks: StorefrontLink[];
   actionLinks: StorefrontIconLink[];
   showActions: boolean;
+  stickyMain?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -77,7 +79,7 @@ export function StorefrontHeader({
         ))}
       </div>
 
-      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 px-6 py-6 lg:grid-cols-[1fr_auto_1fr] lg:px-12 lg:py-8">
+      <div className={`grid grid-cols-[auto_1fr_auto] items-center gap-4 bg-white px-6 py-6 lg:grid-cols-[1fr_auto_1fr] lg:px-12 lg:py-8 ${stickyMain ? 'sticky top-0 z-40 border-b border-gray-100 shadow-sm' : ''}`}>
         <nav className="flex items-center gap-6 text-base text-neutral-800">
           <button
             type="button"

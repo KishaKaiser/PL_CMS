@@ -710,6 +710,12 @@ export class PublicContentService {
       homepageSections?.posts && typeof homepageSections.posts === 'object'
         ? homepageSections.posts
         : null;
+    const blogSidebar =
+      parsed?.blogSidebar && typeof parsed.blogSidebar === 'object'
+        ? parsed.blogSidebar
+        : null;
+    const sidebarSection = (key: keyof SiteThemeSettings['blogSidebar']) =>
+      blogSidebar?.[key] && typeof blogSidebar[key] === 'object' ? blogSidebar[key] : null;
 
     return {
       primaryColor: this.getString(parsed?.primaryColor, DEFAULT_SITE_THEME.primaryColor),
@@ -729,6 +735,28 @@ export class PublicContentService {
         posts: {
           enabled: this.getBoolean(postSection?.enabled, DEFAULT_SITE_THEME.homepageSections.posts.enabled),
           title: this.getString(postSection?.title, DEFAULT_SITE_THEME.homepageSections.posts.title),
+        },
+      },
+      blogSidebar: {
+        search: {
+          enabled: this.getBoolean(sidebarSection('search')?.enabled, DEFAULT_SITE_THEME.blogSidebar.search.enabled),
+          title: this.getString(sidebarSection('search')?.title, DEFAULT_SITE_THEME.blogSidebar.search.title),
+        },
+        categories: {
+          enabled: this.getBoolean(sidebarSection('categories')?.enabled, DEFAULT_SITE_THEME.blogSidebar.categories.enabled),
+          title: this.getString(sidebarSection('categories')?.title, DEFAULT_SITE_THEME.blogSidebar.categories.title),
+        },
+        tags: {
+          enabled: this.getBoolean(sidebarSection('tags')?.enabled, DEFAULT_SITE_THEME.blogSidebar.tags.enabled),
+          title: this.getString(sidebarSection('tags')?.title, DEFAULT_SITE_THEME.blogSidebar.tags.title),
+        },
+        authors: {
+          enabled: this.getBoolean(sidebarSection('authors')?.enabled, DEFAULT_SITE_THEME.blogSidebar.authors.enabled),
+          title: this.getString(sidebarSection('authors')?.title, DEFAULT_SITE_THEME.blogSidebar.authors.title),
+        },
+        archives: {
+          enabled: this.getBoolean(sidebarSection('archives')?.enabled, DEFAULT_SITE_THEME.blogSidebar.archives.enabled),
+          title: this.getString(sidebarSection('archives')?.title, DEFAULT_SITE_THEME.blogSidebar.archives.title),
         },
       },
     };

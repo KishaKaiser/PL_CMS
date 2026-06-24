@@ -22,6 +22,13 @@ export type SiteThemeSettings = {
     pages: ThemeSectionSettings;
     posts: ThemeSectionSettings;
   };
+  blogSidebar: {
+    search: ThemeSectionSettings;
+    categories: ThemeSectionSettings;
+    tags: ThemeSectionSettings;
+    authors: ThemeSectionSettings;
+    archives: ThemeSectionSettings;
+  };
 };
 
 export type SiteIdentitySettings = {
@@ -123,6 +130,13 @@ export const DEFAULT_SITE_THEME: SiteThemeSettings = {
   homepageSections: {
     pages: { enabled: true, title: 'Browse Pages' },
     posts: { enabled: true, title: 'Latest Posts' },
+  },
+  blogSidebar: {
+    search: { enabled: true, title: 'Search' },
+    categories: { enabled: true, title: 'Categories' },
+    tags: { enabled: true, title: 'Tags' },
+    authors: { enabled: true, title: 'Authors' },
+    archives: { enabled: true, title: 'Archives' },
   },
 };
 
