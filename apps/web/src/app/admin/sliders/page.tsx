@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MediaAsset } from '../../../components/admin/media-library';
 import { PublicSliderEmbed, type CmsSlider, type SliderLayer, type SliderSlide } from '../../../components/cms/public-slider-embed';
@@ -168,20 +169,29 @@ export default function AdminSlidersPage() {
   const activeSlide = slider.slides[activeSlideIndex] ?? slider.slides[0];
 
   return (
-    <div className="mx-auto max-w-7xl p-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div className="flex h-screen flex-col bg-gray-100">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white px-5 py-3">
         <div>
-          <h1 className="text-3xl font-bold">Sliders</h1>
-          <p className="mt-1 text-sm text-gray-600">Create reusable image and video sliders with layered text and buttons.</p>
+          <h1 className="text-lg font-semibold text-gray-900">Sliders</h1>
+          <p className="text-xs text-gray-500">Full-screen image and video slider editor</p>
         </div>
-        <button type="button" onClick={startNew} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">New Slider</button>
+        <div className="flex gap-2">
+          <Link href="/admin" className="rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">
+            Back to Admin
+          </Link>
+          <button type="button" onClick={startNew} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">New Slider</button>
+        </div>
       </div>
 
-      {error && <p className="mb-4 rounded bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
-      {message && <p className="mb-4 rounded bg-green-50 px-4 py-3 text-sm text-green-700">{message}</p>}
+      {(error || message) && (
+        <div className="shrink-0 px-5 py-3">
+          {error && <p className="rounded bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
+          {message && <p className="rounded bg-green-50 px-4 py-3 text-sm text-green-700">{message}</p>}
+        </div>
+      )}
 
-      <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="grid min-h-0 flex-1 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="min-h-0 overflow-y-auto border-r border-gray-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Saved Sliders</h2>
           {loading ? <p className="mt-4 text-sm text-gray-500">Loading...</p> : sliders.length === 0 ? <p className="mt-4 text-sm text-gray-500">No sliders saved yet.</p> : (
             <div className="mt-4 space-y-2">
@@ -195,8 +205,8 @@ export default function AdminSlidersPage() {
           )}
         </aside>
 
-        <form onSubmit={saveSlider} className="space-y-6">
-          <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <form onSubmit={saveSlider} className="min-h-0 overflow-y-auto p-5">
+          <section className="mb-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="mb-5 flex flex-wrap justify-between gap-3">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">{selectedSliderId ? 'Edit Slider' : 'Create Slider'}</h2>
@@ -218,8 +228,8 @@ export default function AdminSlidersPage() {
             </div>
           </section>
 
-          <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="space-y-4">
+          <section className="grid min-h-[calc(100vh-270px)] gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="min-h-0 space-y-4">
               <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
                 <div className="mb-3 flex flex-wrap justify-between gap-2">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Live Preview</h3>
@@ -263,7 +273,7 @@ export default function AdminSlidersPage() {
               </div>
             </div>
 
-            <aside className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <aside className="min-h-0 overflow-y-auto rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Layers</h3>
               {!activeSlide || activeSlide.layers.length === 0 ? <p className="text-sm text-gray-500">Add text or button layers to this slide.</p> : (
                 <div className="space-y-4">

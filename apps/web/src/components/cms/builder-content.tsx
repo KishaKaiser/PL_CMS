@@ -377,6 +377,18 @@ function getLines(value: unknown, fallback: string[]) {
 }
 
 function getMenuLinks(block: BuilderBlock) {
+  if (Array.isArray(block.props.menuItems)) {
+    return block.props.menuItems
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const candidate = item as { label?: unknown; href?: unknown };
+        return {
+          label: String(candidate.label ?? 'Link'),
+          href: String(candidate.href ?? '#'),
+        };
+      })
+      .filter((item): item is { label: string; href: string } => Boolean(item?.label));
+  }
   return getLines(block.props.linksText, ['Home|/', 'Shop|/shop', 'Blog|/blog']).map((line) => {
     const [label, href] = line.split('|');
     return { label: label?.trim() || 'Link', href: href?.trim() || '#' };

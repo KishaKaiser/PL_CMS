@@ -96,6 +96,18 @@ interface SavedSliderLite extends CmsSlider {
   status: string;
 }
 
+interface SavedMenuItem {
+  label: string;
+  href: string;
+}
+
+interface SavedMenuLite {
+  id: string;
+  name: string;
+  location?: string;
+  items: SavedMenuItem[];
+}
+
 export type StorePreviewData = {
   products: ProductPreview[];
   categories: TaxonomyPreview[];
@@ -248,6 +260,18 @@ function getLines(value: unknown, fallback: string[]) {
 }
 
 function getMenuLinks(block: BuilderBlock) {
+  if (Array.isArray(block.props.menuItems)) {
+    return block.props.menuItems
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const candidate = item as { label?: unknown; href?: unknown };
+        return {
+          label: String(candidate.label ?? 'Link'),
+          href: String(candidate.href ?? '#'),
+        };
+      })
+      .filter((item): item is SavedMenuItem => Boolean(item?.label));
+  }
   return getLinksFromText(block.props.linksText, ['Home|/', 'Shop|/shop', 'Blog|/blog']);
 }
 
@@ -256,6 +280,49 @@ function getLinksFromText(value: unknown, fallback: string[]) {
     const [label, href] = line.split('|');
     return { label: label?.trim() || 'Link', href: href?.trim() || '#' };
   });
+}
+
+function normalizeSavedMenus(value: unknown): SavedMenuLite[] {
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      parsed = null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') return [];
+  const source = parsed as { header?: unknown; footer?: unknown; custom?: unknown };
+  const menus: SavedMenuLite[] = [
+    { id: 'header', name: 'Header Menu', location: 'header', items: normalizeMenuItems(source.header) },
+    { id: 'footer', name: 'Footer Menu', location: 'footer', items: normalizeMenuItems(source.footer) },
+  ];
+  if (Array.isArray(source.custom)) {
+    source.custom.forEach((menu, index) => {
+      if (!menu || typeof menu !== 'object') return;
+      const candidate = menu as { id?: unknown; name?: unknown; location?: unknown; items?: unknown };
+      menus.push({
+        id: String(candidate.id ?? `custom-${index + 1}`),
+        name: String(candidate.name ?? `Custom Menu ${index + 1}`),
+        location: typeof candidate.location === 'string' ? candidate.location : 'custom',
+        items: normalizeMenuItems(candidate.items),
+      });
+    });
+  }
+  return menus.filter((menu) => menu.items.length > 0);
+}
+
+function normalizeMenuItems(value: unknown): SavedMenuItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const candidate = item as { label?: unknown; href?: unknown };
+      const label = String(candidate.label ?? '').trim();
+      const href = String(candidate.href ?? '').trim();
+      return label && href ? { label, href } : null;
+    })
+    .filter((item): item is SavedMenuItem => item !== null);
 }
 
 function getIconLinksFromText(value: unknown, fallback: string[]) {
@@ -741,6 +808,7 @@ export function BlockEditor({
   mediaAssets,
   savedForms,
   savedSliders,
+  savedMenus,
   widgets,
 }: {
   block: BuilderBlock;
@@ -751,6 +819,7 @@ export function BlockEditor({
   mediaAssets: MediaAsset[];
   savedForms: SavedFormLite[];
   savedSliders: SavedSliderLite[];
+  savedMenus: SavedMenuLite[];
   widgets: BuilderWidget[];
 }) {
   const text = String(block.props.text ?? block.props.label ?? '');
@@ -854,7 +923,36 @@ export function BlockEditor({
       )}
       {block.type === 'menu' && (
         <>
-          <select value={String(block.props.source ?? 'header')} onChange={(event) => onChange({ source: event.target.value })} className="w-full rounded border px-3 py-2 text-sm">
+          <label className="block text-sm font-medium text-gray-700">
+            Saved Menu
+            <select
+              value={String(block.props.menuId ?? '')}
+              onChange={(event) => {
+                const selectedMenu = savedMenus.find((menu) => menu.id === event.target.value);
+                onChange({
+                  menuId: selectedMenu?.id ?? '',
+                  menuName: selectedMenu?.name ?? '',
+                  source: selectedMenu?.location ?? 'custom',
+                  linksText: selectedMenu ? selectedMenu.items.map((item) => `${item.label}|${item.href}`).join('\n') : String(block.props.linksText ?? ''),
+                  menuItems: selectedMenu?.items ?? [],
+                });
+              }}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            >
+              <option value="">Custom links</option>
+              {savedMenus.map((menu) => (
+                <option key={menu.id} value={menu.id}>
+                  {menu.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {savedMenus.length === 0 && (
+            <p className="rounded border border-dashed px-3 py-2 text-xs text-gray-500">
+              Create saved menus under Admin Menus, then refresh this editor to select them.
+            </p>
+          )}
+          <select value={String(block.props.source ?? 'header')} onChange={(event) => onChange({ source: event.target.value, menuId: '' })} className="w-full rounded border px-3 py-2 text-sm">
             <option value="header">Header menu</option>
             <option value="footer">Footer menu</option>
             <option value="custom">Custom links</option>
@@ -1058,13 +1156,14 @@ export function PageDesignCanvas({
   const [components, setComponents] = useState<GlobalComponentLite[]>([]);
   const [savedForms, setSavedForms] = useState<SavedFormLite[]>([]);
   const [savedSliders, setSavedSliders] = useState<SavedSliderLite[]>([]);
+  const [savedMenus, setSavedMenus] = useState<SavedMenuLite[]>([]);
   const [selectedBlockId, setSelectedBlockId] = useState('');
   const [dragBlockId, setDragBlockId] = useState('');
   const [responsiveMode, setResponsiveMode] = useState<ResponsiveMode>('desktop');
 
   const fetchResources = useCallback(async () => {
     try {
-      const [widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes, componentsRes, formsRes, slidersRes] = await Promise.all([
+      const [widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes, componentsRes, formsRes, slidersRes, menusRes] = await Promise.all([
         fetch('/api/proxy/admin/builder/widgets'),
         fetch('/api/proxy/media'),
         fetch('/api/proxy/products/all'),
@@ -1073,6 +1172,7 @@ export function PageDesignCanvas({
         fetch('/api/proxy/admin/builder/components'),
         fetch('/api/proxy/admin/forms'),
         fetch('/api/proxy/admin/sliders'),
+        fetch('/api/proxy/settings/site_menus'),
       ]);
       if (widgetsRes.ok) {
         const nextWidgets = (await widgetsRes.json()) as BuilderWidget[];
@@ -1088,6 +1188,10 @@ export function PageDesignCanvas({
       if (componentsRes.ok) setComponents((await componentsRes.json()) as GlobalComponentLite[]);
       if (formsRes.ok) setSavedForms((await formsRes.json()) as SavedFormLite[]);
       if (slidersRes.ok) setSavedSliders((await slidersRes.json()) as SavedSliderLite[]);
+      if (menusRes.ok) {
+        const setting = (await menusRes.json()) as { value?: string } | null;
+        setSavedMenus(normalizeSavedMenus(setting?.value));
+      }
     } catch {
       // Resource loading failures degrade gracefully — palette/preview just show fewer options.
     }
@@ -1253,6 +1357,7 @@ export function PageDesignCanvas({
             mediaAssets={mediaAssets}
             savedForms={savedForms}
             savedSliders={savedSliders}
+            savedMenus={savedMenus}
             widgets={mergeWidgets(widgets)}
           />
         ) : (

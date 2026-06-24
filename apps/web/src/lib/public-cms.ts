@@ -88,6 +88,8 @@ export interface BuilderLayout {
     layout?: string;
     breadcrumbs?: boolean;
     showTitle?: boolean;
+    showHeader?: boolean;
+    showFooter?: boolean;
   };
   sections: Array<{
     id: string;

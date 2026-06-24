@@ -17,6 +17,7 @@ const NAV_GROUPS = [
       { href: '/admin/pages', label: 'Pages' },
       { href: '/admin/posts', label: 'Posts' },
       { href: '/admin/forms', label: 'Forms' },
+      { href: '/admin/menus', label: 'Menus' },
       { href: '/admin/sliders', label: 'Sliders' },
       { href: '/admin/taxonomies', label: 'Categories & Tags' },
       { href: '/admin/media', label: 'Media Library' },
@@ -49,14 +50,14 @@ const NAV_GROUPS = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const isThemeBuilder = pathname.startsWith('/admin/theme-builder');
+  const isFullScreenEditor = pathname.startsWith('/admin/theme-builder') || pathname.startsWith('/admin/sliders');
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
   }
 
-  if (isThemeBuilder) {
+  if (isFullScreenEditor) {
     return <main className="min-h-screen bg-gray-100">{children}</main>;
   }
 

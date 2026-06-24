@@ -57,9 +57,11 @@ export default async function CmsPage({ params, searchParams }: Props) {
   const featuredImageSrc = getSafeImageSrc(page.featuredImageUrl);
   const builderLayout = page.builderLayout;
   const showPageTitle = builderLayout?.settings?.showTitle !== false;
+  const showSiteHeader = builderLayout?.settings?.showHeader !== false;
+  const showSiteFooter = builderLayout?.settings?.showFooter !== false;
 
   return (
-    <PublicSiteShell siteConfig={siteConfig}>
+    <PublicSiteShell siteConfig={siteConfig} showHeader={showSiteHeader} showFooter={showSiteFooter}>
       {builderLayout ? (
         <main>
           <BuilderContent layout={builderLayout} />
