@@ -602,6 +602,59 @@ export default function AdminPagesPage() {
           </p>
         )}
 
+        {editorTab === 'design' && (
+          <div className="fixed inset-0 z-50 flex flex-col bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">
+                  Design Page: {form.title || 'Untitled page'}
+                </h2>
+                <p className="text-xs text-gray-500">Full-screen page editor</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {PAGE_EDITOR_TABS.map((tab) => (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    onClick={() => setEditorTab(tab.value)}
+                    className={`rounded px-3 py-1.5 text-sm font-medium ${
+                      editorTab === tab.value
+                        ? 'bg-indigo-600 text-white'
+                        : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="rounded border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Back to All Pages
+                </button>
+              </div>
+            </div>
+            {editingId ? (
+              <PageDesignCanvas
+                layout={builderLayout}
+                onChange={setBuilderLayout}
+                saving={builderSaving}
+                status={builderStatus}
+                error={builderError}
+                onSave={() => void savePageLayout()}
+                fullScreen
+              />
+            ) : (
+              <div className="flex flex-1 items-center justify-center bg-gray-50 p-8">
+                <p className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
+                  Save the page before designing its layout.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="mb-6 grid gap-2 rounded-lg bg-gray-50 p-2 md:grid-cols-4">
           {PAGE_EDITOR_TABS.map((tab) => (
             <button

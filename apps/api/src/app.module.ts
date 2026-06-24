@@ -19,6 +19,7 @@ import { MessagesModule } from './messages/messages.module';
 import { AccountModule } from './account/account.module';
 import { DefaultContentModule } from './bootstrap/default-content.module';
 import { FormsModule } from './forms/forms.module';
+import { SlidersModule } from './sliders/sliders.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { FormsModule } from './forms/forms.module';
     AccountModule,
     DefaultContentModule,
     FormsModule,
+    SlidersModule,
   ],
 })
 export class AppModule {}

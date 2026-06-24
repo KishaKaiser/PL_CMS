@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MediaAsset } from '../admin/media-library';
+import { PublicSliderEmbed, type CmsSlider } from './public-slider-embed';
 
 export type BuilderBlockType =
   | 'heading'
@@ -90,6 +91,11 @@ interface SavedFormLite {
   status: string;
 }
 
+interface SavedSliderLite extends CmsSlider {
+  id: string;
+  status: string;
+}
+
 export type StorePreviewData = {
   products: ProductPreview[];
   categories: TaxonomyPreview[];
@@ -112,7 +118,7 @@ export const defaultWidgets: BuilderWidget[] = [
   { type: 'heading', label: 'Heading', category: 'content', enabled: true },
   { type: 'text', label: 'Text', category: 'content', enabled: true },
   { type: 'image', label: 'Image', category: 'media', enabled: true },
-  { type: 'image-slider', label: 'Image Slider', category: 'media', enabled: true },
+  { type: 'image-slider', label: 'Saved Slider / Video', category: 'media', enabled: true },
   { type: 'video', label: 'Video Embed', category: 'media', enabled: true },
   { type: 'button', label: 'Button', category: 'content', enabled: true },
   { type: 'icon', label: 'Font Awesome Icon', category: 'content', enabled: true },
@@ -141,7 +147,7 @@ export function createBlock(type: BuilderBlockType, widget?: BuilderWidget): Bui
   if (type === 'heading') return { id, type, props: { text: 'New Heading', level: 2, fontSize: 36, align: 'left' } };
   if (type === 'text') return { id, type, props: { text: 'New text block.', fontSize: 16, align: 'left' } };
   if (type === 'image') return { id, type, props: { mediaId: '', src: '', alt: '', width: 100, height: 320, objectFit: 'cover', align: 'center', borderRadius: 8 } };
-  if (type === 'image-slider') return { id, type, props: { mediaIds: [], slides: [], height: 360 } };
+  if (type === 'image-slider') return { id, type, props: { mode: 'saved-slider', sliderId: '', sliderSlug: '', sliderTitle: '', videoUrl: '', height: 420 } };
   if (type === 'video') return { id, type, props: { url: '', aspectRatio: '16 / 9' } };
   if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#' } };
   if (type === 'icon') return { id, type, props: { iconClass: 'fa-solid fa-star', label: 'Icon label', size: 36, color: '#4f46e5' } };
@@ -397,6 +403,7 @@ export function PreviewBlock({
   block,
   components,
   savedForms = [],
+  savedSliders = [],
   theme,
   storePreview,
   selectedBlockId,
@@ -407,6 +414,7 @@ export function PreviewBlock({
   block: BuilderBlock;
   components: Array<{ id: string; schemaJson: BuilderBlock }>;
   savedForms?: SavedFormLite[];
+  savedSliders?: SavedSliderLite[];
   theme: ThemePreviewStyles;
   storePreview: StorePreviewData;
   selectedBlockId?: string;
@@ -453,9 +461,22 @@ export function PreviewBlock({
   if (block.type === 'grid') {
     const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 3)));
     const children = block.children ?? [];
-    return <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} savedForms={savedForms} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this grid and add widgets from the right panel.</div>}</div>;
+    return <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} savedForms={savedForms} savedSliders={savedSliders} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this grid and add widgets from the right panel.</div>}</div>;
   }
   if (block.type === 'image-slider') {
+    const mode = String(block.props.mode ?? (block.props.sliderSlug ? 'saved-slider' : 'legacy-images'));
+    if (mode === 'saved-slider') {
+      const selectedSlider = savedSliders.find((item) => item.id === block.props.sliderId || item.slug === block.props.sliderSlug);
+      return selectedSlider ? (
+        <PublicSliderEmbed slider={selectedSlider} />
+      ) : (
+        <div className="mb-6 rounded border border-dashed p-6 text-sm text-gray-500">Choose a saved slider in the block options.</div>
+      );
+    }
+    if (mode === 'video') {
+      const url = String(block.props.videoUrl ?? '');
+      return <div className="mb-6 overflow-hidden rounded border bg-black" style={{ aspectRatio: String(block.props.aspectRatio ?? '16 / 9') }}>{url ? videoEmbed(url) : <div className="flex h-full min-h-64 items-center justify-center text-sm text-white">Video widget</div>}</div>;
+    }
     const slides = getSlides(block);
     const height = `${Number(block.props.height ?? 360)}px`;
     return <AnimatedSlider slides={slides} height={height} seconds={Number(block.props.slideSeconds ?? 5)} fallback="Select images for this slider." />;
@@ -499,17 +520,18 @@ export function PreviewBlock({
   }
   if (block.type === 'global') {
     const component = components.find((item) => item.id === block.props.componentId);
-    return component ? <PreviewBlock block={component.schemaJson} components={components} savedForms={savedForms} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} /> : <div className="rounded border p-3 text-sm text-gray-500">Global component</div>;
+    return component ? <PreviewBlock block={component.schemaJson} components={components} savedForms={savedForms} savedSliders={savedSliders} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} /> : <div className="rounded border p-3 text-sm text-gray-500">Global component</div>;
   }
   const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 2)));
   const children = block.children ?? [];
-  return <div className="mb-4 grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} savedForms={savedForms} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this container and add widgets from the right panel.</div>}</div>;
+  return <div className="mb-4 grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} savedForms={savedForms} savedSliders={savedSliders} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this container and add widgets from the right panel.</div>}</div>;
 }
 
 export function EditableBlock({
   block,
   components,
   savedForms,
+  savedSliders,
   theme,
   storePreview,
   selectedBlockId,
@@ -522,6 +544,7 @@ export function EditableBlock({
   block: BuilderBlock;
   components: Array<{ id: string; schemaJson: BuilderBlock }>;
   savedForms: SavedFormLite[];
+  savedSliders: SavedSliderLite[];
   theme: ThemePreviewStyles;
   storePreview: StorePreviewData;
   selectedBlockId: string;
@@ -537,7 +560,7 @@ export function EditableBlock({
       <div className="absolute right-2 top-2 z-20 hidden rounded bg-white shadow group-hover/block:block">
         <button onClick={(event) => { event.stopPropagation(); onRemoveBlock(block.id); }} className="px-2 py-1 text-xs text-red-600">Remove</button>
       </div>
-      <PreviewBlock block={block} components={components} savedForms={savedForms} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} />
+      <PreviewBlock block={block} components={components} savedForms={savedForms} savedSliders={savedSliders} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} />
     </div>
   );
 }
@@ -556,6 +579,7 @@ export function PreviewLayout({
   showChrome,
   components,
   savedForms,
+  savedSliders,
   theme,
   storePreview,
   selectedBlockId,
@@ -570,6 +594,7 @@ export function PreviewLayout({
   showChrome: boolean;
   components: Array<{ id: string; schemaJson: BuilderBlock }>;
   savedForms: SavedFormLite[];
+  savedSliders: SavedSliderLite[];
   theme: ThemePreviewStyles;
   storePreview: StorePreviewData;
   selectedBlockId: string;
@@ -601,7 +626,7 @@ export function PreviewLayout({
                   active ? <button onClick={() => onAddBlock('heading', section.id)} className="w-full rounded border border-dashed p-10 text-sm text-gray-500">Add content</button> : null
                 ) : (
                   section.blocks.map((block, index) => (
-                    <EditableBlock key={block.id} block={block} components={components} savedForms={savedForms} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} onDragStart={() => active && onDragStart(block.id)} onDrop={() => active && onMoveBlock(section.id, index)} active={active} />
+                    <EditableBlock key={block.id} block={block} components={components} savedForms={savedForms} savedSliders={savedSliders} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} onDragStart={() => active && onDragStart(block.id)} onDrop={() => active && onMoveBlock(section.id, index)} active={active} />
                   ))
                 )}
               </div>
@@ -715,6 +740,7 @@ export function BlockEditor({
   theme,
   mediaAssets,
   savedForms,
+  savedSliders,
   widgets,
 }: {
   block: BuilderBlock;
@@ -724,6 +750,7 @@ export function BlockEditor({
   theme: ThemePreviewStyles;
   mediaAssets: MediaAsset[];
   savedForms: SavedFormLite[];
+  savedSliders: SavedSliderLite[];
   widgets: BuilderWidget[];
 }) {
   const text = String(block.props.text ?? block.props.label ?? '');
@@ -887,9 +914,58 @@ export function BlockEditor({
       )}
       {block.type === 'image-slider' && (
         <>
-          <MediaSlidePicker block={block} mediaAssets={mediaAssets} onChange={onChange} />
-          <label className="block text-sm font-medium text-gray-700">Height<input type="number" min="120" max="800" value={Number(block.props.height ?? 360)} onChange={(event) => onChange({ height: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
-          <label className="block text-sm font-medium text-gray-700">Slide Speed (seconds)<input type="number" min="2" max="20" value={Number(block.props.slideSeconds ?? 5)} onChange={(event) => onChange({ slideSeconds: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">
+            Widget Mode
+            <select value={String(block.props.mode ?? 'saved-slider')} onChange={(event) => onChange({ mode: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+              <option value="saved-slider">Saved slider</option>
+              <option value="video">Video</option>
+              <option value="legacy-images">Legacy image list</option>
+            </select>
+          </label>
+          {String(block.props.mode ?? 'saved-slider') === 'saved-slider' && (
+            <>
+              <label className="block text-sm font-medium text-gray-700">
+                Saved Slider
+                <select
+                  value={String(block.props.sliderId ?? '')}
+                  onChange={(event) => {
+                    const selectedSlider = savedSliders.find((item) => item.id === event.target.value);
+                    onChange({
+                      sliderId: selectedSlider?.id ?? '',
+                      sliderSlug: selectedSlider?.slug ?? '',
+                      sliderTitle: selectedSlider?.title ?? '',
+                    });
+                  }}
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                >
+                  <option value="">Choose a saved slider</option>
+                  {savedSliders.map((savedSlider) => (
+                    <option key={savedSlider.id} value={savedSlider.id}>
+                      {savedSlider.title} ({savedSlider.status.toLowerCase()})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {savedSliders.length === 0 && (
+                <p className="rounded border border-dashed px-3 py-2 text-xs text-gray-500">
+                  Create a slider under Admin Sliders, then refresh this editor to select it.
+                </p>
+              )}
+            </>
+          )}
+          {block.props.mode === 'video' && (
+            <>
+              <label className="block text-sm font-medium text-gray-700">Video URL<input value={String(block.props.videoUrl ?? '')} onChange={(event) => onChange({ videoUrl: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="YouTube, Vimeo, or MP4 URL" /></label>
+              <label className="block text-sm font-medium text-gray-700">Aspect Ratio<select value={String(block.props.aspectRatio ?? '16 / 9')} onChange={(event) => onChange({ aspectRatio: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="16 / 9">16:9</option><option value="4 / 3">4:3</option><option value="1 / 1">Square</option></select></label>
+            </>
+          )}
+          {block.props.mode === 'legacy-images' && (
+            <>
+              <MediaSlidePicker block={block} mediaAssets={mediaAssets} onChange={onChange} />
+              <label className="block text-sm font-medium text-gray-700">Height<input type="number" min="120" max="800" value={Number(block.props.height ?? 360)} onChange={(event) => onChange({ height: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700">Slide Speed (seconds)<input type="number" min="2" max="20" value={Number(block.props.slideSeconds ?? 5)} onChange={(event) => onChange({ slideSeconds: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+            </>
+          )}
         </>
       )}
       {block.type === 'video' && (
@@ -965,6 +1041,7 @@ export function PageDesignCanvas({
   error,
   onSave,
   theme = DEFAULT_THEME_PREVIEW_STYLES,
+  fullScreen = false,
 }: {
   layout: BuilderLayout;
   onChange: (updater: (current: BuilderLayout) => BuilderLayout) => void;
@@ -973,19 +1050,21 @@ export function PageDesignCanvas({
   error: string;
   onSave: () => void;
   theme?: ThemePreviewStyles;
+  fullScreen?: boolean;
 }) {
   const [widgets, setWidgets] = useState<BuilderWidget[]>(defaultWidgets);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [storePreview, setStorePreview] = useState<StorePreviewData>(emptyStorePreview);
   const [components, setComponents] = useState<GlobalComponentLite[]>([]);
   const [savedForms, setSavedForms] = useState<SavedFormLite[]>([]);
+  const [savedSliders, setSavedSliders] = useState<SavedSliderLite[]>([]);
   const [selectedBlockId, setSelectedBlockId] = useState('');
   const [dragBlockId, setDragBlockId] = useState('');
   const [responsiveMode, setResponsiveMode] = useState<ResponsiveMode>('desktop');
 
   const fetchResources = useCallback(async () => {
     try {
-      const [widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes, componentsRes, formsRes] = await Promise.all([
+      const [widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes, componentsRes, formsRes, slidersRes] = await Promise.all([
         fetch('/api/proxy/admin/builder/widgets'),
         fetch('/api/proxy/media'),
         fetch('/api/proxy/products/all'),
@@ -993,6 +1072,7 @@ export function PageDesignCanvas({
         fetch('/api/proxy/admin/tags'),
         fetch('/api/proxy/admin/builder/components'),
         fetch('/api/proxy/admin/forms'),
+        fetch('/api/proxy/admin/sliders'),
       ]);
       if (widgetsRes.ok) {
         const nextWidgets = (await widgetsRes.json()) as BuilderWidget[];
@@ -1007,6 +1087,7 @@ export function PageDesignCanvas({
       setStorePreview({ products, categories, tags });
       if (componentsRes.ok) setComponents((await componentsRes.json()) as GlobalComponentLite[]);
       if (formsRes.ok) setSavedForms((await formsRes.json()) as SavedFormLite[]);
+      if (slidersRes.ok) setSavedSliders((await slidersRes.json()) as SavedSliderLite[]);
     } catch {
       // Resource loading failures degrade gracefully — palette/preview just show fewer options.
     }
@@ -1099,7 +1180,13 @@ export function PageDesignCanvas({
   }
 
   return (
-    <div className="grid gap-4 overflow-hidden rounded-lg border border-gray-200 xl:grid-cols-[220px_minmax(0,1fr)_300px]">
+    <div
+      className={`grid overflow-hidden border border-gray-200 bg-white ${
+        fullScreen
+          ? 'h-[calc(100vh-72px)] xl:grid-cols-[240px_minmax(0,1fr)_320px]'
+          : 'gap-4 rounded-lg xl:grid-cols-[220px_minmax(0,1fr)_300px]'
+      }`}
+    >
       <aside className="min-h-0 overflow-y-auto border-r border-gray-200 bg-gray-50 p-3">
         <div className="mb-3 flex items-center justify-between gap-2">
           {(['desktop', 'tablet', 'mobile'] as ResponsiveMode[]).map((mode) => (
@@ -1133,7 +1220,7 @@ export function PageDesignCanvas({
         <button onClick={addSection} className="w-full rounded bg-gray-900 px-3 py-2 text-xs font-medium text-white">Add section</button>
       </aside>
 
-      <section className="min-h-0 overflow-auto bg-gray-200 p-4">
+      <section className={`min-h-0 overflow-auto bg-gray-200 ${fullScreen ? 'p-3' : 'p-4'}`}>
         <div className="mx-auto bg-white shadow-xl transition-all" style={{ maxWidth: responsiveWidth(responsiveMode), fontFamily: theme.fontFamily }}>
           <PreviewLayout
             layout={layout}
@@ -1141,6 +1228,7 @@ export function PageDesignCanvas({
             showChrome
             components={components}
             savedForms={savedForms}
+            savedSliders={savedSliders}
             theme={theme}
             storePreview={storePreview}
             selectedBlockId={selectedBlockId}
@@ -1164,6 +1252,7 @@ export function PageDesignCanvas({
             theme={theme}
             mediaAssets={mediaAssets}
             savedForms={savedForms}
+            savedSliders={savedSliders}
             widgets={mergeWidgets(widgets)}
           />
         ) : (
@@ -1190,6 +1279,7 @@ export function BuilderLayoutPreview({ layout, theme = DEFAULT_THEME_PREVIEW_STY
       showChrome
       components={[]}
       savedForms={[]}
+      savedSliders={[]}
       theme={theme}
       storePreview={emptyStorePreview}
       selectedBlockId=""

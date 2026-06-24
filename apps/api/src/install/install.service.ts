@@ -200,6 +200,7 @@ export class InstallService {
       { name: 'fulfillment', version: '1.0.0', enabled: true },
       { name: 'private-messages', version: '1.0.0', enabled: true },
       { name: 'forms', version: '1.0.0', enabled: true },
+      { name: 'sliders', version: '1.0.0', enabled: true },
     ];
 
     for (const m of modules) {
