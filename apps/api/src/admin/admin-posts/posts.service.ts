@@ -219,6 +219,87 @@ export class PostsService {
     return this.prisma.post.delete({ where: { id } });
   }
 
+  async importPosts(items: Array<Record<string, unknown>>, authorId: string) {
+    const author = await this.prisma.user.findUnique({ where: { id: authorId }, select: { id: true } });
+    if (!author) throw new NotFoundException(`Author ${authorId} not found`);
+
+    const results: Array<{ title: string; status: 'created' | 'skipped'; reason?: string }> = [];
+    for (const item of items) {
+      const title = readString(item, ['title', 'Title', 'post_title', 'name']);
+      const content = readString(item, ['content', 'Content', 'post_content', 'description']) ?? '';
+      if (!title || !content) {
+        results.push({ title: title || 'Untitled post', status: 'skipped', reason: 'Missing title or content' });
+        continue;
+      }
+
+      const baseSlug = normalizeSlug(readString(item, ['slug', 'post_name', 'Slug']) ?? title);
+      const slug = await this.nextAvailableSlug(baseSlug);
+      const categoryIds = await this.resolveTaxonomyIds('category', readList(item, ['categories', 'Categories', 'category']));
+      const tagIds = await this.resolveTaxonomyIds('tag', readList(item, ['tags', 'Tags', 'post_tags', 'tag']));
+      const status = readString(item, ['status', 'post_status', 'Status'])?.toLowerCase();
+      const dateValue = readString(item, ['publishedAt', 'post_date', 'post_date_gmt', 'Date']);
+
+      await this.prisma.post.create({
+        data: {
+          slug,
+          title,
+          metaTitle: this.normalizeMetadataField(readString(item, ['metaTitle', 'Meta title', 'yoast_wpseo_title'])),
+          metaDescription: this.normalizeMetadataField(readString(item, ['metaDescription', 'Meta description', 'yoast_wpseo_metadesc'])),
+          excerpt: readString(item, ['excerpt', 'post_excerpt', 'Excerpt']) ?? null,
+          content: sanitizeCmsHtml(content),
+          featuredImageUrl: readString(item, ['featuredImageUrl', 'featured_image', 'image', 'Image']) ?? null,
+          authorId,
+          publishedAt: status === 'draft' || status === 'pending' ? null : parseDateOrNull(dateValue) ?? new Date(),
+          categories: categoryIds.length > 0 ? { connect: categoryIds.map((id) => ({ id })) } : undefined,
+          tags: tagIds.length > 0 ? { connect: tagIds.map((id) => ({ id })) } : undefined,
+        },
+        include: POST_INCLUDE,
+      });
+      results.push({ title, status: 'created' });
+    }
+
+    return {
+      created: results.filter((result) => result.status === 'created').length,
+      skipped: results.filter((result) => result.status === 'skipped').length,
+      results,
+    };
+  }
+
+  private async nextAvailableSlug(baseSlug: string) {
+    const fallback = baseSlug || 'imported-post';
+    let candidate = fallback;
+    let suffix = 2;
+    while (await this.prisma.post.findUnique({ where: { slug: candidate }, select: { id: true } })) {
+      candidate = `${fallback}-${suffix}`;
+      suffix += 1;
+    }
+    return candidate;
+  }
+
+  private async resolveTaxonomyIds(kind: TaxonomyKind, names: string[]) {
+    const ids: string[] = [];
+    for (const name of names) {
+      const slug = normalizeSlug(name);
+      if (!slug) continue;
+      const record =
+        kind === 'category'
+          ? await this.prisma.category.upsert({
+              where: { slug },
+              update: {},
+              create: { slug, name },
+              select: { id: true },
+            })
+          : await this.prisma.tag.upsert({
+              where: { slug },
+              update: {},
+              create: { slug, name },
+              select: { id: true },
+            });
+      ids.push(record.id);
+    }
+    return ids;
+  }
+
   private async resolveFeaturedMedia(
     featuredMediaId?: string | null,
     featuredImageUrl?: string | null,
@@ -263,4 +344,27 @@ export class PostsService {
     const normalized = value.trim();
     return normalized || null;
   }
+}
+
+type TaxonomyKind = 'category' | 'tag';
+
+function readString(item: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number') return String(value);
+  }
+  return null;
+}
+
+function readList(item: Record<string, unknown>, keys: string[]) {
+  const value = readString(item, keys);
+  if (!value) return [];
+  return value.split(/[|,>]/).map((entry) => entry.trim()).filter(Boolean);
+}
+
+function parseDateOrNull(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }

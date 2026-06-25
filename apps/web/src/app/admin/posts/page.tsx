@@ -1,5 +1,6 @@
 'use client';
 
+import type { ChangeEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RevisionsPanel } from '../../../components/admin/revisions-panel';
 import { EditorPreview } from '../../../components/admin/editor-preview';
@@ -141,6 +142,80 @@ function getAutosaveLabel(state: AutosaveState) {
   }
 }
 
+async function readImportFile(file: File) {
+  const text = await file.text();
+  if (file.name.toLowerCase().endsWith('.json')) {
+    const parsed = JSON.parse(text) as unknown;
+    if (Array.isArray(parsed)) return parsed as Array<Record<string, unknown>>;
+    if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { items?: unknown }).items)) {
+      return (parsed as { items: Array<Record<string, unknown>> }).items;
+    }
+    throw new Error('JSON import must be an array or an object with an items array.');
+  }
+  return parseCsv(text);
+}
+
+function parseCsv(text: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let quoted = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      cell += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === ',' && !quoted) {
+      row.push(cell);
+      cell = '';
+    } else if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && next === '\n') index += 1;
+      row.push(cell);
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
+      cell = '';
+    } else {
+      cell += char;
+    }
+  }
+
+  row.push(cell);
+  if (row.some((value) => value.trim())) rows.push(row);
+  const headers = rows.shift()?.map((header) => header.trim()) ?? [];
+  return rows.map((values) =>
+    Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() ?? ''])),
+  );
+}
+
+function downloadRows(rows: Array<Record<string, unknown>>, filename: string, format: 'json' | 'csv') {
+  const content = format === 'json' ? JSON.stringify(rows, null, 2) : toCsv(rows);
+  const type = format === 'json' ? 'application/json' : 'text/csv';
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function toCsv(rows: Array<Record<string, unknown>>) {
+  const headers = Array.from(rows.reduce((set, row) => {
+    Object.keys(row).forEach((key) => set.add(key));
+    return set;
+  }, new Set<string>()));
+  const lines = rows.map((row) => headers.map((header) => csvCell(row[header])).join(','));
+  return [headers.join(','), ...lines].join('\n');
+}
+
+function csvCell(value: unknown) {
+  const text = value == null ? '' : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
 export default function AdminPostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [authors, setAuthors] = useState<User[]>([]);
@@ -148,6 +223,7 @@ export default function AdminPostsPage() {
   const [tags, setTags] = useState<TaxonomyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [importStatus, setImportStatus] = useState('');
   const [form, setForm] = useState<PostForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -422,6 +498,56 @@ export default function AdminPostsPage() {
     }
   }
 
+  function exportPosts(format: 'json' | 'csv') {
+    const rows = posts.map((post) => ({
+      title: post.title,
+      slug: post.slug,
+      metaTitle: post.metaTitle ?? '',
+      metaDescription: post.metaDescription ?? '',
+      excerpt: post.excerpt ?? '',
+      content: post.content,
+      featuredImageUrl: post.featuredMedia?.url ?? post.featuredImageUrl ?? '',
+      authorEmail: post.author.email,
+      publishedAt: post.publishedAt ?? '',
+      status: post.publishedAt ? 'publish' : 'draft',
+      categories: post.categories.map((category) => category.name).join('|'),
+      tags: post.tags.map((tag) => tag.name).join('|'),
+    }));
+    downloadRows(rows, `posts-export.${format}`, format);
+  }
+
+  async function handleImportPosts(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const authorId = form.authorId || authors[0]?.id;
+    if (!authorId) {
+      setError('Choose or create an author before importing posts.');
+      return;
+    }
+
+    setImportStatus('Importing posts...');
+    setError('');
+    try {
+      const items = await readImportFile(file);
+      const res = await fetch('/api/proxy/posts/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authorId, items }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? 'Post import failed');
+      }
+      const result = (await res.json()) as { created: number; skipped: number };
+      setImportStatus(`Imported ${result.created} post${result.created === 1 ? '' : 's'}${result.skipped ? `, skipped ${result.skipped}` : ''}.`);
+      await fetchData(statusFilter);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Post import failed');
+      setImportStatus('');
+    }
+  }
+
   function startEdit(post: Post) {
     setShowEditor(true);
     applyPostToForm(post);
@@ -471,18 +597,27 @@ export default function AdminPostsPage() {
             Back to All Posts
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={() => {
-              resetForm();
-              setShowEditor(true);
-            }}
-            className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
-            Create New Post
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => exportPosts('csv')} className="rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">Export CSV</button>
+            <button type="button" onClick={() => exportPosts('json')} className="rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">Export JSON</button>
+            <label className="cursor-pointer rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">
+              Import
+              <input type="file" accept=".csv,.json,application/json,text/csv" onChange={handleImportPosts} className="hidden" />
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                resetForm();
+                setShowEditor(true);
+              }}
+              className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Create New Post
+            </button>
+          </div>
         )}
       </div>
+      {importStatus && <p className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{importStatus}</p>}
 
       {showEditor && (
       <section className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">

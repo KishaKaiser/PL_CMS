@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ProductsService } from './products.service';
-import { CreateProductDto, CreateProductReviewDto, UpdateProductDto } from './products.dto';
+import { CreateProductDto, CreateProductReviewDto, ImportProductsDto, UpdateProductDto } from './products.dto';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import { Role } from '@pl-cms/shared';
 
@@ -50,6 +50,13 @@ export class ProductsController {
   @Roles(Role.ADMIN)
   create(@Body() dto: CreateProductDto) {
     return this.productsService.create(dto);
+  }
+
+  @Post('import')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  importProducts(@Body() dto: ImportProductsDto) {
+    return this.productsService.importProducts(dto.items);
   }
 
   @Post(':id/reviews')
