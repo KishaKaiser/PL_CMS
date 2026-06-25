@@ -166,7 +166,7 @@ export function normalizeSlides(slides?: SliderSlide[]): SliderSlide[] {
           width: clampNumber(layer.width, 10, 100, 36),
           fontSize: clampNumber(layer.fontSize, 10, 96, 32),
           color: layer.color ?? '#ffffff',
-          background: layer.background ?? '#4f46e5',
+          background: layer.background ?? '#6f21b6',
         }))
       : [],
   }));

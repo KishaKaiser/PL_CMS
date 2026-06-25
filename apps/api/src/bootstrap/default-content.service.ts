@@ -17,7 +17,7 @@ const DEFAULT_PAGE_LAYOUT = {
   version: 1,
   type: 'page',
   settings: {
-    layout: 'default',
+    layout: 'full',
     breadcrumbs: true,
     showTitle: true,
   },
@@ -25,7 +25,7 @@ const DEFAULT_PAGE_LAYOUT = {
     {
       id: 'section-hero',
       type: 'section',
-      settings: { layout: 'contained', background: '#ffffff', padding: '72px 32px' },
+      settings: { layout: 'full', background: '#ffffff', padding: '72px 32px' },
       blocks: [
         {
           id: 'heading-default',
@@ -52,7 +52,7 @@ const DEFAULT_THEME = {
   version: '1.0.0',
   description: 'Clean starter theme for all pages until another theme is activated.',
   globalStyles: {
-    primaryColor: '#4f46e5',
+    primaryColor: '#6f21b6',
     accentColor: '#0f766e',
     fontFamily: 'Inter, Arial, sans-serif',
     heroTitle: 'Psychic Link CMS',

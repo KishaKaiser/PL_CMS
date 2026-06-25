@@ -118,12 +118,12 @@ type ThemePreviewStyles = {
 const emptyLayout: BuilderLayout = {
   version: 1,
   type: 'page',
-  settings: { layout: 'default', breadcrumbs: true, showTitle: true },
+  settings: { layout: 'full', breadcrumbs: true, showTitle: true },
   sections: [
     {
       id: 'section-hero',
       type: 'section',
-      settings: { layout: 'contained', background: '#ffffff', padding: '72px 32px' },
+      settings: { layout: 'full', background: '#ffffff', padding: '72px 32px' },
       blocks: [
         { id: 'heading-1', type: 'heading', props: { text: 'Design visually', level: 1, align: 'left', fontSize: 48 } },
         {
@@ -180,7 +180,7 @@ export default function ThemeBuilderPage() {
     name: 'Custom Theme',
     slug: 'custom-theme',
     version: '1.0.0',
-    primaryColor: '#4f46e5',
+    primaryColor: '#6f21b6',
     accentColor: '#0f766e',
     fontFamily: 'Inter, Arial, sans-serif',
   });
@@ -241,7 +241,7 @@ export default function ThemeBuilderPage() {
           name: nextActiveTheme.name,
           slug: nextActiveTheme.slug,
           version: nextActiveTheme.version,
-          primaryColor: getStringStyle(nextActiveTheme.globalStyles.primaryColor, '#4f46e5'),
+          primaryColor: getStringStyle(nextActiveTheme.globalStyles.primaryColor, '#6f21b6'),
           accentColor: getStringStyle(nextActiveTheme.globalStyles.accentColor, '#0f766e'),
           fontFamily: getStringStyle(nextActiveTheme.globalStyles.fontFamily, 'Inter, Arial, sans-serif'),
         });
@@ -387,7 +387,7 @@ export default function ThemeBuilderPage() {
         {
           id: createId('section'),
           type: 'section',
-          settings: { layout: 'contained', background: '#ffffff', padding: '56px 32px' },
+          settings: { layout: 'full', background: '#ffffff', padding: '56px 32px' },
           blocks: [],
         },
       ],
@@ -885,7 +885,7 @@ function BlockEditor({
           <label className="block text-sm font-medium text-gray-700">Main Nav (label|url per line)<textarea value={String(block.props.navLinksText ?? '')} rows={5} onChange={(event) => onChange({ navLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="block text-sm font-medium text-gray-700">Action Icons (icon class|url|label per line)<textarea value={String(block.props.actionLinksText ?? '')} rows={4} onChange={(event) => onChange({ actionLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={block.props.showActions !== false} onChange={(event) => onChange({ showActions: event.target.checked })} /> Show login/search/wishlist/cart icons</label>
-          <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={block.props.stickyMain === true} onChange={(event) => onChange({ stickyMain: event.target.checked })} /> Sticky main nav and action icons</label>
+          <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={!(block.props.stickyMain === false && block.props.stickyMainTouched === true)} onChange={(event) => onChange({ stickyMain: event.target.checked, stickyMainTouched: true })} /> Sticky main nav and action icons</label>
         </>
       )}
       {block.type === 'hero-slider' && (
@@ -1462,9 +1462,9 @@ function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlo
   if (type === 'image-slider') return { id, type, props: { mediaIds: [], slides: [], height: 360, displayWidth: 'content' } };
   if (type === 'video') return { id, type, props: { url: '', aspectRatio: '16 / 9' } };
   if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#' } };
-  if (type === 'icon') return { id, type, props: { iconClass: 'fa-solid fa-star', label: 'Icon label', size: 36, color: '#4f46e5' } };
+  if (type === 'icon') return { id, type, props: { iconClass: 'fa-solid fa-star', label: 'Icon label', size: 36, color: '#6f21b6' } };
   if (type === 'announcement-bar') return { id, type, props: { text: 'Free shipping on all domestic orders over $35', background: '#6f21b6', color: '#ffffff' } };
-  if (type === 'store-header') return { id, type, props: { logoMode: 'text', logoText: 'The Psychic Link', logoMediaId: '', logoSrc: '', logoAlt: 'The Psychic Link', socialLinksText: 'fa-brands fa-instagram|https://instagram.com|Instagram\nfa-brands fa-facebook-f|https://facebook.com|Facebook\nfa-brands fa-pinterest-p|https://pinterest.com|Pinterest', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', actionLinksText: 'text|/login|Login\nfa-solid fa-magnifying-glass|/search|Search\nfa-regular fa-heart|/wishlist|Wishlist\nfa-solid fa-bag-shopping|/shop/cart|Cart', showActions: true, stickyMain: false } };
+  if (type === 'store-header') return { id, type, props: { logoMode: 'text', logoText: 'The Psychic Link', logoMediaId: '', logoSrc: '', logoAlt: 'The Psychic Link', socialLinksText: 'fa-brands fa-instagram|https://instagram.com|Instagram\nfa-brands fa-facebook-f|https://facebook.com|Facebook\nfa-brands fa-pinterest-p|https://pinterest.com|Pinterest', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', actionLinksText: 'text|/login|Login\nfa-solid fa-magnifying-glass|/search|Search\nfa-regular fa-heart|/wishlist|Wishlist\nfa-solid fa-bag-shopping|/shop/cart|Cart', showActions: true, stickyMain: true } };
   if (type === 'hero-slider') return { id, type, props: { mediaIds: [], slides: [], mediaId: '', src: '', alt: '', heading: 'Welcome', buttonLabel: 'SHOP NOW', buttonHref: '/shop', height: 610, slideSeconds: 5 } };
   if (type === 'columns') return { id, type, props: { columns: 2 }, children: [] };
   if (type === 'grid') return { id, type, props: { columns: 3, itemsText: 'Grid item\nGrid item\nGrid item' } };

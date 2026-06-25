@@ -134,7 +134,7 @@ function normalizeLayers(layers: Record<string, unknown>[]): SliderLayer[] {
     width: clampNumber(layer.width, 10, 100, 36),
     fontSize: clampNumber(layer.fontSize, 10, 96, 32),
     color: typeof layer.color === 'string' ? layer.color : '#ffffff',
-    background: typeof layer.background === 'string' ? layer.background : '#4f46e5',
+    background: typeof layer.background === 'string' ? layer.background : '#6f21b6',
   }));
 }
 
