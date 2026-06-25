@@ -45,6 +45,10 @@ function watch(child, name) {
   });
 }
 
+console.log(`Starting PL_CMS web on port ${webPort}.`);
+console.log(`Starting PL_CMS API on internal port ${apiPort}.`);
+console.log(`Web server API base: ${internalApiBase}`);
+
 const api = start('API', pnpm, ['--filter', '@pl-cms/api', 'start'], {
   ...process.env,
   PORT: apiPort,
@@ -65,7 +69,17 @@ process.on('SIGTERM', () => {
   stopAll('SIGTERM');
 });
 
-const result = await Promise.race([watch(api, 'API'), watch(web, 'Web')]);
+watch(api, 'API').then((result) => {
+  console.error(`${result.name} stopped. The website will stay online, but API-backed features will be unavailable.`);
+  if (typeof result.code === 'number') {
+    console.error(`${result.name} exit code: ${result.code}`);
+  }
+  if (result.signal) {
+    console.error(`${result.name} signal: ${result.signal}`);
+  }
+});
+
+const result = await watch(web, 'Web');
 
 console.error(`${result.name} stopped.`);
 stopAll();
