@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getSafeImageSrc } from '../../lib/public-cms';
+import { fetchApi } from '../../lib/server-api';
 
 interface Product {
   id: string;
@@ -15,9 +16,8 @@ interface Product {
 }
 
 async function getProducts(): Promise<Product[]> {
-  const apiBase = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
   try {
-    const res = await fetch(`${apiBase}/products`, { cache: 'no-store' });
+    const res = await fetchApi('/products', { cache: 'no-store' });
     if (!res.ok) return [];
     return res.json() as Promise<Product[]>;
   } catch {

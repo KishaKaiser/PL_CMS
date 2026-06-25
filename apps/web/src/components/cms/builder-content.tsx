@@ -4,6 +4,7 @@ import { getCategories, getTags } from '../../lib/public-cms';
 import { PublicFormEmbed } from './public-form-embed';
 import { PublicSliderEmbed } from './public-slider-embed';
 import { AnnouncementBar, StorefrontHeader } from './storefront-header';
+import { fetchApi } from '../../lib/server-api';
 
 interface Product {
   id: string;
@@ -20,9 +21,8 @@ type StoreData = {
 };
 
 async function getProducts(): Promise<Product[]> {
-  const apiBase = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
   try {
-    const res = await fetch(`${apiBase}/products`, { next: { revalidate: 60 } });
+    const res = await fetchApi('/products', { next: { revalidate: 60 } });
     if (!res.ok) return [];
     return res.json() as Promise<Product[]>;
   } catch {

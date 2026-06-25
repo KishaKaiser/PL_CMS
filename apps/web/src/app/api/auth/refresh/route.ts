@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-
-const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
+import { fetchApi } from '../../../../lib/server-api';
 
 export async function POST(_req: NextRequest) {
   const cookieStore = await cookies();
@@ -11,11 +10,15 @@ export async function POST(_req: NextRequest) {
     return NextResponse.json({ message: 'No refresh token' }, { status: 401 });
   }
 
-  const upstream = await fetch(`${API_BASE}/auth/refresh`, {
+  const upstream = await fetchApi('/auth/refresh', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ refreshToken }),
-  });
+  }).catch(() => null);
+
+  if (!upstream) {
+    return NextResponse.json({ message: 'API is unavailable. Check API_BASE_URL or the API service.' }, { status: 503 });
+  }
 
   const data = (await upstream.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string; message?: string };
 

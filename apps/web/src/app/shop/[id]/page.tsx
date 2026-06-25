@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { RichContent } from '../../../components/cms/rich-content';
 import { ReviewSection } from '../../../components/reviews/review-section';
 import { getSafeImageSrc } from '../../../lib/public-cms';
+import { fetchApi } from '../../../lib/server-api';
 import ProductDetailClient from './ProductDetailClient';
 
 interface Inventory {
@@ -35,9 +36,8 @@ interface Product {
 }
 
 async function getProduct(id: string): Promise<Product | null> {
-  const apiBase = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
   try {
-    const res = await fetch(`${apiBase}/products/${id}`, { cache: 'no-store' });
+    const res = await fetchApi(`/products/${id}`, { cache: 'no-store' });
     if (!res.ok) return null;
     return res.json() as Promise<Product>;
   } catch {
