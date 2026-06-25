@@ -1,4 +1,4 @@
-const DEFAULT_API_BASES = ['http://api:3001/api', 'http://localhost:3001/api'];
+const DEFAULT_API_BASES = ['http://127.0.0.1:3001/api', 'http://localhost:3001/api', 'http://api:3001/api'];
 
 export function getApiBaseCandidates() {
   const configured = [
