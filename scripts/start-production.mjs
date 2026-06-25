@@ -1,7 +1,10 @@
 import { spawn } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const isWindows = process.platform === 'win32';
 const pnpm = isWindows ? 'pnpm.cmd' : 'pnpm';
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const apiPort = process.env.API_PORT ?? '3001';
 const webPort = process.env.WEB_PORT ?? process.env.PORT ?? '3000';
@@ -11,6 +14,7 @@ const children = new Set();
 
 function start(name, command, args, env) {
   const child = spawn(command, args, {
+    cwd: repoRoot,
     env,
     stdio: 'inherit',
     shell: false,
