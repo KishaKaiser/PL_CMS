@@ -17,24 +17,43 @@ export class AuthService {
   async validateUser(identifier: string, password: string) {
     const normalizedIdentifier = normalizeEmailInput(identifier);
     if (typeof normalizedIdentifier !== 'string') throw new UnauthorizedException('Invalid credentials');
-    const user = await this.prisma.user.findUnique({
-      where: normalizedIdentifier.includes('@')
-        ? { email: normalizedIdentifier }
-        : { username: normalizedIdentifier },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        passwordHash: true,
-        role: true,
-      },
-    });
+
+    const user = normalizedIdentifier.includes('@')
+      ? await this.prisma.user.findUnique({
+          where: { email: normalizedIdentifier },
+          select: {
+            id: true,
+            email: true,
+            passwordHash: true,
+            role: true,
+          },
+        })
+      : await this.findUserByUsername(normalizedIdentifier);
+
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     return user;
+  }
+
+  private async findUserByUsername(username: string) {
+    if (!username) throw new UnauthorizedException('Invalid credentials');
+
+    try {
+      return await this.prisma.user.findUnique({
+        where: { username },
+        select: {
+          id: true,
+          email: true,
+          passwordHash: true,
+          role: true,
+        },
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid credentials');
+    }
   }
 
   async login(email: string, password: string) {
