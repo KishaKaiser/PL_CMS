@@ -14,13 +14,17 @@ export class AuthService {
     private readonly config: ConfigService,
   ) {}
 
-  async validateUser(email: string, password: string) {
-    const normalizedEmail = normalizeEmailInput(email);
+  async validateUser(identifier: string, password: string) {
+    const normalizedIdentifier = normalizeEmailInput(identifier);
+    if (typeof normalizedIdentifier !== 'string') throw new UnauthorizedException('Invalid credentials');
     const user = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
+      where: normalizedIdentifier.includes('@')
+        ? { email: normalizedIdentifier }
+        : { username: normalizedIdentifier },
       select: {
         id: true,
         email: true,
+        username: true,
         passwordHash: true,
         role: true,
       },
