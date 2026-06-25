@@ -66,9 +66,10 @@ export function StorefrontHeader({
   const [stuck, setStuck] = useState(false);
   const mainRowRef = useRef<HTMLDivElement | null>(null);
   const [mainRowHeight, setMainRowHeight] = useState(0);
+  const stickyEnabled = stickyMain !== false;
 
   useEffect(() => {
-    if (!stickyMain) {
+    if (!stickyEnabled) {
       setStuck(false);
       return;
     }
@@ -80,7 +81,7 @@ export function StorefrontHeader({
 
     function updateStickyState() {
       setMainRowHeight(rowElement.offsetHeight);
-      setStuck(window.scrollY > top);
+      setStuck(window.scrollY >= top);
     }
 
     updateStickyState();
@@ -90,7 +91,7 @@ export function StorefrontHeader({
       window.removeEventListener('scroll', updateStickyState);
       window.removeEventListener('resize', updateStickyState);
     };
-  }, [stickyMain]);
+  }, [stickyEnabled]);
 
   return (
     <header className="bg-white">
@@ -111,7 +112,7 @@ export function StorefrontHeader({
       <div
         ref={mainRowRef}
         className={`grid grid-cols-[auto_1fr_auto] items-center gap-4 bg-white px-6 py-6 lg:grid-cols-[1fr_auto_1fr] lg:px-12 lg:py-8 ${
-          stuck ? 'fixed left-0 right-0 top-0 z-50 border-b border-gray-100 shadow-md' : stickyMain ? 'z-40 border-b border-gray-100 shadow-sm' : ''
+          stuck ? 'fixed left-0 right-0 top-0 z-50 border-b border-gray-100 shadow-md' : stickyEnabled ? 'z-40 border-b border-gray-100 shadow-sm' : ''
         }`}
       >
         <nav className="flex items-center gap-6 text-base text-neutral-800">

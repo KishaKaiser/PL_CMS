@@ -112,7 +112,7 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
         <i
           className={String(block.props.iconClass ?? 'fa-solid fa-star')}
           style={{
-            color: String(block.props.color ?? '#4f46e5'),
+            color: String(block.props.color ?? '#6f21b6'),
             fontSize: `${Number(block.props.size ?? 36)}px`,
           }}
         />
@@ -276,7 +276,7 @@ function StoreHeaderView({ block }: { block: BuilderBlock }) {
       navLinks={navLinks}
       actionLinks={actionLinks}
       showActions={block.props.showActions !== false}
-      stickyMain={block.props.stickyMain === true}
+      stickyMain={!(block.props.stickyMain === false && block.props.stickyMainTouched === true)}
     />
   );
 }

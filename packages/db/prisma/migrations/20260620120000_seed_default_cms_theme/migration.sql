@@ -21,7 +21,7 @@ SELECT
   'Clean starter theme for all pages until another theme is activated.',
   NOT EXISTS (SELECT 1 FROM "cms_themes" WHERE "isActive" = true),
   '{
-    "primaryColor": "#4f46e5",
+    "primaryColor": "#6f21b6",
     "accentColor": "#0f766e",
     "fontFamily": "Inter, Arial, sans-serif",
     "heroTitle": "Psychic Link CMS",

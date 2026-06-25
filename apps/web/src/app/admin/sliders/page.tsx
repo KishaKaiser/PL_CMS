@@ -14,7 +14,7 @@ const emptySlide: SliderSlide = {
   alt: '',
   layers: [
     { id: 'layer-1', type: 'text', text: 'New slider', x: 12, y: 34, width: 42, fontSize: 44, color: '#ffffff', background: 'transparent' },
-    { id: 'layer-2', type: 'button', text: 'Learn More', href: '#', x: 12, y: 58, width: 20, fontSize: 16, color: '#ffffff', background: '#4f46e5' },
+    { id: 'layer-2', type: 'button', text: 'Learn More', href: '#', x: 12, y: 58, width: 20, fontSize: 16, color: '#ffffff', background: '#6f21b6' },
   ],
 };
 
@@ -161,7 +161,7 @@ export default function AdminSlidersPage() {
       width: type === 'button' ? 20 : 40,
       fontSize: type === 'button' ? 16 : 36,
       color: '#ffffff',
-      background: type === 'button' ? '#4f46e5' : 'transparent',
+      background: type === 'button' ? '#6f21b6' : 'transparent',
     };
     updateSlide(activeSlideIndex, { layers: [...(slider.slides[activeSlideIndex]?.layers ?? []), layer] });
   }
@@ -292,7 +292,7 @@ export default function AdminSlidersPage() {
                           <label className="block text-xs font-medium text-gray-700">Width %<input type="number" value={layer.width} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { width: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
                           <label className="block text-xs font-medium text-gray-700">Font<input type="number" value={layer.fontSize} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { fontSize: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
                           <label className="block text-xs font-medium text-gray-700">Color<input type="color" value={layer.color} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { color: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
-                          <label className="block text-xs font-medium text-gray-700">Background<input type="color" value={layer.background === 'transparent' ? '#4f46e5' : layer.background} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { background: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
+                          <label className="block text-xs font-medium text-gray-700">Background<input type="color" value={layer.background === 'transparent' ? '#6f21b6' : layer.background} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { background: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
                         </div>
                       </div>
                     </div>

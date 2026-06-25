@@ -76,12 +76,12 @@ const PAGE_EDITOR_TABS: Array<{ value: EditorTab; label: string; description: st
 const emptyBuilderLayout: BuilderLayout = {
   version: 1,
   type: 'page',
-  settings: { layout: 'default', breadcrumbs: true, showTitle: true, showHeader: true, showFooter: true },
+  settings: { layout: 'full', breadcrumbs: true, showTitle: true, showHeader: true, showFooter: true },
   sections: [
     {
       id: 'section-main',
       type: 'section',
-      settings: { layout: 'contained', background: '#ffffff', padding: '48px 24px' },
+      settings: { layout: 'full', background: '#ffffff', padding: '48px 24px' },
       blocks: [
         { id: 'heading-main', type: 'heading', props: { text: 'Page heading', fontSize: 40, align: 'left' } },
         { id: 'text-main', type: 'text', props: { text: 'Add page content or visual blocks here.', fontSize: 16 } },

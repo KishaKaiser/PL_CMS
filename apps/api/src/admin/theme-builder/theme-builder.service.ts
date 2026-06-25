@@ -16,11 +16,12 @@ import { createStoreZip, readStoreZip } from './zip.util';
 const DEFAULT_LAYOUT = {
   version: 1,
   type: 'page',
+  settings: { layout: 'full', breadcrumbs: true, showTitle: true, showHeader: true, showFooter: true },
   sections: [
     {
       id: 'section-hero',
       type: 'section',
-      settings: { layout: 'contained', background: '#ffffff', padding: '48px 24px' },
+      settings: { layout: 'full', background: '#ffffff', padding: '48px 24px' },
       blocks: [
         {
           id: 'heading-1',

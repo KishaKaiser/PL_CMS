@@ -146,7 +146,7 @@ export const DEFAULT_POSTS_PAGE_SETTINGS: PostsPageSettings = {
 };
 
 export const DEFAULT_SITE_THEME: SiteThemeSettings = {
-  primaryColor: '#4f46e5',
+  primaryColor: '#6f21b6',
   accentColor: '#7c3aed',
   fontFamily: 'Inter, Arial, sans-serif',
   heroTitle: DEFAULT_SITE_TITLE,
