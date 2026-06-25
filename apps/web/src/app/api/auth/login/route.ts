@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     body: JSON.stringify(body),
   });
 
-  const data = await upstream.json() as { accessToken?: string; refreshToken?: string; message?: string };
+  const data = (await upstream.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string; message?: string };
 
   if (!upstream.ok || !data.accessToken || !data.refreshToken) {
     return NextResponse.json(

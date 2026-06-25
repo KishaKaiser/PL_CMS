@@ -78,7 +78,7 @@ function LoginForm() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
             <label className="mb-1 block text-sm font-medium" htmlFor="email">
-              Email
+              Email or username
             </label>
             <input
               id="email"
@@ -86,10 +86,10 @@ function LoginForm() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
+              autoComplete="username"
               aria-invalid={Boolean(error)}
               className="w-full rounded border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="you@example.com"
+              placeholder="you@example.com or username"
             />
           </div>
           <div>
