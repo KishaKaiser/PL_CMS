@@ -370,7 +370,7 @@ export default function AdminProductsPage() {
           <button type="button" onClick={() => exportProducts('json')} className="rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">Export JSON</button>
           <label className="cursor-pointer rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">
             Import
-            <input type="file" accept=".csv,.json,application/json,text/csv" onChange={handleImportProducts} className="hidden" />
+            <input type="file" accept=".csv,.json,.xml,application/json,text/csv,application/xml,text/xml" onChange={handleImportProducts} className="hidden" />
           </label>
           <button
             type="button"
@@ -749,6 +749,7 @@ function optionalString(value: string, clearBlankValues = false) {
 
 async function readImportFile(file: File) {
   const text = await file.text();
+  if (file.name.toLowerCase().endsWith('.xml')) return parseWxrProducts(text);
   if (file.name.toLowerCase().endsWith('.json')) {
     const parsed = JSON.parse(text) as unknown;
     if (Array.isArray(parsed)) return parsed as Array<Record<string, unknown>>;
@@ -758,6 +759,40 @@ async function readImportFile(file: File) {
     throw new Error('JSON import must be an array or an object with an items array.');
   }
   return parseCsv(text);
+}
+
+function parseWxrProducts(text: string) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const items = Array.from(doc.getElementsByTagName('item'));
+  const attachments = buildWxrAttachmentMap(items);
+
+  return items
+    .filter((item) => wxrText(item, 'wp:post_type') === 'product')
+    .map((item) => {
+      const title = childText(item, 'title');
+      const content = childText(item, 'content:encoded');
+      const excerpt = childText(item, 'excerpt:encoded');
+      const thumbnailId = wxrMeta(item, '_thumbnail_id');
+      const image = attachments.get(thumbnailId) ?? firstImageFromHtml(content);
+      return {
+        name: title,
+        Name: title,
+        description: content,
+        shortDescription: excerpt,
+        regularPrice: wxrMeta(item, '_regular_price') || wxrMeta(item, '_price'),
+        salePrice: wxrMeta(item, '_sale_price'),
+        stockQuantity: wxrMeta(item, '_stock'),
+        stockStatus: wxrMeta(item, '_stock_status'),
+        trackStock: wxrMeta(item, '_manage_stock'),
+        weightOz: wxrMeta(item, '_weight'),
+        lengthIn: wxrMeta(item, '_length'),
+        widthIn: wxrMeta(item, '_width'),
+        heightIn: wxrMeta(item, '_height'),
+        imageUrl: image ?? '',
+        categories: wxrCategories(item, 'product_cat').join('|'),
+        tags: wxrCategories(item, 'product_tag').join('|'),
+      };
+    });
 }
 
 function parseCsv(text: string) {
@@ -819,6 +854,44 @@ function toCsv(rows: Array<Record<string, unknown>>) {
 function csvCell(value: unknown) {
   const text = value == null ? '' : String(value);
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function childText(parent: Element, tagName: string) {
+  return parent.getElementsByTagName(tagName)[0]?.textContent?.trim() ?? '';
+}
+
+function wxrText(item: Element, tagName: string) {
+  return childText(item, tagName);
+}
+
+function wxrMeta(item: Element, key: string) {
+  const metas = Array.from(item.getElementsByTagName('wp:postmeta'));
+  for (const meta of metas) {
+    if (childText(meta, 'wp:meta_key') === key) return childText(meta, 'wp:meta_value');
+  }
+  return '';
+}
+
+function wxrCategories(item: Element, domain: string) {
+  return Array.from(item.getElementsByTagName('category'))
+    .filter((category) => category.getAttribute('domain') === domain)
+    .map((category) => category.textContent?.trim() ?? '')
+    .filter(Boolean);
+}
+
+function buildWxrAttachmentMap(items: Element[]) {
+  const map = new Map<string, string>();
+  for (const item of items) {
+    if (wxrText(item, 'wp:post_type') !== 'attachment') continue;
+    const id = wxrText(item, 'wp:post_id');
+    const url = wxrText(item, 'wp:attachment_url');
+    if (id && url) map.set(id, url);
+  }
+  return map;
+}
+
+function firstImageFromHtml(html: string) {
+  return html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] ?? null;
 }
 
 function toDatetimeLocal(value?: string | null) {

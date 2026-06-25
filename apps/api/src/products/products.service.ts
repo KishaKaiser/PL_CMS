@@ -3,6 +3,7 @@ import { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto, CreateProductReviewDto, UpdateProductDto } from './products.dto';
 import { normalizeSlug, sanitizeCmsHtml } from '../admin/admin-content/cms-content.util';
+import { downloadRemoteImageToMedia } from '../admin/admin-media/media-import.util';
 import { serializeMediaAsset } from '../admin/admin-media/media.util';
 
 @Injectable()
@@ -70,6 +71,8 @@ export class ProductsService {
       const tagIds = await this.resolveTaxonomyIds('tag', readList(item, ['tags', 'Tags', 'tag']));
       const salePrice = readNumber(item, ['salePrice', 'sale_price', 'Sale price']);
       const stockQuantity = readNumber(item, ['stockQuantity', 'stock_quantity', 'Stock', 'stock', 'inventory', 'Inventory']);
+      const remoteImageUrl = firstImageUrl(readString(item, ['imageUrl', 'images', 'Images', 'featuredImageUrl', 'image']));
+      const downloadedMedia = await downloadRemoteImageToMedia(this.prisma, remoteImageUrl, name);
 
       await this.prisma.product.create({
         data: createProductData({
@@ -91,7 +94,8 @@ export class ProductsService {
           trackStock: readBoolean(item, ['trackStock', 'manage_stock', 'Manage stock'], stockQuantity != null && stockQuantity > 0),
           stockQuantity: Math.max(0, Math.trunc(stockQuantity ?? 0)),
           stockStatus: normalizeStockStatus(readString(item, ['stockStatus', 'stock_status', 'Stock status'])),
-          imageUrl: readString(item, ['imageUrl', 'images', 'Images', 'featuredImageUrl']) ?? null,
+          imageUrl: downloadedMedia?.url ?? remoteImageUrl,
+          featuredMediaId: downloadedMedia?.id ?? null,
           categoryIds,
           tagIds,
         }),
@@ -299,6 +303,11 @@ function normalizeStockStatus(value: string | null) {
   if (normalized === 'outofstock' || normalized === 'out_of_stock') return 'OUT_OF_STOCK';
   if (normalized === 'onbackorder' || normalized === 'backorder' || normalized === 'backorders_allowed') return 'BACKORDER';
   return 'IN_STOCK';
+}
+
+function firstImageUrl(value: string | null) {
+  if (!value) return null;
+  return value.split(/[|,\s]+/).find((entry) => /^https?:\/\//i.test(entry)) ?? null;
 }
 
 function applyEffectiveSalePrice<

@@ -6,11 +6,12 @@ import {
   buildMediaAssetUrl,
   serializeMediaAsset,
 } from '../admin-media/media.util';
+import { downloadRemoteImageToMedia } from '../admin-media/media-import.util';
 import { normalizeSlug, sanitizeCmsHtml } from '../admin-content/cms-content.util';
 import { BulkActionDto, CreatePostDto, UpdatePostDto } from './posts.dto';
 
 const POST_INCLUDE = {
-  author: { select: { id: true, name: true, email: true } },
+  author: { select: { id: true, name: true, username: true, email: true } },
   categories: { select: { id: true, slug: true, name: true } },
   tags: { select: { id: true, slug: true, name: true } },
   featuredMedia: { select: MEDIA_ASSET_SELECT },
@@ -238,6 +239,8 @@ export class PostsService {
       const tagIds = await this.resolveTaxonomyIds('tag', readList(item, ['tags', 'Tags', 'post_tags', 'tag']));
       const status = readString(item, ['status', 'post_status', 'Status'])?.toLowerCase();
       const dateValue = readString(item, ['publishedAt', 'post_date', 'post_date_gmt', 'Date']);
+      const remoteImageUrl = firstImageUrl(readString(item, ['featuredImageUrl', 'featured_image', 'image', 'Image', 'attachment_url']));
+      const downloadedMedia = await downloadRemoteImageToMedia(this.prisma, remoteImageUrl, title);
 
       await this.prisma.post.create({
         data: {
@@ -247,7 +250,8 @@ export class PostsService {
           metaDescription: this.normalizeMetadataField(readString(item, ['metaDescription', 'Meta description', 'yoast_wpseo_metadesc'])),
           excerpt: readString(item, ['excerpt', 'post_excerpt', 'Excerpt']) ?? null,
           content: sanitizeCmsHtml(content),
-          featuredImageUrl: readString(item, ['featuredImageUrl', 'featured_image', 'image', 'Image']) ?? null,
+          featuredImageUrl: downloadedMedia?.url ?? remoteImageUrl,
+          featuredMediaId: downloadedMedia?.id ?? null,
           authorId,
           publishedAt: status === 'draft' || status === 'pending' ? null : parseDateOrNull(dateValue) ?? new Date(),
           categories: categoryIds.length > 0 ? { connect: categoryIds.map((id) => ({ id })) } : undefined,
@@ -367,4 +371,9 @@ function parseDateOrNull(value: string | null) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function firstImageUrl(value: string | null) {
+  if (!value) return null;
+  return value.split(/[|,\s]+/).find((entry) => /^https?:\/\//i.test(entry)) ?? null;
 }

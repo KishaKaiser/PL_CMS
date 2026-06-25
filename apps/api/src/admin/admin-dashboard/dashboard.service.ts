@@ -36,7 +36,7 @@ export class DashboardService {
           slug: true,
           publishedAt: true,
           updatedAt: true,
-          author: { select: { name: true } },
+          author: { select: { name: true, username: true } },
         },
       }),
       this.prisma.page.findMany({
