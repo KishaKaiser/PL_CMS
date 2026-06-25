@@ -4,6 +4,7 @@ import {
   DEFAULT_SITE_EXTENSION_POINTS,
   DEFAULT_SITE_IDENTITY,
   DEFAULT_SITE_MENUS,
+  DEFAULT_SITE_SIDEBARS,
   DEFAULT_SITE_THEME,
   buildDefaultHomepageBlocks,
   type HomepageSettings,
@@ -11,6 +12,7 @@ import {
   type SiteHomepageBlock,
   type SiteIdentitySettings,
   type SiteMenuItem,
+  type SiteSidebarsSettings,
   type SiteThemeSettings,
 } from '@pl-cms/shared';
 
@@ -38,6 +40,7 @@ export interface PublicSiteConfig {
   };
   homepageBlocks: SiteHomepageBlock[];
   extensionPoints: SiteExtensionPoints;
+  sidebars: SiteSidebarsSettings;
 }
 
 const DEFAULT_PUBLIC_SITE_CONFIG: PublicSiteConfig = {
@@ -59,6 +62,7 @@ const DEFAULT_PUBLIC_SITE_CONFIG: PublicSiteConfig = {
   },
   homepageBlocks: buildDefaultHomepageBlocks('/blog'),
   extensionPoints: DEFAULT_SITE_EXTENSION_POINTS,
+  sidebars: DEFAULT_SITE_SIDEBARS,
 };
 
 export interface PublicPage {

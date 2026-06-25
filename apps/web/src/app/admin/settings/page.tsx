@@ -78,13 +78,6 @@ interface SiteThemeForm {
     pages: ThemeSectionForm;
     posts: ThemeSectionForm;
   };
-  blogSidebar: {
-    search: ThemeSectionForm;
-    categories: ThemeSectionForm;
-    tags: ThemeSectionForm;
-    authors: ThemeSectionForm;
-    archives: ThemeSectionForm;
-  };
 }
 
 const SITE_IDENTITY_KEY = SITE_SETTING_KEYS.SITE_IDENTITY;
@@ -195,8 +188,6 @@ export default function AdminSettingsPage() {
     const homepageSections = isRecord(theme?.homepageSections) ? theme.homepageSections : null;
     const pageSection = isRecord(homepageSections?.pages) ? homepageSections.pages : null;
     const postSection = isRecord(homepageSections?.posts) ? homepageSections.posts : null;
-    const blogSidebar = isRecord(theme?.blogSidebar) ? theme.blogSidebar : null;
-    const blogSidebarSection = (key: keyof SiteThemeForm['blogSidebar']) => isRecord(blogSidebar?.[key]) ? blogSidebar[key] as Record<string, unknown> : null;
 
     setIdentityForm({
       title: readString(identity?.title, defaultIdentityForm.title),
@@ -233,28 +224,6 @@ export default function AdminSettingsPage() {
         posts: {
           enabled: readBoolean(postSection?.enabled, defaultThemeForm.homepageSections.posts.enabled),
           title: readString(postSection?.title, defaultThemeForm.homepageSections.posts.title),
-        },
-      },
-      blogSidebar: {
-        search: {
-          enabled: readBoolean(blogSidebarSection('search')?.enabled, defaultThemeForm.blogSidebar.search.enabled),
-          title: readString(blogSidebarSection('search')?.title, defaultThemeForm.blogSidebar.search.title),
-        },
-        categories: {
-          enabled: readBoolean(blogSidebarSection('categories')?.enabled, defaultThemeForm.blogSidebar.categories.enabled),
-          title: readString(blogSidebarSection('categories')?.title, defaultThemeForm.blogSidebar.categories.title),
-        },
-        tags: {
-          enabled: readBoolean(blogSidebarSection('tags')?.enabled, defaultThemeForm.blogSidebar.tags.enabled),
-          title: readString(blogSidebarSection('tags')?.title, defaultThemeForm.blogSidebar.tags.title),
-        },
-        authors: {
-          enabled: readBoolean(blogSidebarSection('authors')?.enabled, defaultThemeForm.blogSidebar.authors.enabled),
-          title: readString(blogSidebarSection('authors')?.title, defaultThemeForm.blogSidebar.authors.title),
-        },
-        archives: {
-          enabled: readBoolean(blogSidebarSection('archives')?.enabled, defaultThemeForm.blogSidebar.archives.enabled),
-          title: readString(blogSidebarSection('archives')?.title, defaultThemeForm.blogSidebar.archives.title),
         },
       },
     });
@@ -819,53 +788,6 @@ export default function AdminSettingsPage() {
                 className="mt-3 w-full rounded border px-3 py-2 text-sm"
                 placeholder="Posts section title"
               />
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <h3 className="text-sm font-semibold text-gray-900">Blog sidebar widgets</h3>
-            <p className="mt-1 text-sm text-gray-500">Choose which widgets appear in the blog sidebar and rename their headings.</p>
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              {(['search', 'categories', 'tags', 'authors', 'archives'] as Array<keyof SiteThemeForm['blogSidebar']>).map((key) => (
-                <div key={key} className="rounded-lg border border-gray-200 p-4">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={themeForm.blogSidebar[key].enabled}
-                      onChange={(event) =>
-                        setThemeForm((currentForm) => ({
-                          ...currentForm,
-                          blogSidebar: {
-                            ...currentForm.blogSidebar,
-                            [key]: {
-                              ...currentForm.blogSidebar[key],
-                              enabled: event.target.checked,
-                            },
-                          },
-                        }))
-                      }
-                    />
-                    Show {key}
-                  </label>
-                  <input
-                    value={themeForm.blogSidebar[key].title}
-                    onChange={(event) =>
-                      setThemeForm((currentForm) => ({
-                        ...currentForm,
-                        blogSidebar: {
-                          ...currentForm.blogSidebar,
-                          [key]: {
-                            ...currentForm.blogSidebar[key],
-                            title: event.target.value,
-                          },
-                        },
-                      }))
-                    }
-                    className="mt-3 w-full rounded border px-3 py-2 text-sm"
-                    placeholder={`${key} title`}
-                  />
-                </div>
-              ))}
             </div>
           </div>
 
