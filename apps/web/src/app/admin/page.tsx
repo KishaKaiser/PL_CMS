@@ -17,7 +17,7 @@ interface DashboardStats {
     slug: string;
     publishedAt: string | null;
     updatedAt: string;
-    author: { name: string | null };
+    author: { name: string | null; username?: string | null };
   }>;
   recentPages: Array<{
     id: string;
@@ -182,7 +182,7 @@ export default function AdminPage() {
                               <p className="text-xs text-gray-500">/blog/{post.slug}</p>
                             </td>
                             <td className="px-4 py-3 text-xs text-gray-500">
-                              {post.author.name || 'Unknown author'}
+                              {post.author.username || post.author.name || 'Unknown author'}
                             </td>
                             <td className="px-4 py-3">
                               <span
