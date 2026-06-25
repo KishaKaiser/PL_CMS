@@ -36,7 +36,7 @@ export default function AdminSidebarsPage() {
     try {
       const res = await fetch(`/api/proxy/settings/${SITE_SIDEBARS_KEY}`);
       if (!res.ok && res.status !== 404) throw new Error('Could not load sidebars');
-      const setting = res.ok ? ((await res.json()) as { value?: string } | null) : null;
+      const setting = res.ok ? await readSettingResponse(res) : null;
       setSidebars(normalizeSidebars(setting?.value));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not load sidebars');
@@ -162,6 +162,7 @@ export default function AdminSidebarsPage() {
 
 function normalizeSidebars(value: unknown): SiteSidebarsSettings {
   if (typeof value === 'string') {
+    if (!value.trim()) return DEFAULT_SITE_SIDEBARS;
     try {
       return normalizeSidebars(JSON.parse(value));
     } catch {
@@ -174,4 +175,14 @@ function normalizeSidebars(value: unknown): SiteSidebarsSettings {
     blog: Array.isArray(candidate.blog) ? candidate.blog : DEFAULT_SITE_SIDEBARS.blog,
     shop: Array.isArray(candidate.shop) ? candidate.shop : DEFAULT_SITE_SIDEBARS.shop,
   };
+}
+
+async function readSettingResponse(res: Response): Promise<{ value?: string } | null> {
+  const text = await res.text();
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text) as { value?: string } | null;
+  } catch {
+    return null;
+  }
 }
