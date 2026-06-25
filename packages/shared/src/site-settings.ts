@@ -81,6 +81,32 @@ export type SiteExtensionPoints = {
   };
 };
 
+export type SiteSidebarWidgetType =
+  | 'search'
+  | 'categories'
+  | 'tags'
+  | 'authors'
+  | 'archives'
+  | 'image'
+  | 'form'
+  | 'menu'
+  | 'shop_categories'
+  | 'price_filter'
+  | 'color_filter';
+
+export type SiteSidebarWidget = {
+  id: string;
+  type: SiteSidebarWidgetType;
+  enabled: boolean;
+  title: string;
+  settings?: Record<string, string | number | boolean>;
+};
+
+export type SiteSidebarsSettings = {
+  blog: SiteSidebarWidget[];
+  shop: SiteSidebarWidget[];
+};
+
 export const SITE_SETTING_KEYS = {
   SITE_NAME: 'site_name',
   SITE_IDENTITY: 'site_identity',
@@ -90,6 +116,7 @@ export const SITE_SETTING_KEYS = {
   SITE_THEME: 'site_theme',
   SITE_HOMEPAGE_BLOCKS: 'site_homepage_blocks',
   SITE_EXTENSION_POINTS: 'site_extension_points',
+  SITE_SIDEBARS: 'site_sidebars',
 } as const;
 
 export const PUBLIC_SITE_SETTING_KEYS = [
@@ -101,6 +128,7 @@ export const PUBLIC_SITE_SETTING_KEYS = [
   SITE_SETTING_KEYS.SITE_THEME,
   SITE_SETTING_KEYS.SITE_HOMEPAGE_BLOCKS,
   SITE_SETTING_KEYS.SITE_EXTENSION_POINTS,
+  SITE_SETTING_KEYS.SITE_SIDEBARS,
 ] as const;
 
 const DEFAULT_SITE_TITLE = 'Psychic Link CMS';
@@ -164,6 +192,20 @@ export const DEFAULT_SITE_EXTENSION_POINTS: SiteExtensionPoints = {
     header: [],
     footer: [],
   },
+};
+
+export const DEFAULT_SITE_SIDEBARS: SiteSidebarsSettings = {
+  blog: [
+    { id: 'blog-search', type: 'search', enabled: true, title: 'Search' },
+    { id: 'blog-categories', type: 'categories', enabled: true, title: 'Categories' },
+    { id: 'blog-tags', type: 'tags', enabled: true, title: 'Tags' },
+    { id: 'blog-authors', type: 'authors', enabled: true, title: 'Authors' },
+    { id: 'blog-archives', type: 'archives', enabled: true, title: 'Archives' },
+  ],
+  shop: [
+    { id: 'shop-categories', type: 'shop_categories', enabled: true, title: 'Shop Categories' },
+    { id: 'shop-price-filter', type: 'price_filter', enabled: true, title: 'Price Filter' },
+  ],
 };
 
 export function buildDefaultHomepageBlocks(postsPath = '/blog'): SiteHomepageBlock[] {

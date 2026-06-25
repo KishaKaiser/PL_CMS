@@ -63,7 +63,7 @@ export async function BlogIndex({
   ]);
 
   const activeFilterCount = [search, category, tag, authorId, year, month].filter(Boolean).length;
-  const sidebar = config.theme.blogSidebar;
+  const sidebarWidgets = config.sidebars.blog.filter((widget) => widget.enabled);
 
   return (
     <PublicSiteShell siteConfig={config}>
@@ -163,19 +163,20 @@ export async function BlogIndex({
         </section>
 
         <aside className="space-y-6">
-          {sidebar.search.enabled && (
-            <section className="rounded-lg border bg-white p-4 shadow-sm">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{sidebar.search.title}</h2>
+          {sidebarWidgets.map((widget) => {
+            if (widget.type === 'search') return (
+            <section key={widget.id} className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{widget.title}</h2>
               <form action={blogPath} className="mt-3 flex gap-2">
                 <input name="search" defaultValue={search} className="w-full rounded border border-gray-200 px-3 py-2 text-sm" placeholder="Search posts" />
                 <button className="rounded px-3 py-2 text-sm font-medium text-white" style={{ backgroundColor: config.theme.primaryColor }}>Go</button>
               </form>
             </section>
-          )}
+            );
 
-          {sidebar.categories.enabled && (
-            <section className="rounded-lg border bg-white p-4 shadow-sm">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{sidebar.categories.title}</h2>
+            if (widget.type === 'categories') return (
+            <section key={widget.id} className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{widget.title}</h2>
               <ul className="mt-3 space-y-2 text-sm">
                 {categories.map((item) => (
                   <li key={item.id}>
@@ -186,11 +187,11 @@ export async function BlogIndex({
                 ))}
               </ul>
             </section>
-          )}
+            );
 
-          {sidebar.tags.enabled && (
-            <section className="rounded-lg border bg-white p-4 shadow-sm">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{sidebar.tags.title}</h2>
+            if (widget.type === 'tags') return (
+            <section key={widget.id} className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{widget.title}</h2>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
                 {tags.map((item) => (
                   <Link key={item.id} href={`/blog/tags/${item.slug}`} className="rounded bg-gray-100 px-2 py-1 text-gray-700 hover:bg-gray-200">
@@ -199,11 +200,11 @@ export async function BlogIndex({
                 ))}
               </div>
             </section>
-          )}
+            );
 
-          {sidebar.authors.enabled && (
-            <section className="rounded-lg border bg-white p-4 shadow-sm">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{sidebar.authors.title}</h2>
+            if (widget.type === 'authors') return (
+            <section key={widget.id} className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{widget.title}</h2>
               <ul className="mt-3 space-y-2 text-sm">
                 {authors.map((item) => (
                   <li key={item.id}>
@@ -214,11 +215,11 @@ export async function BlogIndex({
                 ))}
               </ul>
             </section>
-          )}
+            );
 
-          {sidebar.archives.enabled && (
-            <section className="rounded-lg border bg-white p-4 shadow-sm">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{sidebar.archives.title}</h2>
+            if (widget.type === 'archives') return (
+            <section key={widget.id} className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{widget.title}</h2>
               <ul className="mt-3 space-y-2 text-sm">
                 {archives.slice(0, 6).map((archive) => (
                   <li key={archive.key}>
@@ -232,7 +233,15 @@ export async function BlogIndex({
                 View all archives
               </Link>
             </section>
-          )}
+            );
+
+            return (
+              <section key={widget.id} className="rounded-lg border border-dashed bg-white p-4 text-sm text-gray-500 shadow-sm">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{widget.title}</h2>
+                <p className="mt-2">This widget type is ready for future sidebar content.</p>
+              </section>
+            );
+          })}
         </aside>
       </main>
     </PublicSiteShell>

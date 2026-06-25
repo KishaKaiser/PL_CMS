@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export type StorefrontLink = {
   label: string;
@@ -63,6 +63,34 @@ export function StorefrontHeader({
   stickyMain?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [stuck, setStuck] = useState(false);
+  const mainRowRef = useRef<HTMLDivElement | null>(null);
+  const [mainRowHeight, setMainRowHeight] = useState(0);
+
+  useEffect(() => {
+    if (!stickyMain) {
+      setStuck(false);
+      return;
+    }
+
+    const row = mainRowRef.current;
+    if (!row) return;
+    const rowElement = row;
+    const top = rowElement.getBoundingClientRect().top + window.scrollY;
+
+    function updateStickyState() {
+      setMainRowHeight(rowElement.offsetHeight);
+      setStuck(window.scrollY > top);
+    }
+
+    updateStickyState();
+    window.addEventListener('scroll', updateStickyState, { passive: true });
+    window.addEventListener('resize', updateStickyState);
+    return () => {
+      window.removeEventListener('scroll', updateStickyState);
+      window.removeEventListener('resize', updateStickyState);
+    };
+  }, [stickyMain]);
 
   return (
     <header className="bg-white">
@@ -79,7 +107,13 @@ export function StorefrontHeader({
         ))}
       </div>
 
-      <div className={`grid grid-cols-[auto_1fr_auto] items-center gap-4 bg-white px-6 py-6 lg:grid-cols-[1fr_auto_1fr] lg:px-12 lg:py-8 ${stickyMain ? 'sticky top-0 z-40 border-b border-gray-100 shadow-sm' : ''}`}>
+      {stuck && <div style={{ height: mainRowHeight }} />}
+      <div
+        ref={mainRowRef}
+        className={`grid grid-cols-[auto_1fr_auto] items-center gap-4 bg-white px-6 py-6 lg:grid-cols-[1fr_auto_1fr] lg:px-12 lg:py-8 ${
+          stuck ? 'fixed left-0 right-0 top-0 z-50 border-b border-gray-100 shadow-md' : stickyMain ? 'z-40 border-b border-gray-100 shadow-sm' : ''
+        }`}
+      >
         <nav className="flex items-center gap-6 text-base text-neutral-800">
           <button
             type="button"
@@ -119,7 +153,7 @@ export function StorefrontHeader({
       </div>
 
       {menuOpen && (
-        <nav className="border-t border-gray-200 bg-white px-6 py-4 lg:hidden">
+        <nav className={`${stuck ? 'fixed left-0 right-0 z-50 shadow-md' : ''} border-t border-gray-200 bg-white px-6 py-4 lg:hidden`} style={stuck ? { top: mainRowHeight } : undefined}>
           <div className="grid gap-3">
             {navLinks.map((link) => (
               <a key={link.href} href={link.href} className="rounded px-2 py-2 text-base font-medium text-neutral-800 hover:bg-purple-50 hover:text-purple-700">

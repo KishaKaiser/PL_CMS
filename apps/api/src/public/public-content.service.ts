@@ -4,6 +4,7 @@ import {
   DEFAULT_HOMEPAGE_SETTINGS,
   DEFAULT_SITE_EXTENSION_POINTS,
   DEFAULT_SITE_IDENTITY,
+  DEFAULT_SITE_SIDEBARS,
   DEFAULT_SITE_THEME,
   PUBLIC_SITE_SETTING_KEYS,
   SITE_SETTING_KEYS,
@@ -13,6 +14,9 @@ import {
   type SiteHomepageBlock,
   type SiteIdentitySettings,
   type SiteMenuItem,
+  type SiteSidebarWidget,
+  type SiteSidebarWidgetType,
+  type SiteSidebarsSettings,
   type SiteThemeSettings,
 } from '@pl-cms/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -51,6 +55,7 @@ type PublicSiteConfig = {
   };
   homepageBlocks: SiteHomepageBlock[];
   extensionPoints: SiteExtensionPoints;
+  sidebars: SiteSidebarsSettings;
 };
 
 const POST_SELECT = {
@@ -149,6 +154,7 @@ export class PublicContentService {
       theme,
       postsPage.path,
     );
+    const sidebars = this.normalizeSidebars(settingMap.get(SITE_SETTING_KEYS.SITE_SIDEBARS));
 
     const config: PublicSiteConfig = {
       identity,
@@ -162,6 +168,7 @@ export class PublicContentService {
       },
       homepageBlocks,
       extensionPoints,
+      sidebars,
     };
 
     return this.applySiteConfigTransformers(config);
@@ -624,6 +631,45 @@ export class PublicContentService {
         footer: footer.length > 0 ? footer : DEFAULT_SITE_EXTENSION_POINTS.menu.footer,
       },
     };
+  }
+
+  private normalizeSidebars(value: string | undefined): SiteSidebarsSettings {
+    const parsed = this.parseJsonSetting<Partial<SiteSidebarsSettings>>(value);
+    return {
+      blog: this.normalizeSidebarWidgets(parsed?.blog, DEFAULT_SITE_SIDEBARS.blog),
+      shop: this.normalizeSidebarWidgets(parsed?.shop, DEFAULT_SITE_SIDEBARS.shop),
+    };
+  }
+
+  private normalizeSidebarWidgets(value: unknown, fallback: SiteSidebarWidget[]): SiteSidebarWidget[] {
+    if (!Array.isArray(value)) return fallback;
+    const widgets: SiteSidebarWidget[] = value
+      .map((widget, index): SiteSidebarWidget | null => {
+        if (!widget || typeof widget !== 'object' || Array.isArray(widget)) return null;
+        const source = widget as Record<string, unknown>;
+        const type = this.normalizeSidebarWidgetType(source.type);
+        if (!type) return null;
+        return {
+          id: this.getString(source.id, `${type}-${index + 1}`),
+          type,
+          enabled: this.getBoolean(source.enabled, true),
+          title: this.getString(source.title, this.getDefaultSidebarTitle(type)),
+          settings: source.settings && typeof source.settings === 'object' && !Array.isArray(source.settings)
+            ? source.settings as Record<string, string | number | boolean>
+            : {},
+        };
+      })
+      .filter((widget): widget is SiteSidebarWidget => widget !== null);
+    return widgets.length > 0 ? widgets : fallback;
+  }
+
+  private normalizeSidebarWidgetType(value: unknown): SiteSidebarWidgetType | null {
+    const allowed: SiteSidebarWidgetType[] = ['search', 'categories', 'tags', 'authors', 'archives', 'image', 'form', 'menu', 'shop_categories', 'price_filter', 'color_filter'];
+    return typeof value === 'string' && allowed.includes(value as SiteSidebarWidgetType) ? value as SiteSidebarWidgetType : null;
+  }
+
+  private getDefaultSidebarTitle(type: SiteSidebarWidgetType) {
+    return type.split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
   }
 
   private normalizeHomepageBlocks(
