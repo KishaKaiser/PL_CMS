@@ -1,6 +1,6 @@
 'use client';
 
-import type { InputHTMLAttributes } from 'react';
+import type { ChangeEvent, InputHTMLAttributes } from 'react';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 interface Inventory {
@@ -49,6 +49,7 @@ interface Product {
   widthIn?: number | string | null;
   heightIn?: number | string | null;
   trackStock: boolean;
+  stockQuantity: number;
   stockStatus: string;
   imageUrl?: string | null;
   featuredMediaId?: string | null;
@@ -73,6 +74,7 @@ const emptyProductForm = {
   widthIn: '',
   heightIn: '',
   trackStock: false,
+  stockQuantity: '0',
   stockStatus: 'IN_STOCK',
   featuredMediaId: '',
   categoryIds: [] as string[],
@@ -98,6 +100,7 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [importStatus, setImportStatus] = useState('');
   const [variantForms, setVariantForms] = useState<Record<string, typeof emptyVariantForm>>({});
   const [variantErrors, setVariantErrors] = useState<Record<string, string>>({});
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
@@ -166,6 +169,7 @@ export default function AdminProductsPage() {
       widthIn: product.widthIn == null ? '' : String(product.widthIn),
       heightIn: product.heightIn == null ? '' : String(product.heightIn),
       trackStock: product.trackStock,
+      stockQuantity: String(product.stockQuantity ?? 0),
       stockStatus: product.stockStatus ?? 'IN_STOCK',
       featuredMediaId: product.featuredMediaId ?? '',
       categoryIds: product.categories.map((category) => category.id),
@@ -226,6 +230,57 @@ export default function AdminProductsPage() {
       if (editingProductId === id) closeEditor();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error deleting product');
+    }
+  }
+
+  function exportProducts(format: 'json' | 'csv') {
+    const rows = products.map((product) => ({
+      name: product.name,
+      description: product.description ?? '',
+      shortDescription: product.shortDescription ?? '',
+      regularPrice: product.regularPrice ?? product.price,
+      salePrice: product.salePrice ?? '',
+      saleStartsAt: product.saleStartsAt ?? '',
+      saleEndsAt: product.saleEndsAt ?? '',
+      minutesPack: product.minutesPack,
+      isActive: product.isActive,
+      weightOz: product.weightOz ?? '',
+      lengthIn: product.lengthIn ?? '',
+      widthIn: product.widthIn ?? '',
+      heightIn: product.heightIn ?? '',
+      trackStock: product.trackStock,
+      stockQuantity: product.stockQuantity ?? 0,
+      stockStatus: product.stockStatus,
+      imageUrl: product.featuredMedia?.url ?? product.imageUrl ?? '',
+      categories: product.categories.map((category) => category.name).join('|'),
+      tags: product.tags.map((tag) => tag.name).join('|'),
+    }));
+    downloadRows(rows, `products-export.${format}`, format);
+  }
+
+  async function handleImportProducts(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setImportStatus('Importing products...');
+    setError('');
+    try {
+      const items = await readImportFile(file);
+      const res = await fetch('/api/proxy/products/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? 'Product import failed');
+      }
+      const result = (await res.json()) as { created: number; skipped: number };
+      setImportStatus(`Imported ${result.created} product${result.created === 1 ? '' : 's'}${result.skipped ? `, skipped ${result.skipped}` : ''}.`);
+      await fetchData();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Product import failed');
+      setImportStatus('');
     }
   }
 
@@ -310,16 +365,25 @@ export default function AdminProductsPage() {
             Review products first, then create or edit product details when needed.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreateForm}
-          className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          Add New Product
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => exportProducts('csv')} className="rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">Export CSV</button>
+          <button type="button" onClick={() => exportProducts('json')} className="rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">Export JSON</button>
+          <label className="cursor-pointer rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">
+            Import
+            <input type="file" accept=".csv,.json,application/json,text/csv" onChange={handleImportProducts} className="hidden" />
+          </label>
+          <button
+            type="button"
+            onClick={openCreateForm}
+            className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            Add New Product
+          </button>
+        </div>
       </div>
 
       {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
+      {importStatus && <p className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{importStatus}</p>}
 
       {showEditor && (
         <section className="mb-8 rounded-lg border bg-white p-6 shadow-sm">
@@ -445,6 +509,13 @@ export default function AdminProductsPage() {
               min="0"
               value={form.heightIn}
               onChange={(heightIn) => setForm((current) => ({ ...current, heightIn }))}
+            />
+            <TextInput
+              label="Current Stock Amount"
+              type="number"
+              min="0"
+              value={form.stockQuantity}
+              onChange={(stockQuantity) => setForm((current) => ({ ...current, stockQuantity }))}
             />
 
             <label className="block text-sm font-medium text-gray-700">
@@ -582,6 +653,7 @@ export default function AdminProductsPage() {
                             </span>
                           )}
                           <span>{product.stockStatus.replaceAll('_', ' ')}</span>
+                          {product.trackStock && <span>{product.stockQuantity ?? 0} in stock</span>}
                           <span>{product.variants.length} variant{product.variants.length === 1 ? '' : 's'}</span>
                         </div>
                         {product.shortDescription && (
@@ -659,6 +731,7 @@ function buildProductPayload(form: typeof emptyProductForm, clearBlankValues: bo
     widthIn: optionalNumber(form.widthIn, clearBlankValues),
     heightIn: optionalNumber(form.heightIn, clearBlankValues),
     trackStock: form.trackStock,
+    stockQuantity: Math.max(0, parseInt(form.stockQuantity || '0', 10)),
     stockStatus: form.stockStatus,
     featuredMediaId: optionalString(form.featuredMediaId, clearBlankValues),
     categoryIds: form.categoryIds,
@@ -672,6 +745,80 @@ function optionalNumber(value: string, clearBlankValues = false) {
 
 function optionalString(value: string, clearBlankValues = false) {
   return value === '' ? (clearBlankValues ? null : undefined) : value;
+}
+
+async function readImportFile(file: File) {
+  const text = await file.text();
+  if (file.name.toLowerCase().endsWith('.json')) {
+    const parsed = JSON.parse(text) as unknown;
+    if (Array.isArray(parsed)) return parsed as Array<Record<string, unknown>>;
+    if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { items?: unknown }).items)) {
+      return (parsed as { items: Array<Record<string, unknown>> }).items;
+    }
+    throw new Error('JSON import must be an array or an object with an items array.');
+  }
+  return parseCsv(text);
+}
+
+function parseCsv(text: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let quoted = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      cell += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === ',' && !quoted) {
+      row.push(cell);
+      cell = '';
+    } else if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && next === '\n') index += 1;
+      row.push(cell);
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
+      cell = '';
+    } else {
+      cell += char;
+    }
+  }
+
+  row.push(cell);
+  if (row.some((value) => value.trim())) rows.push(row);
+  const headers = rows.shift()?.map((header) => header.trim()) ?? [];
+  return rows.map((values) =>
+    Object.fromEntries(headers.map((header, index) => [header, values[index]?.trim() ?? ''])),
+  );
+}
+
+function downloadRows(rows: Array<Record<string, unknown>>, filename: string, format: 'json' | 'csv') {
+  const content = format === 'json' ? JSON.stringify(rows, null, 2) : toCsv(rows);
+  const type = format === 'json' ? 'application/json' : 'text/csv';
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function toCsv(rows: Array<Record<string, unknown>>) {
+  const headers = Array.from(rows.reduce((set, row) => {
+    Object.keys(row).forEach((key) => set.add(key));
+    return set;
+  }, new Set<string>()));
+  const lines = rows.map((row) => headers.map((header) => csvCell(row[header])).join(','));
+  return [headers.join(','), ...lines].join('\n');
+}
+
+function csvCell(value: unknown) {
+  const text = value == null ? '' : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
 function toDatetimeLocal(value?: string | null) {

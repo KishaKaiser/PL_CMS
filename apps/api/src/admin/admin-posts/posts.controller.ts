@@ -16,7 +16,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
-import { BulkActionDto, CreatePostDto, UpdatePostDto } from './posts.dto';
+import { BulkActionDto, CreatePostDto, ImportPostsDto, UpdatePostDto } from './posts.dto';
 import { PostsService } from './posts.service';
 
 @Controller('posts')
@@ -43,6 +43,11 @@ export class PostsController {
   @Post('bulk')
   bulk(@Body() dto: BulkActionDto, @Request() req: { user: { sub: string } }) {
     return this.postsService.bulkAction(dto, req.user.sub);
+  }
+
+  @Post('import')
+  importPosts(@Body() dto: ImportPostsDto) {
+    return this.postsService.importPosts(dto.items, dto.authorId);
   }
 
   @Put(':id')

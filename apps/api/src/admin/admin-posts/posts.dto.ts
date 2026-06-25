@@ -139,3 +139,12 @@ export class BulkActionDto {
   @IsString({ each: true })
   ids!: string[];
 }
+
+export class ImportPostsDto {
+  @IsString()
+  @IsNotEmpty()
+  authorId!: string;
+
+  @IsArray()
+  items!: Array<Record<string, unknown>>;
+}

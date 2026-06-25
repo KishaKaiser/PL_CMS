@@ -90,6 +90,12 @@ export class CreateProductDto {
   trackStock?: boolean;
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  stockQuantity?: number;
+
+  @IsOptional()
   @IsString()
   stockStatus?: string;
 
@@ -194,6 +200,12 @@ export class UpdateProductDto {
   trackStock?: boolean;
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  stockQuantity?: number;
+
+  @IsOptional()
   @IsString()
   stockStatus?: string;
 
@@ -226,4 +238,9 @@ export class CreateProductReviewDto {
   @IsOptional()
   @IsString()
   comment?: string;
+}
+
+export class ImportProductsDto {
+  @IsArray()
+  items!: Array<Record<string, unknown>>;
 }

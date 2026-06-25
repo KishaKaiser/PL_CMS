@@ -2,7 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto, CreateProductReviewDto, UpdateProductDto } from './products.dto';
-import { sanitizeCmsHtml } from '../admin/admin-content/cms-content.util';
+import { normalizeSlug, sanitizeCmsHtml } from '../admin/admin-content/cms-content.util';
 import { serializeMediaAsset } from '../admin/admin-media/media.util';
 
 @Injectable()
@@ -55,6 +55,57 @@ export class ProductsService {
     return this.prisma.product.delete({ where: { id } });
   }
 
+  async importProducts(items: Array<Record<string, unknown>>) {
+    const results: Array<{ name: string; status: 'created' | 'skipped'; reason?: string }> = [];
+
+    for (const item of items) {
+      const name = readString(item, ['name', 'Name', 'post_title', 'Title', 'product_name']);
+      const price = readNumber(item, ['regularPrice', 'regular_price', 'Regular price', 'price', 'Price']);
+      if (!name || price == null) {
+        results.push({ name: name || 'Untitled product', status: 'skipped', reason: 'Missing name or price' });
+        continue;
+      }
+
+      const categoryIds = await this.resolveTaxonomyIds('category', readList(item, ['categories', 'Categories', 'category']));
+      const tagIds = await this.resolveTaxonomyIds('tag', readList(item, ['tags', 'Tags', 'tag']));
+      const salePrice = readNumber(item, ['salePrice', 'sale_price', 'Sale price']);
+      const stockQuantity = readNumber(item, ['stockQuantity', 'stock_quantity', 'Stock', 'stock', 'inventory', 'Inventory']);
+
+      await this.prisma.product.create({
+        data: createProductData({
+          name,
+          description: readString(item, ['description', 'Description', 'post_content', 'Content']) ?? undefined,
+          shortDescription: readString(item, ['shortDescription', 'short_description', 'Short description', 'post_excerpt', 'Excerpt']) ?? undefined,
+          price,
+          regularPrice: price,
+          salePrice,
+          saleStartsAt: readString(item, ['saleStartsAt', 'sale_price_dates_from']) ?? null,
+          saleEndsAt: readString(item, ['saleEndsAt', 'sale_price_dates_to']) ?? null,
+          currency: readString(item, ['currency', 'Currency']) ?? 'USD',
+          minutesPack: readNumber(item, ['minutesPack', 'minutes_pack']) ?? 0,
+          isActive: readBoolean(item, ['isActive', 'published', 'Published', 'post_status'], true),
+          weightOz: readNumber(item, ['weightOz', 'weight', 'Weight']) ?? null,
+          lengthIn: readNumber(item, ['lengthIn', 'length', 'Length']) ?? null,
+          widthIn: readNumber(item, ['widthIn', 'width', 'Width']) ?? null,
+          heightIn: readNumber(item, ['heightIn', 'height', 'Height']) ?? null,
+          trackStock: readBoolean(item, ['trackStock', 'manage_stock', 'Manage stock'], stockQuantity != null && stockQuantity > 0),
+          stockQuantity: Math.max(0, Math.trunc(stockQuantity ?? 0)),
+          stockStatus: normalizeStockStatus(readString(item, ['stockStatus', 'stock_status', 'Stock status'])),
+          imageUrl: readString(item, ['imageUrl', 'images', 'Images', 'featuredImageUrl']) ?? null,
+          categoryIds,
+          tagIds,
+        }),
+      });
+      results.push({ name, status: 'created' });
+    }
+
+    return {
+      created: results.filter((result) => result.status === 'created').length,
+      skipped: results.filter((result) => result.status === 'skipped').length,
+      results,
+    };
+  }
+
   async listReviews(productId: string) {
     await this.findOne(productId);
     return this.prisma.productReview.findMany({
@@ -92,6 +143,30 @@ export class ProductsService {
       },
       select: reviewSelect,
     });
+  }
+
+  private async resolveTaxonomyIds(kind: TaxonomyKind, names: string[]) {
+    const ids: string[] = [];
+    for (const name of names) {
+      const slug = normalizeSlug(name);
+      if (!slug) continue;
+      const record =
+        kind === 'category'
+          ? await this.prisma.category.upsert({
+              where: { slug },
+              update: {},
+              create: { slug, name },
+              select: { id: true },
+            })
+          : await this.prisma.tag.upsert({
+              where: { slug },
+              update: {},
+              create: { slug, name },
+              select: { id: true },
+            });
+      ids.push(record.id);
+    }
+    return ids;
   }
 }
 
@@ -138,6 +213,7 @@ function createProductData(dto: CreateProductDto): Prisma.ProductCreateInput {
     widthIn: dto.widthIn ?? null,
     heightIn: dto.heightIn ?? null,
     trackStock: dto.trackStock ?? false,
+    stockQuantity: dto.stockQuantity ?? 0,
     stockStatus: dto.stockStatus ?? 'IN_STOCK',
     imageUrl: dto.imageUrl ?? null,
     featuredMedia: dto.featuredMediaId
@@ -170,6 +246,7 @@ function updateProductData(dto: UpdateProductDto): Prisma.ProductUpdateInput {
     ...(dto.widthIn !== undefined ? { widthIn: dto.widthIn } : {}),
     ...(dto.heightIn !== undefined ? { heightIn: dto.heightIn } : {}),
     ...(dto.trackStock !== undefined ? { trackStock: dto.trackStock } : {}),
+    ...(dto.stockQuantity !== undefined ? { stockQuantity: dto.stockQuantity } : {}),
     ...(dto.stockStatus !== undefined ? { stockStatus: dto.stockStatus } : {}),
     ...(dto.imageUrl !== undefined ? { imageUrl: dto.imageUrl || null } : {}),
     ...(dto.featuredMediaId !== undefined
@@ -184,6 +261,44 @@ function updateProductData(dto: UpdateProductDto): Prisma.ProductUpdateInput {
       : {}),
     ...(dto.tagIds !== undefined ? { tags: { set: dto.tagIds.map((id) => ({ id })) } } : {}),
   };
+}
+
+type TaxonomyKind = 'category' | 'tag';
+
+function readString(item: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number') return String(value);
+  }
+  return null;
+}
+
+function readNumber(item: Record<string, unknown>, keys: string[]) {
+  const value = readString(item, keys);
+  if (value == null) return null;
+  const normalized = value.replace(/[$,]/g, '');
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : null;
+}
+
+function readBoolean(item: Record<string, unknown>, keys: string[], fallback = false) {
+  const value = readString(item, keys);
+  if (value == null) return fallback;
+  return ['1', 'yes', 'true', 'publish', 'published', 'instock', 'in_stock'].includes(value.toLowerCase());
+}
+
+function readList(item: Record<string, unknown>, keys: string[]) {
+  const value = readString(item, keys);
+  if (!value) return [];
+  return value.split(/[|,>]/).map((entry) => entry.trim()).filter(Boolean);
+}
+
+function normalizeStockStatus(value: string | null) {
+  const normalized = value?.trim().toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
+  if (normalized === 'outofstock' || normalized === 'out_of_stock') return 'OUT_OF_STOCK';
+  if (normalized === 'onbackorder' || normalized === 'backorder' || normalized === 'backorders_allowed') return 'BACKORDER';
+  return 'IN_STOCK';
 }
 
 function applyEffectiveSalePrice<

@@ -714,6 +714,7 @@ model Product {
   widthIn      Decimal?
   heightIn     Decimal?
   trackStock   Boolean  @default(false)
+  stockQuantity Int     @default(0)
   stockStatus  String   @default("IN_STOCK")
   imageUrl     String?
   featuredMediaId String?
