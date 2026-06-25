@@ -9,6 +9,7 @@
   },
   "scripts": {
     "setup": "node scripts/setup.mjs",
+    "start": "node scripts/start-production.mjs",
     "dev:api": "pnpm --filter @pl-cms/api dev",
     "dev:web": "pnpm --filter @pl-cms/web dev",
     "build": "pnpm -r build",
