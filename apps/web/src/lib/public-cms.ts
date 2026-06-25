@@ -15,8 +15,8 @@ import {
   type SiteSidebarsSettings,
   type SiteThemeSettings,
 } from '@pl-cms/shared';
+import { fetchApi } from './server-api';
 
-const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
 const CMS_REVALIDATE_SECONDS = 60;
 const CMS_REQUEST_TIMEOUT_MS = 5000;
 
@@ -187,7 +187,7 @@ async function fetchCmsJson<T>(path: string, fallback: T): Promise<T> {
   const timeoutId = setTimeout(() => controller.abort(), CMS_REQUEST_TIMEOUT_MS);
 
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetchApi(path, {
       next: { revalidate: CMS_REVALIDATE_SECONDS },
       signal: controller.signal,
     });

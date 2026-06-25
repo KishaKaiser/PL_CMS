@@ -1,7 +1,6 @@
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
-
-const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
+import { fetchApi } from '../../../../lib/server-api';
 
 const ALLOWED_PATH_PREFIXES = [
   'products',
@@ -45,8 +44,6 @@ async function proxy(req: NextRequest, { params }: Context) {
   }
 
   const search = req.nextUrl.search ?? '';
-  const url = `${API_BASE}/${targetPath}${search}`;
-
   const headers = new Headers();
 
   const auth = req.headers.get('authorization');
@@ -66,7 +63,7 @@ async function proxy(req: NextRequest, { params }: Context) {
 
   const body = req.method !== 'GET' && req.method !== 'HEAD' ? await req.arrayBuffer() : undefined;
 
-  const upstream = await fetch(url, {
+  const upstream = await fetchApi(`/${targetPath}${search}`, {
     method: req.method,
     headers,
     body: body ? Buffer.from(body) : undefined,

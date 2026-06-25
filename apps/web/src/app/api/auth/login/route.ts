@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:3001/api';
+import { fetchApi } from '../../../../lib/server-api';
 
 export async function POST(req: NextRequest) {
   let body: unknown;
@@ -10,11 +9,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: 'Invalid request body' }, { status: 400 });
   }
 
-  const upstream = await fetch(`${API_BASE}/auth/login`, {
+  const upstream = await fetchApi('/auth/login', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  }).catch(() => null);
+
+  if (!upstream) {
+    return NextResponse.json({ message: 'API is unavailable. Check API_BASE_URL or the API service.' }, { status: 503 });
+  }
 
   const data = (await upstream.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string; message?: string };
 
