@@ -87,7 +87,7 @@ export default async function ProductDetailPage({ params }: Props) {
       ) : (
         <>
           <div className="mb-4 flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-indigo-700">
+            <span className="text-4xl font-bold text-purple-700">
               ${Number(product.price).toFixed(2)}
             </span>
             <span className="text-lg text-gray-400">{product.currency}</span>
@@ -101,7 +101,7 @@ export default async function ProductDetailPage({ params }: Props) {
 
           <Link
             href={`/shop/checkout?productId=${product.id}`}
-            className="inline-block rounded bg-indigo-600 px-8 py-3 text-white hover:bg-indigo-700"
+            className="inline-block rounded bg-purple-600 px-8 py-3 text-white hover:bg-purple-700"
           >
             Buy Now – ${Number(product.price).toFixed(2)}
           </Link>
@@ -109,7 +109,7 @@ export default async function ProductDetailPage({ params }: Props) {
       )}
 
       <div className="mt-8">
-        <Link href="/shop" className="text-sm text-indigo-600 hover:underline">
+        <Link href="/shop" className="text-sm text-purple-600 hover:underline">
           ← Back to Shop
         </Link>
       </div>

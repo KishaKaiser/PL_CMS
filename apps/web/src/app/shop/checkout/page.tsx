@@ -245,7 +245,7 @@ function CheckoutContent() {
       <div className="rounded-lg border border-green-200 bg-green-50 p-8 text-center">
         <h1 className="mb-3 text-2xl font-bold text-green-700">Payment Successful!</h1>
         <p className="text-gray-600">Your order has been confirmed. Enjoy your minutes!</p>
-        <a href="/client" className="mt-6 inline-block text-indigo-600 hover:underline">
+        <a href="/client" className="mt-6 inline-block text-purple-600 hover:underline">
           Go to Client Portal →
         </a>
       </div>
@@ -257,7 +257,7 @@ function CheckoutContent() {
       <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-8 text-center">
         <h1 className="mb-3 text-2xl font-bold text-yellow-700">Payment Cancelled</h1>
         <p className="text-gray-600">Your payment was cancelled. No charges were made.</p>
-        <a href="/shop" className="mt-6 inline-block text-indigo-600 hover:underline">
+        <a href="/shop" className="mt-6 inline-block text-purple-600 hover:underline">
           ← Back to Shop
         </a>
       </div>
@@ -289,7 +289,7 @@ function CheckoutContent() {
       {cart.length === 0 && status !== 'success' ? (
         <div className="rounded-lg border bg-white p-6">
           <p className="text-gray-500">Your cart is empty.</p>
-          <a href="/shop" className="mt-4 inline-block text-indigo-600 hover:underline">
+          <a href="/shop" className="mt-4 inline-block text-purple-600 hover:underline">
             ← Browse Shop
           </a>
         </div>
@@ -396,7 +396,7 @@ function CheckoutContent() {
                 </div>
                 <div className="col-span-2">
                   <button type="submit" disabled={ratesLoading}
-                    className="rounded bg-indigo-600 px-6 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50">
+                    className="rounded bg-purple-600 px-6 py-2 text-sm text-white hover:bg-purple-700 disabled:opacity-50">
                     {ratesLoading ? 'Getting rates…' : 'Get Shipping Rates →'}
                   </button>
                 </div>
@@ -412,7 +412,7 @@ function CheckoutContent() {
                 Shipping to {shippingAddress.city}, {shippingAddress.state} {shippingAddress.postalCode}
                 {' '}
                 <button onClick={() => { setAddressSubmitted(false); setShippingRates([]); }}
-                  className="text-indigo-600 hover:underline">
+                  className="text-purple-600 hover:underline">
                   (change)
                 </button>
               </p>
@@ -423,10 +423,10 @@ function CheckoutContent() {
                     <button
                       key={`${rate.carrierCode}-${rate.serviceCode}`}
                       onClick={() => setSelectedRate(rate)}
-                      className="flex w-full items-center justify-between rounded border px-4 py-3 text-left text-sm hover:border-indigo-400 hover:bg-indigo-50"
+                      className="flex w-full items-center justify-between rounded border px-4 py-3 text-left text-sm hover:border-purple-400 hover:bg-purple-50"
                     >
                       <span className="font-medium">{rate.serviceName}</span>
-                      <span className="font-semibold text-indigo-700">${total.toFixed(2)}</span>
+                      <span className="font-semibold text-purple-700">${total.toFixed(2)}</span>
                     </button>
                   );
                 })}
@@ -446,7 +446,7 @@ function CheckoutContent() {
                   {shippingAddress.city}, {shippingAddress.state} {shippingAddress.postalCode}
                   {' '}
                   <button onClick={() => { setAddressSubmitted(false); setShippingRates([]); setSelectedRate(null); setPaypalRendered(false); }}
-                    className="text-indigo-600 hover:underline">
+                    className="text-purple-600 hover:underline">
                     (change)
                   </button>
                 </p>
@@ -455,7 +455,7 @@ function CheckoutContent() {
                   {selectedRate.serviceName} — ${(selectedRate.shipmentCost + selectedRate.otherCost).toFixed(2)}
                   {' '}
                   <button onClick={() => { setSelectedRate(null); setPaypalRendered(false); }}
-                    className="text-indigo-600 hover:underline">
+                    className="text-purple-600 hover:underline">
                     (change)
                   </button>
                 </p>
@@ -476,7 +476,7 @@ function CheckoutContent() {
       )}
 
       <div className="mt-8">
-        <a href="/shop/cart" className="text-sm text-indigo-600 hover:underline">
+        <a href="/shop/cart" className="text-sm text-purple-600 hover:underline">
           ← Back to Cart
         </a>
       </div>

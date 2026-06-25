@@ -101,7 +101,7 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
   }
   if (block.type === 'button') {
     return (
-      <a href={String(block.props.href ?? '#')} className="mb-4 inline-block rounded bg-indigo-600 px-4 py-2 text-white">
+      <a href={String(block.props.href ?? '#')} className="mb-4 inline-block rounded bg-purple-600 px-4 py-2 text-white">
         {String(block.props.label ?? 'Learn More')}
       </a>
     );
@@ -126,7 +126,7 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
     return (
       <nav className={`mb-4 flex ${vertical ? 'flex-col items-start' : 'flex-wrap items-center'} gap-3`}>
         {links.map((link) => (
-          <a key={`${link.label}-${link.href}`} href={link.href} className="text-sm font-medium text-indigo-700 hover:underline">
+          <a key={`${link.label}-${link.href}`} href={link.href} className="text-sm font-medium text-purple-700 hover:underline">
             {link.label}
           </a>
         ))}
@@ -220,7 +220,7 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
           <Link key={product.id} href={`/shop/${product.id}`} className="rounded border bg-white p-4 shadow-sm hover:shadow">
             <h3 className="font-semibold">{product.name}</h3>
             {product.description && <p className="mt-1 text-sm text-gray-500">{product.description}</p>}
-            <p className="mt-3 text-xl font-bold text-indigo-700">${Number(product.price).toFixed(2)}</p>
+            <p className="mt-3 text-xl font-bold text-purple-700">${Number(product.price).toFixed(2)}</p>
           </Link>
         ))}
       </div>

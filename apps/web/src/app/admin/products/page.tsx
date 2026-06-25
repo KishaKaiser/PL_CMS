@@ -262,10 +262,12 @@ export default function AdminProductsPage() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    setImportStatus('Importing products...');
+    setImportStatus('Reading import file...');
     setError('');
     try {
       const items = await readImportFile(file);
+      if (items.length === 0) throw new Error('No products were found in this file.');
+      setImportStatus(`Found ${items.length} product${items.length === 1 ? '' : 's'}. Uploading import...`);
       const res = await fetch('/api/proxy/products/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -276,7 +278,7 @@ export default function AdminProductsPage() {
         throw new Error(data.message ?? 'Product import failed');
       }
       const result = (await res.json()) as { created: number; skipped: number };
-      setImportStatus(`Imported ${result.created} product${result.created === 1 ? '' : 's'}${result.skipped ? `, skipped ${result.skipped}` : ''}.`);
+      setImportStatus(`Imported ${result.created} product${result.created === 1 ? '' : 's'}${result.skipped ? `, skipped ${result.skipped}` : ''}. Images are downloaded during import when possible.`);
       await fetchData();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Product import failed');
@@ -857,7 +859,16 @@ function csvCell(value: unknown) {
 }
 
 function childText(parent: Element, tagName: string) {
-  return parent.getElementsByTagName(tagName)[0]?.textContent?.trim() ?? '';
+  return findChildText(parent, tagName);
+}
+
+function findChildText(parent: Element, tagName: string) {
+  const direct = parent.getElementsByTagName(tagName)[0]?.textContent?.trim();
+  if (direct) return direct;
+  const localName = tagName.split(':').pop();
+  return Array.from(parent.children)
+    .find((child) => child.localName === localName)
+    ?.textContent?.trim() ?? '';
 }
 
 function wxrText(item: Element, tagName: string) {
