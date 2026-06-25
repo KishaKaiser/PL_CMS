@@ -26,7 +26,7 @@ export default async function BlogArchivePage() {
             <li key={archive.key}>
               <Link
                 href={`/blog/archive/${archive.year}/${String(archive.month).padStart(2, '0')}`}
-                className="rounded-lg border bg-white px-4 py-3 text-sm shadow-sm hover:border-indigo-300 hover:text-indigo-700"
+                className="rounded-lg border bg-white px-4 py-3 text-sm shadow-sm hover:border-purple-300 hover:text-purple-700"
               >
                 {monthLabel(archive.year, archive.month)} ({archive.count})
               </Link>

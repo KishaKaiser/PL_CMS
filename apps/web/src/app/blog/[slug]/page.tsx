@@ -55,7 +55,7 @@ export default async function BlogPostPage({ params }: Props) {
             <h1 className="text-3xl font-bold">{post.title}</h1>
             <p className="mt-2 text-sm text-gray-500">
               {new Date(post.publishedAt).toLocaleDateString()} •{' '}
-              <Link href={`/blog/authors/${post.author.id}`} className="hover:text-indigo-700 hover:underline">
+              <Link href={`/blog/authors/${post.author.id}`} className="hover:text-purple-700 hover:underline">
                 {post.author.name}
               </Link>
             </p>
@@ -63,7 +63,7 @@ export default async function BlogPostPage({ params }: Props) {
             {(post.categories.length > 0 || post.tags.length > 0) && (
               <div className="mt-4 flex flex-wrap gap-2 text-xs">
                 {post.categories.map((item) => (
-                  <Link key={item.id} href={`/blog/categories/${item.slug}`} className="rounded bg-indigo-50 px-2 py-1 text-indigo-700 hover:bg-indigo-100">
+                  <Link key={item.id} href={`/blog/categories/${item.slug}`} className="rounded bg-purple-50 px-2 py-1 text-purple-700 hover:bg-purple-100">
                     {item.name}
                   </Link>
                 ))}

@@ -39,7 +39,7 @@ export default function CartPage() {
         <h1 className="mb-6 text-3xl font-bold">Your Cart</h1>
         <div className="rounded-lg border bg-white p-8 text-center text-gray-500">
           <p className="mb-4">Your cart is empty.</p>
-          <Link href="/shop" className="text-indigo-600 hover:underline">
+          <Link href="/shop" className="text-purple-600 hover:underline">
             ← Browse Shop
           </Link>
         </div>
@@ -124,7 +124,7 @@ export default function CartPage() {
         </Link>
         <Link
           href="/shop/checkout"
-          className="flex-1 rounded bg-indigo-600 py-3 text-center text-sm text-white hover:bg-indigo-700"
+          className="flex-1 rounded bg-purple-600 py-3 text-center text-sm text-white hover:bg-purple-700"
         >
           Proceed to Checkout →
         </Link>

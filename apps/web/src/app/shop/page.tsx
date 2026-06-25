@@ -37,7 +37,7 @@ export default async function ShopPage() {
         </div>
         <Link
           href="/shop/cart"
-          className="rounded border border-indigo-300 px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50"
+          className="rounded border border-purple-300 px-4 py-2 text-sm text-purple-600 hover:bg-purple-50"
         >
           View Cart
         </Link>
@@ -64,7 +64,7 @@ export default async function ShopPage() {
                 <p className="mt-1 flex-1 text-sm text-gray-500">{p.shortDescription || p.description}</p>
               )}
               <div className="mt-3 flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-indigo-700">
+                <span className="text-2xl font-bold text-purple-700">
                   ${Number(p.price).toFixed(2)}
                 </span>
                 <span className="text-sm text-gray-400">{p.currency}</span>
@@ -76,7 +76,7 @@ export default async function ShopPage() {
               )}
               <Link
                 href={`/shop/${p.id}`}
-                className="mt-4 rounded bg-indigo-600 py-2 text-center text-sm text-white hover:bg-indigo-700"
+                className="mt-4 rounded bg-purple-600 py-2 text-center text-sm text-white hover:bg-purple-700"
               >
                 View Details
               </Link>
@@ -86,7 +86,7 @@ export default async function ShopPage() {
       )}
 
       <div className="mt-8">
-        <Link href="/" className="text-sm text-indigo-600 hover:underline">
+        <Link href="/" className="text-sm text-purple-600 hover:underline">
           Back to Home
         </Link>
       </div>

@@ -104,7 +104,7 @@ export function PublicFormEmbed({ slug, fallbackTitle, showTitle = true }: { slu
         <button
           type="submit"
           disabled={submitting}
-          className="rounded bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="rounded bg-purple-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
         >
           {submitting ? 'Submitting...' : form.type === 'REGISTRATION' ? 'Create Account' : 'Submit'}
         </button>

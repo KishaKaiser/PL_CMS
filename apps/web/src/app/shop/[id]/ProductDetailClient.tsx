@@ -74,7 +74,7 @@ export default function ProductDetailClient({ product, variants }: Props) {
 
       {/* Price */}
       <div className="mb-4 flex items-baseline gap-2">
-        <span className="text-4xl font-bold text-indigo-700">
+        <span className="text-4xl font-bold text-purple-700">
           ${Number(displayPrice).toFixed(2)}
         </span>
         <span className="text-lg text-gray-400">{product.currency}</span>
@@ -105,7 +105,7 @@ export default function ProductDetailClient({ product, variants }: Props) {
                 }}
                 className={`flex h-9 w-9 items-center justify-center rounded-full border-2 transition ${
                   selectedVariantId === v.id
-                    ? 'border-indigo-600 ring-2 ring-indigo-300'
+                    ? 'border-purple-600 ring-2 ring-purple-300'
                     : 'border-gray-300 hover:border-gray-400'
                 } ${unavailable ? 'opacity-40' : ''}`}
                 style={{ backgroundColor: v.color }}
@@ -141,13 +141,13 @@ export default function ProductDetailClient({ product, variants }: Props) {
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={handleAddToCart}
-            className="rounded border border-indigo-600 px-8 py-3 text-indigo-600 hover:bg-indigo-50"
+            className="rounded border border-purple-600 px-8 py-3 text-purple-600 hover:bg-purple-50"
           >
             {addedToCart ? '✓ Added to Cart' : 'Add to Cart'}
           </button>
           <Link
             href={`/shop/checkout?productId=${product.id}&variantId=${selected?.id}`}
-            className="inline-block rounded bg-indigo-600 px-8 py-3 text-white hover:bg-indigo-700"
+            className="inline-block rounded bg-purple-600 px-8 py-3 text-white hover:bg-purple-700"
           >
             Buy Now – ${Number(displayPrice).toFixed(2)}
           </Link>
@@ -157,7 +157,7 @@ export default function ProductDetailClient({ product, variants }: Props) {
       {addedToCart && (
         <div className="mt-4 flex items-center gap-4 rounded border border-green-200 bg-green-50 p-3 text-sm">
           <span className="text-green-700">Added to your cart!</span>
-          <Link href="/shop/cart" className="font-medium text-indigo-600 hover:underline">
+          <Link href="/shop/cart" className="font-medium text-purple-600 hover:underline">
             View Cart →
           </Link>
         </div>
