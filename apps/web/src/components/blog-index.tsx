@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { BuilderContent } from './cms/builder-content';
 import { RichContent } from './cms/rich-content';
 import { PublicSiteShell } from './public-site-shell';
 import {
@@ -10,7 +9,6 @@ import {
   getPublicSiteConfig,
   getSafeImageSrc,
   getTags,
-  type BuilderLayout,
   type PublicSiteConfig,
   toPlainText,
 } from '../lib/public-cms';
@@ -25,7 +23,6 @@ type Props = {
   heading?: string;
   description?: string;
   contentHtml?: string;
-  builderLayout?: BuilderLayout | null;
   siteConfig?: PublicSiteConfig;
 };
 
@@ -39,7 +36,6 @@ export async function BlogIndex({
   heading,
   description,
   contentHtml,
-  builderLayout,
   siteConfig,
 }: Props) {
   const config = siteConfig ?? (await getPublicSiteConfig());
@@ -63,26 +59,19 @@ export async function BlogIndex({
 
   const activeFilterCount = [search, category, tag, authorId, year, month].filter(Boolean).length;
   const sidebarWidgets = config.sidebars.blog.filter((widget) => widget.enabled);
-  const showDefaultIntro = !builderLayout;
 
   return (
     <PublicSiteShell siteConfig={config}>
       <main className="mx-auto grid w-full max-w-7xl gap-8 p-8 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section>
-          {showDefaultIntro && (
-            <div className="mb-8">
-              <h1 className="mb-2 text-4xl font-bold" style={{ color: config.theme.primaryColor }}>
-                {title}
-              </h1>
-              <p className="max-w-3xl text-gray-600">{intro}</p>
-            </div>
-          )}
+          <div className="mb-8">
+            <h1 className="mb-2 text-4xl font-bold" style={{ color: config.theme.primaryColor }}>
+              {title}
+            </h1>
+            <p className="max-w-3xl text-gray-600">{intro}</p>
+          </div>
 
-          {builderLayout ? (
-            <div className="mb-8 overflow-hidden rounded-lg border bg-white shadow-sm">
-              <BuilderContent layout={builderLayout} breadcrumbLabel={title} />
-            </div>
-          ) : contentHtml ? (
+          {contentHtml ? (
             <div className="mb-8 rounded-lg border bg-white p-6 shadow-sm">
               <RichContent html={contentHtml} className="prose max-w-none text-gray-800" />
             </div>

@@ -41,7 +41,6 @@ export default async function BlogPage({ searchParams }: Props) {
       heading={page?.title ?? siteConfig.postsPage.title}
       description={page?.metaDescription ?? undefined}
       contentHtml={page?.content}
-      builderLayout={page?.builderLayout}
     />
   );
 }
