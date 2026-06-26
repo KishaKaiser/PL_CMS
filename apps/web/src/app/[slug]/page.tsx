@@ -55,6 +55,8 @@ export default async function CmsPage({ params, searchParams }: Props) {
         heading={page?.title ?? siteConfig.postsPage.title}
         description={page?.metaDescription ?? undefined}
         contentHtml={page?.content}
+        showTitle={page?.builderLayout?.settings?.showTitle !== false}
+        showBreadcrumbs={page?.builderLayout?.settings?.breadcrumbs !== false}
       />
     );
   }
