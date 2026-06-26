@@ -23,6 +23,8 @@ type Props = {
   heading?: string;
   description?: string;
   contentHtml?: string;
+  showTitle?: boolean;
+  showBreadcrumbs?: boolean;
   siteConfig?: PublicSiteConfig;
 };
 
@@ -36,6 +38,8 @@ export async function BlogIndex({
   heading,
   description,
   contentHtml,
+  showTitle = true,
+  showBreadcrumbs = true,
   siteConfig,
 }: Props) {
   const config = siteConfig ?? (await getPublicSiteConfig());
@@ -64,15 +68,26 @@ export async function BlogIndex({
     <PublicSiteShell siteConfig={config}>
       <main className="mx-auto grid w-full max-w-7xl gap-8 p-8 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section>
+          {showBreadcrumbs && (
+            <nav className="mb-4 text-sm text-gray-500">
+              <Link href="/" className="hover:underline">
+                Home
+              </Link>
+              <span className="mx-2">/</span>
+              <span>{title}</span>
+            </nav>
+          )}
+          {showTitle && (
+            <h1 className="mb-4 text-4xl font-bold" style={{ color: config.theme.primaryColor }}>
+              {title}
+            </h1>
+          )}
           {contentHtml ? (
             <div className="mb-8 rounded-lg border bg-white p-6 shadow-sm">
               <RichContent html={contentHtml} className="prose max-w-none text-gray-800" />
             </div>
           ) : (
             <div className="mb-8">
-              <h1 className="mb-2 text-4xl font-bold" style={{ color: config.theme.primaryColor }}>
-                {title}
-              </h1>
               <p className="max-w-3xl text-gray-600">{intro}</p>
             </div>
           )}
