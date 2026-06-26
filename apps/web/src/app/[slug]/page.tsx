@@ -64,7 +64,7 @@ export default async function CmsPage({ params, searchParams }: Props) {
     <PublicSiteShell siteConfig={siteConfig} showHeader={showSiteHeader} showFooter={showSiteFooter}>
       {builderLayout ? (
         <main>
-          <BuilderContent layout={builderLayout} />
+          <BuilderContent layout={builderLayout} breadcrumbLabel={page.title} />
         </main>
       ) : (
         <main className="mx-auto max-w-3xl p-8">
