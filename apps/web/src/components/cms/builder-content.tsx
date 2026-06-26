@@ -33,9 +33,11 @@ async function getProducts(): Promise<Product[]> {
 export async function BuilderContent({
   layout,
   showChrome = true,
+  breadcrumbLabel = 'Page',
 }: {
   layout: BuilderLayout;
   showChrome?: boolean;
+  breadcrumbLabel?: string;
 }) {
   const [products, categories, tags] = await Promise.all([getProducts(), getCategories(), getTags()]);
   const storeData = { products, categories, tags };
@@ -46,7 +48,7 @@ export async function BuilderContent({
         <nav className="border-b bg-gray-50 px-8 py-3 text-sm text-gray-500">
           <Link href="/">Home</Link>
           <span className="mx-2">/</span>
-          <span>Page</span>
+          <span>{breadcrumbLabel}</span>
         </nav>
       )}
       <div className={showChrome ? pageShellClass(layout.settings?.layout) : ''}>

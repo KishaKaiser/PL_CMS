@@ -86,7 +86,7 @@ export default async function HomePage({ searchParams }: Props) {
     return (
       <PublicSiteShell siteConfig={siteConfig} showHeader={showSiteHeader} showFooter={showSiteFooter}>
         <main>
-          <BuilderContent layout={builderLayout} />
+          <BuilderContent layout={builderLayout} breadcrumbLabel={homePage.title} />
         </main>
       </PublicSiteShell>
     );
