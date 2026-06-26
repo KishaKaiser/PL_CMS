@@ -18,10 +18,14 @@ export async function generateMetadata({ params }: Pick<Props, 'params'>): Promi
   const siteConfig = await getPublicSiteConfig();
 
   if (siteConfig.postsPage.pageSlug && slug === siteConfig.postsPage.pageSlug) {
+    const page = await getPublishedPage(slug);
     return buildSeoMetadata({
-      title: getSeoTitle(siteConfig.postsPage.title),
-      description: getSeoDescription(siteConfig.theme.heroBody, siteConfig.identity.tagline),
+      title: page ? getSeoTitle(page.title, page.metaTitle) : getSeoTitle(siteConfig.postsPage.title),
+      description: page
+        ? getSeoDescription(page.metaDescription, page.content, siteConfig.identity.tagline)
+        : getSeoDescription(siteConfig.theme.heroBody, siteConfig.identity.tagline),
       path: siteConfig.postsPage.path,
+      imageUrl: page?.featuredImageUrl ?? siteConfig.identity.logoUrl,
       siteName: siteConfig.identity.title,
     });
   }
@@ -43,7 +47,17 @@ export default async function CmsPage({ params, searchParams }: Props) {
   const siteConfig = await getPublicSiteConfig();
 
   if (siteConfig.postsPage.pageSlug && slug === siteConfig.postsPage.pageSlug) {
-    return <BlogIndex searchParams={(await searchParams) ?? {}} siteConfig={siteConfig} />;
+    const page = await getPublishedPage(slug);
+    return (
+      <BlogIndex
+        searchParams={(await searchParams) ?? {}}
+        siteConfig={siteConfig}
+        heading={page?.title ?? siteConfig.postsPage.title}
+        description={page?.metaDescription ?? undefined}
+        contentHtml={page?.content}
+        builderLayout={page?.builderLayout}
+      />
+    );
   }
 
   const page = await getPublishedPage(slug);
