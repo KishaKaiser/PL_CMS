@@ -64,18 +64,18 @@ export async function BlogIndex({
     <PublicSiteShell siteConfig={config}>
       <main className="mx-auto grid w-full max-w-7xl gap-8 p-8 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section>
-          <div className="mb-8">
-            <h1 className="mb-2 text-4xl font-bold" style={{ color: config.theme.primaryColor }}>
-              {title}
-            </h1>
-            <p className="max-w-3xl text-gray-600">{intro}</p>
-          </div>
-
           {contentHtml ? (
             <div className="mb-8 rounded-lg border bg-white p-6 shadow-sm">
               <RichContent html={contentHtml} className="prose max-w-none text-gray-800" />
             </div>
-          ) : null}
+          ) : (
+            <div className="mb-8">
+              <h1 className="mb-2 text-4xl font-bold" style={{ color: config.theme.primaryColor }}>
+                {title}
+              </h1>
+              <p className="max-w-3xl text-gray-600">{intro}</p>
+            </div>
+          )}
 
           {activeFilterCount > 0 && (
             <div
