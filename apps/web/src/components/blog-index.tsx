@@ -63,34 +63,20 @@ export async function BlogIndex({
 
   const activeFilterCount = [search, category, tag, authorId, year, month].filter(Boolean).length;
   const sidebarWidgets = config.sidebars.blog.filter((widget) => widget.enabled);
+  const showDefaultIntro = !builderLayout;
 
   return (
     <PublicSiteShell siteConfig={config}>
       <main className="mx-auto grid w-full max-w-7xl gap-8 p-8 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section>
-          <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
+          {showDefaultIntro && (
+            <div className="mb-8">
               <h1 className="mb-2 text-4xl font-bold" style={{ color: config.theme.primaryColor }}>
                 {title}
               </h1>
               <p className="max-w-3xl text-gray-600">{intro}</p>
             </div>
-
-            <form action={blogPath} className="flex w-full gap-3 lg:max-w-md">
-              <input
-                name="search"
-                defaultValue={search}
-                className="w-full rounded-lg border border-gray-200 px-4 py-2 text-sm"
-                placeholder="Search posts"
-              />
-              <button
-                className="rounded px-4 py-2 text-sm font-medium text-white"
-                style={{ backgroundColor: config.theme.primaryColor }}
-              >
-                Search
-              </button>
-            </form>
-          </div>
+          )}
 
           {builderLayout ? (
             <div className="mb-8 overflow-hidden rounded-lg border bg-white shadow-sm">
