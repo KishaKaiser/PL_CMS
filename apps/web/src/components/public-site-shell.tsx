@@ -1,9 +1,11 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import {
   getSafeImageSrc,
   getPublicSiteConfig,
   type PublicSiteConfig,
 } from '../lib/public-cms';
+import { getAccountLinkFromToken } from '../lib/account-routing';
 import { BuilderContent } from './cms/builder-content';
 
 type Props = {
@@ -15,6 +17,8 @@ type Props = {
 
 export async function PublicSiteShell({ children, siteConfig, showHeader = true, showFooter = true }: Props) {
   const config = siteConfig ?? (await getPublicSiteConfig());
+  const cookieStore = await cookies();
+  const accountLink = getAccountLinkFromToken(cookieStore.get('access_token')?.value);
   const logo = getSafeImageSrc(config.identity.logoUrl);
   const headerLinks = config.menus.header;
   const footerLinks = config.menus.footer;
@@ -27,7 +31,7 @@ export async function PublicSiteShell({ children, siteConfig, showHeader = true,
       {showHeader && (
         config.themeLayouts.header ? (
           <header className="border-b bg-white">
-            <BuilderContent layout={config.themeLayouts.header} showChrome={false} />
+            <BuilderContent layout={config.themeLayouts.header} showChrome={false} accountLink={accountLink} />
           </header>
         ) : (
           <header className="border-b bg-white">
@@ -48,8 +52,8 @@ export async function PublicSiteShell({ children, siteConfig, showHeader = true,
                     {item.label}
                   </Link>
                 ))}
-                <Link href="/admin" className="rounded px-3 py-2 hover:bg-gray-100">
-                  Admin
+                <Link href={accountLink.href} className="rounded px-3 py-2 hover:bg-gray-100">
+                  {accountLink.label}
                 </Link>
               </nav>
             </div>
