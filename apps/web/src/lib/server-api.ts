@@ -1,4 +1,5 @@
 const DEFAULT_API_BASES = ['http://127.0.0.1:3001/api', 'http://localhost:3001/api', 'http://api:3001/api'];
+const RETRYABLE_API_STATUSES = new Set([404, 500, 502, 503, 504]);
 
 export function getApiBaseCandidates() {
   const configured = [
@@ -13,14 +14,18 @@ export function getApiBaseCandidates() {
 
 export async function fetchApi(path: string, init?: RequestInit) {
   let lastError: unknown = null;
+  let fallbackResponse: Response | null = null;
 
   for (const base of getApiBaseCandidates()) {
     try {
-      return await fetch(`${base}${path}`, init);
+      const response = await fetch(`${base}${path}`, init);
+      if (!RETRYABLE_API_STATUSES.has(response.status)) return response;
+      fallbackResponse = response;
     } catch (error) {
       lastError = error;
     }
   }
 
+  if (fallbackResponse) return fallbackResponse;
   throw lastError ?? new Error('API request failed');
 }
