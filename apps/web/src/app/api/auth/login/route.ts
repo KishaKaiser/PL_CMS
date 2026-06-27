@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchApi } from '../../../../lib/server-api';
+import { getApiBaseCandidates } from '../../../../lib/server-api';
+
+const RETRYABLE_UPSTREAM_STATUSES = new Set([404, 500, 502, 503, 504]);
 
 export async function POST(req: NextRequest) {
   let body: unknown;
@@ -9,11 +11,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: 'Invalid request body' }, { status: 400 });
   }
 
-  const upstream = await fetchApi('/auth/login', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  }).catch(() => null);
+  const upstream = await postLoginToApi(body);
 
   if (!upstream) {
     return NextResponse.json({ message: 'API is unavailable. Check API_BASE_URL or the API service.' }, { status: 503 });
@@ -49,4 +47,25 @@ export async function POST(req: NextRequest) {
   });
 
   return res;
+}
+
+async function postLoginToApi(body: unknown) {
+  let fallbackResponse: Response | null = null;
+
+  for (const base of getApiBaseCandidates()) {
+    try {
+      const response = await fetch(`${base}/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!RETRYABLE_UPSTREAM_STATUSES.has(response.status)) return response;
+      fallbackResponse = response;
+    } catch {
+      continue;
+    }
+  }
+
+  return fallbackResponse;
 }
