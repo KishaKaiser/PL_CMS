@@ -1,3 +1,104 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  .cms-rich-content {
+    line-height: 1.75;
+  }
+
+  .cms-rich-content > * + * {
+    margin-top: 1rem;
+  }
+
+  .cms-rich-content ul,
+  .cms-rich-content ol {
+    margin: 1rem 0;
+    padding-left: 1.5rem;
+  }
+
+  .cms-rich-content ul {
+    list-style: disc;
+  }
+
+  .cms-rich-content ol {
+    list-style: decimal;
+  }
+
+  .cms-rich-content li {
+    margin: 0.35rem 0;
+  }
+
+  .cms-rich-content li > ul,
+  .cms-rich-content li > ol {
+    margin: 0.35rem 0;
+  }
+
+  .cms-rich-content blockquote {
+    border-left: 4px solid #d8b4fe;
+    color: #4b5563;
+    font-style: italic;
+    margin: 1.25rem 0;
+    padding-left: 1rem;
+  }
+
+  .cms-rich-content a {
+    color: #6f21b6;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .cms-rich-content img,
+  .cms-rich-content video,
+  .cms-rich-content iframe {
+    max-width: 100%;
+  }
+
+  .cms-rich-content img,
+  .cms-rich-content video {
+    height: auto;
+  }
+
+  .cms-rich-content iframe {
+    aspect-ratio: 16 / 9;
+    width: 100%;
+  }
+
+  .cms-rich-content table {
+    border-collapse: collapse;
+    margin: 1.25rem 0;
+    width: 100%;
+  }
+
+  .cms-rich-content th,
+  .cms-rich-content td {
+    border: 1px solid #e5e7eb;
+    padding: 0.65rem;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .cms-rich-content th {
+    background: #f9fafb;
+    font-weight: 700;
+  }
+
+  .cms-rich-content pre {
+    background: #111827;
+    border-radius: 0.5rem;
+    color: #f9fafb;
+    overflow-x: auto;
+    padding: 1rem;
+  }
+
+  .cms-rich-content code {
+    background: #f3f4f6;
+    border-radius: 0.25rem;
+    padding: 0.1rem 0.3rem;
+  }
+
+  .cms-rich-content pre code {
+    background: transparent;
+    padding: 0;
+  }
+}
