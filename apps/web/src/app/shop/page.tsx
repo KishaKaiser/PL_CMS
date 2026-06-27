@@ -59,7 +59,7 @@ export default async function ShopPage({ searchParams }: Props) {
         </nav>
       )}
 
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mb-8">
         <section className="max-w-3xl">
           {showTitle && <h1 className="mb-3 text-4xl font-bold text-gray-950">{title}</h1>}
           {page?.content ? (
@@ -68,12 +68,6 @@ export default async function ShopPage({ searchParams }: Props) {
             <p className="text-gray-600">Browse our available products and services.</p>
           )}
         </section>
-        <Link
-          href="/shop/cart"
-          className="w-fit rounded border border-purple-300 px-4 py-2 text-sm text-purple-600 hover:bg-purple-50"
-        >
-          View Cart
-        </Link>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
