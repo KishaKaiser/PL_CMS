@@ -32,6 +32,13 @@ interface Product {
   currency: string;
   minutesPack: number;
   isActive: boolean;
+  weightOz?: string | number | null;
+  lengthIn?: string | number | null;
+  widthIn?: string | number | null;
+  heightIn?: string | number | null;
+  stockQuantity?: number | null;
+  stockStatus?: string | null;
+  trackStock?: boolean | null;
   variants: ProductVariant[];
 }
 
@@ -57,68 +64,97 @@ export default async function ProductDetailPage({ params }: Props) {
   const productImage = getSafeImageSrc(product.featuredMedia?.url ?? product.imageUrl);
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
+    <main className="mx-auto w-full max-w-7xl p-8">
       <nav className="mb-6 text-sm text-gray-500">
+        <Link href="/" className="hover:underline">Home</Link>
+        <span className="mx-2">/</span>
         <Link href="/shop" className="hover:underline">Shop</Link>
-        {' / '}
+        <span className="mx-2">/</span>
         <span>{product.name}</span>
       </nav>
 
-      <h1 className="mb-2 text-3xl font-bold">{product.name}</h1>
+      <section className="grid gap-8 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
+        <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+          {productImage ? (
+            <img
+              src={productImage}
+              alt={product.featuredMedia?.altText || product.featuredMedia?.title || product.name}
+              className="aspect-square w-full object-cover"
+            />
+          ) : (
+            <div className="flex aspect-square w-full items-center justify-center bg-gray-100 text-sm text-gray-500">
+              Product image
+            </div>
+          )}
+        </div>
 
-      {productImage && (
-        <img
-          src={productImage}
-          alt={product.featuredMedia?.altText || product.featuredMedia?.title || product.name}
-          className="mb-6 max-h-[460px] w-full rounded-lg border object-cover"
-        />
-      )}
-
-      {product.shortDescription && (
-        <p className="mb-4 text-lg text-gray-600">{product.shortDescription}</p>
-      )}
-
-      {product.description && (
-        <RichContent html={product.description} className="prose mb-6 max-w-none text-gray-700" />
-      )}
-
-      {activeVariants.length > 0 ? (
-        <ProductDetailClient product={product} variants={activeVariants} />
-      ) : (
-        <>
-          <div className="mb-4 flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-purple-700">
-              ${Number(product.price).toFixed(2)}
-            </span>
-            <span className="text-lg text-gray-400">{product.currency}</span>
+        <section className="rounded-lg border bg-white shadow-sm">
+          <div className="border-b border-gray-100 p-6">
+            <h1 className="text-4xl font-bold text-gray-950">{product.name}</h1>
           </div>
 
-          {product.minutesPack > 0 && (
-            <p className="mb-6 text-base font-medium text-green-700">
-              Includes {product.minutesPack} minutes of advisor call time
-            </p>
+          {product.shortDescription && (
+            <div className="border-b border-gray-100 p-6">
+              <p className="text-lg leading-8 text-gray-600">{product.shortDescription}</p>
+            </div>
           )}
 
-          <Link
-            href={`/shop/checkout?productId=${product.id}`}
-            className="inline-block rounded bg-purple-600 px-8 py-3 text-white hover:bg-purple-700"
-          >
-            Buy Now – ${Number(product.price).toFixed(2)}
-          </Link>
-        </>
+          <div className="p-6">
+            <ProductDetailClient product={product} variants={activeVariants} />
+          </div>
+        </section>
+      </section>
+
+      <section className="mt-8 rounded-lg border bg-white shadow-sm">
+        <div className="border-b border-gray-100 p-5">
+          <h2 className="text-xl font-semibold text-gray-950">Product Dimensions</h2>
+        </div>
+        <dl className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+          <DimensionStat label="Height" value={formatMeasurement(product.heightIn, 'in')} />
+          <DimensionStat label="Width" value={formatMeasurement(product.widthIn, 'in')} />
+          <DimensionStat label="Length" value={formatMeasurement(product.lengthIn, 'in')} />
+          <DimensionStat label="Weight" value={formatMeasurement(product.weightOz, 'oz')} />
+        </dl>
+      </section>
+
+      {product.description && (
+        <section className="mt-8 rounded-lg border bg-white shadow-sm">
+          <div className="border-b border-gray-100 p-5">
+            <h2 className="text-xl font-semibold text-gray-950">Long Description</h2>
+          </div>
+          <RichContent html={product.description} className="prose max-w-none p-5 text-gray-700" />
+        </section>
       )}
+
+      <section className="mt-8 rounded-lg border bg-white p-5 shadow-sm">
+        <ReviewSection
+          title="Customer Ratings"
+          endpoint={`/api/proxy/products/${product.id}/reviews`}
+          loginMessage="Log in to review products you purchased."
+        />
+      </section>
 
       <div className="mt-8">
         <Link href="/shop" className="text-sm text-purple-600 hover:underline">
-          ← Back to Shop
+          Back to Shop
         </Link>
       </div>
-
-      <ReviewSection
-        title="Customer Reviews"
-        endpoint={`/api/proxy/products/${product.id}/reviews`}
-        loginMessage="Log in to review products you purchased."
-      />
     </main>
   );
+}
+
+function DimensionStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-gray-50 p-4">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</dt>
+      <dd className="mt-2 text-lg font-semibold text-gray-950">{value}</dd>
+    </div>
+  );
+}
+
+function formatMeasurement(value: string | number | null | undefined, suffix: string) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 'Not set';
+  const formatted = Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2).replace(/\.?0+$/, '');
+  return `${formatted} ${suffix}`;
 }
