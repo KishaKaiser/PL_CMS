@@ -66,118 +66,37 @@ export async function BlogIndex({
 
   return (
     <PublicSiteShell siteConfig={config}>
-      <main className="mx-auto grid w-full max-w-7xl gap-8 p-8 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <section>
-          {showBreadcrumbs && (
-            <nav className="mb-4 text-sm text-gray-500">
-              <Link href="/" className="hover:underline">
-                Home
-              </Link>
-              <span className="mx-2">/</span>
-              <span>{title}</span>
-            </nav>
-          )}
-          {showTitle && (
-            <h1 className="mb-4 text-4xl font-bold" style={{ color: config.theme.primaryColor }}>
-              {title}
-            </h1>
-          )}
-          {contentHtml ? (
-            <div className="mb-8 rounded-lg border bg-white p-6 shadow-sm">
-              <RichContent html={contentHtml} className="prose max-w-none text-gray-800" />
-            </div>
-          ) : (
-            <div className="mb-8">
-              <p className="max-w-3xl text-gray-600">{intro}</p>
-            </div>
-          )}
+      <main className="mx-auto w-full max-w-7xl p-8">
+        {showBreadcrumbs && (
+          <nav className="mb-4 text-sm text-gray-500">
+            <Link href="/" className="hover:underline">
+              Home
+            </Link>
+            <span className="mx-2">/</span>
+            <span>{title}</span>
+          </nav>
+        )}
 
-          {activeFilterCount > 0 && (
-            <div
-              className="mb-4 flex items-center justify-between rounded-lg border px-4 py-3 text-sm"
-              style={{
-                borderColor: `${config.theme.primaryColor}33`,
-                backgroundColor: `${config.theme.primaryColor}12`,
-                color: config.theme.primaryColor,
-              }}
-            >
-              <span>{posts.length} result{posts.length === 1 ? '' : 's'} with filters applied.</span>
-              <Link href={blogPath} className="font-medium hover:underline">
-                Clear filters
-              </Link>
-            </div>
-          )}
+        <div className="mb-8">
+          <section className="max-w-3xl">
+            {showTitle && <h1 className="mb-3 text-4xl font-bold text-gray-950">{title}</h1>}
+            {contentHtml ? (
+              <RichContent html={contentHtml} className="prose max-w-none text-gray-700" />
+            ) : (
+              <p className="text-gray-600">{intro}</p>
+            )}
+          </section>
+        </div>
 
-          {posts.length === 0 ? (
-            <p className="text-gray-500">No published posts found.</p>
-          ) : (
-            <div className="grid gap-6 md:grid-cols-2">
-              {posts.map((post) => {
-                const preview = toPlainText(post.excerpt || post.content);
-                const featuredImageSrc = getSafeImageSrc(post.featuredImageUrl);
-
-                return (
-                  <article key={post.id} className="flex h-full flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                    {featuredImageSrc && (
-                      <Link href={`/blog/${post.slug}`}>
-                        <img src={featuredImageSrc} alt={post.title} className="h-56 w-full object-cover" />
-                      </Link>
-                    )}
-                    <div className="flex flex-1 flex-col p-6">
-                      <h2 className="text-xl font-semibold">
-                        <Link href={`/blog/${post.slug}`} className="hover:underline">
-                          {post.title}
-                        </Link>
-                      </h2>
-                      <p className="mt-1 text-sm text-gray-500">
-                        {new Date(post.publishedAt).toLocaleDateString()} •{' '}
-                        <Link href={`/blog/authors/${post.author.id}`} className="hover:underline" style={{ color: config.theme.accentColor }}>
-                          {post.author.name}
-                        </Link>
-                      </p>
-                      <p className="mt-3 whitespace-pre-wrap text-gray-700">
-                        {preview.slice(0, BLOG_EXCERPT_LENGTH)}
-                        {preview.length > BLOG_EXCERPT_LENGTH ? '…' : ''}
-                      </p>
-                      <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                        {post.categories.map((item) => (
-                          <Link
-                            key={item.id}
-                            href={`/blog/categories/${item.slug}`}
-                            className="rounded px-2 py-1 hover:opacity-90"
-                            style={{
-                              backgroundColor: `${config.theme.primaryColor}12`,
-                              color: config.theme.primaryColor,
-                            }}
-                          >
-                            {item.name}
-                          </Link>
-                        ))}
-                        {post.tags.map((item) => (
-                          <Link key={item.id} href={`/blog/tags/${item.slug}`} className="rounded bg-gray-100 px-2 py-1 text-gray-700 hover:bg-gray-200">
-                            #{item.name}
-                          </Link>
-                        ))}
-                      </div>
-                      <Link href={`/blog/${post.slug}`} className="mt-auto pt-5 text-sm font-medium hover:underline" style={{ color: config.theme.primaryColor }}>
-                        Read post
-                      </Link>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        <aside className="space-y-6">
+        <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="space-y-6">
           {sidebarWidgets.map((widget) => {
             if (widget.type === 'search') return (
               <section key={widget.id} className="rounded-lg border bg-white p-4 shadow-sm">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{widget.title}</h2>
                 <form action={blogPath} className="mt-3 flex gap-2">
                   <input name="search" defaultValue={search} className="w-full rounded border border-gray-200 px-3 py-2 text-sm" placeholder="Search posts" />
-                  <button className="rounded px-3 py-2 text-sm font-medium text-white" style={{ backgroundColor: config.theme.primaryColor }}>Go</button>
+                  <button className="rounded bg-purple-600 px-3 py-2 text-sm font-medium text-white hover:bg-purple-700">Go</button>
                 </form>
               </section>
             );
@@ -250,7 +169,72 @@ export async function BlogIndex({
               </section>
             );
           })}
-        </aside>
+          </aside>
+
+          <section>
+            {activeFilterCount > 0 && (
+              <div className="mb-4 flex items-center justify-between rounded-lg border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-700">
+                <span>{posts.length} result{posts.length === 1 ? '' : 's'} with filters applied.</span>
+                <Link href={blogPath} className="font-medium hover:underline">
+                  Clear filters
+                </Link>
+              </div>
+            )}
+
+            {posts.length === 0 ? (
+              <p className="text-gray-500">No published posts found.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                {posts.map((post) => {
+                  const preview = toPlainText(post.excerpt || post.content);
+                  const featuredImageSrc = getSafeImageSrc(post.featuredImageUrl);
+
+                  return (
+                    <article key={post.id} className="group flex h-full flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                      <Link href={`/blog/${post.slug}`} className="block aspect-[4/3] bg-gray-100">
+                        {featuredImageSrc ? (
+                          <img src={featuredImageSrc} alt={post.title} className="h-full w-full object-cover transition group-hover:scale-[1.02]" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-sm text-gray-400">
+                            No image
+                          </div>
+                        )}
+                      </Link>
+
+                      <div className="flex flex-1 flex-col p-5">
+                        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                          {new Date(post.publishedAt).toLocaleDateString()} / {post.author.name}
+                        </p>
+                        <h2 className="mt-2 text-lg font-semibold text-gray-950 group-hover:text-purple-700">
+                          <Link href={`/blog/${post.slug}`}>{post.title}</Link>
+                        </h2>
+                        <p className="mt-3 line-clamp-3 text-sm leading-6 text-gray-600">
+                          {preview.slice(0, BLOG_EXCERPT_LENGTH)}
+                          {preview.length > BLOG_EXCERPT_LENGTH ? '...' : ''}
+                        </p>
+                        <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                          {post.categories.map((item) => (
+                            <Link key={item.id} href={`/blog/categories/${item.slug}`} className="rounded bg-purple-50 px-2 py-1 text-purple-700 hover:bg-purple-100">
+                              {item.name}
+                            </Link>
+                          ))}
+                          {post.tags.map((item) => (
+                            <Link key={item.id} href={`/blog/tags/${item.slug}`} className="rounded bg-gray-100 px-2 py-1 text-gray-700 hover:bg-gray-200">
+                              #{item.name}
+                            </Link>
+                          ))}
+                        </div>
+                        <Link href={`/blog/${post.slug}`} className="mt-auto pt-5 text-sm font-medium text-purple-700 hover:text-purple-800">
+                          Read post
+                        </Link>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
       </main>
     </PublicSiteShell>
   );
