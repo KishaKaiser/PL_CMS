@@ -1,6 +1,8 @@
 import Link from 'next/link';
-import { getSafeImageSrc } from '../../lib/public-cms';
+import { RichContent } from '../../components/cms/rich-content';
+import { getPublishedPage, getPublicSiteConfig, getSafeImageSrc, type PublicSiteConfig } from '../../lib/public-cms';
 import { fetchApi } from '../../lib/server-api';
+import { ProductGrid } from './ProductGrid';
 
 interface Product {
   id: string;
@@ -13,6 +15,7 @@ interface Product {
   currency: string;
   minutesPack: number;
   isActive: boolean;
+  categories?: Array<{ id: string; slug: string; name: string }>;
 }
 
 async function getProducts(): Promise<Product[]> {
@@ -25,71 +28,185 @@ async function getProducts(): Promise<Product[]> {
   }
 }
 
-export default async function ShopPage() {
-  const products = await getProducts();
+type SearchParams = Record<string, string | string[] | undefined>;
+type Props = { searchParams?: Promise<SearchParams> };
+
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function ShopPage({ searchParams }: Props) {
+  const params = (await searchParams) ?? {};
+  const selectedCategory = firstParam(params.category)?.trim() ?? '';
+  const selectedPrice = firstParam(params.price)?.trim() ?? '';
+  const [products, page, siteConfig] = await Promise.all([getProducts(), getPublishedPage('shop'), getPublicSiteConfig()]);
+  const showTitle = page?.builderLayout?.settings?.showTitle !== false;
+  const showBreadcrumbs = page?.builderLayout?.settings?.breadcrumbs !== false;
+  const title = page?.title ?? 'Shop';
+  const filteredProducts = filterProducts(products, selectedCategory, selectedPrice);
+  const productCards = filteredProducts.map((product) => ({
+    ...product,
+    imageSrc: getSafeImageSrc(product.featuredMedia?.url ?? product.imageUrl),
+  }));
 
   return (
-    <main className="mx-auto max-w-5xl p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="mb-1 text-3xl font-bold">Shop</h1>
-          <p className="text-gray-600">Browse our available minute packs and products.</p>
-        </div>
+    <main className="mx-auto w-full max-w-7xl p-8">
+      {showBreadcrumbs && (
+        <nav className="mb-4 text-sm text-gray-500">
+          <Link href="/" className="hover:underline">Home</Link>
+          <span className="mx-2">/</span>
+          <span>{title}</span>
+        </nav>
+      )}
+
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <section className="max-w-3xl">
+          {showTitle && <h1 className="mb-3 text-4xl font-bold text-gray-950">{title}</h1>}
+          {page?.content ? (
+            <RichContent html={page.content} className="prose max-w-none text-gray-700" />
+          ) : (
+            <p className="text-gray-600">Browse our available products and services.</p>
+          )}
+        </section>
         <Link
           href="/shop/cart"
-          className="rounded border border-purple-300 px-4 py-2 text-sm text-purple-600 hover:bg-purple-50"
+          className="w-fit rounded border border-purple-300 px-4 py-2 text-sm text-purple-600 hover:bg-purple-50"
         >
           View Cart
         </Link>
       </div>
 
-      {products.length === 0 ? (
+      <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <ShopSidebar
+          products={products}
+          siteConfig={siteConfig}
+          selectedCategory={selectedCategory}
+          selectedPrice={selectedPrice}
+        />
+
+        <section>
+      {filteredProducts.length === 0 ? (
         <p className="text-gray-500">No products available at the moment.</p>
       ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((p) => (
-            <div
-              key={p.id}
-              className="flex flex-col rounded-lg border bg-white p-5 shadow-sm"
-            >
-              {getSafeImageSrc(p.featuredMedia?.url ?? p.imageUrl) && (
-                <img
-                  src={getSafeImageSrc(p.featuredMedia?.url ?? p.imageUrl) ?? ''}
-                  alt={p.featuredMedia?.altText || p.featuredMedia?.title || p.name}
-                  className="mb-4 h-44 w-full rounded-md object-cover"
-                />
-              )}
-              <h2 className="text-lg font-semibold">{p.name}</h2>
-              {(p.shortDescription || p.description) && (
-                <p className="mt-1 flex-1 text-sm text-gray-500">{p.shortDescription || p.description}</p>
-              )}
-              <div className="mt-3 flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-purple-700">
-                  ${Number(p.price).toFixed(2)}
-                </span>
-                <span className="text-sm text-gray-400">{p.currency}</span>
-              </div>
-              {p.minutesPack > 0 && (
-                <p className="mt-1 text-sm font-medium text-green-700">
-                  {p.minutesPack} minutes included
-                </p>
-              )}
-              <Link
-                href={`/shop/${p.id}`}
-                className="mt-4 rounded bg-purple-600 py-2 text-center text-sm text-white hover:bg-purple-700"
-              >
-                View Details
-              </Link>
-            </div>
-          ))}
-        </div>
+        <ProductGrid products={productCards} />
       )}
-
-      <div className="mt-8">
-        <Link href="/" className="text-sm text-purple-600 hover:underline">
-          Back to Home
-        </Link>
+        </section>
       </div>
     </main>
   );
+}
+
+function ShopSidebar({
+  products,
+  siteConfig,
+  selectedCategory,
+  selectedPrice,
+}: {
+  products: Product[];
+  siteConfig: PublicSiteConfig;
+  selectedCategory: string;
+  selectedPrice: string;
+}) {
+  const widgets = siteConfig.sidebars.shop.filter((widget) => widget.enabled);
+  const categories = collectCategories(products);
+  const prices = [
+    { key: 'under-25', label: 'Under $25' },
+    { key: '25-50', label: '$25 to $50' },
+    { key: '50-100', label: '$50 to $100' },
+    { key: 'over-100', label: 'Over $100' },
+  ];
+
+  return (
+    <aside className="space-y-6">
+      {widgets.map((widget) => {
+        if (widget.type === 'shop_categories') {
+          return (
+            <section key={widget.id} className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{widget.title}</h2>
+              <ul className="mt-3 space-y-2 text-sm">
+                <li>
+                  <Link href="/shop" className={!selectedCategory ? 'font-medium text-purple-700' : 'text-gray-700 hover:text-purple-700'}>
+                    All products
+                  </Link>
+                </li>
+                {categories.map((category) => (
+                  <li key={category.slug}>
+                    <Link
+                      href={`/shop?category=${encodeURIComponent(category.slug)}`}
+                      className={selectedCategory === category.slug ? 'font-medium text-purple-700' : 'text-gray-700 hover:text-purple-700'}
+                    >
+                      {category.name} ({category.count})
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        }
+
+        if (widget.type === 'price_filter') {
+          return (
+            <section key={widget.id} className="rounded-lg border bg-white p-4 shadow-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{widget.title}</h2>
+              <ul className="mt-3 space-y-2 text-sm">
+                <li>
+                  <Link href={selectedCategory ? `/shop?category=${encodeURIComponent(selectedCategory)}` : '/shop'} className={!selectedPrice ? 'font-medium text-purple-700' : 'text-gray-700 hover:text-purple-700'}>
+                    Any price
+                  </Link>
+                </li>
+                {prices.map((price) => {
+                  const query = new URLSearchParams();
+                  if (selectedCategory) query.set('category', selectedCategory);
+                  query.set('price', price.key);
+                  return (
+                    <li key={price.key}>
+                      <Link href={`/shop?${query.toString()}`} className={selectedPrice === price.key ? 'font-medium text-purple-700' : 'text-gray-700 hover:text-purple-700'}>
+                        {price.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        }
+
+        return (
+          <section key={widget.id} className="rounded-lg border border-dashed bg-white p-4 text-sm text-gray-500 shadow-sm">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{widget.title}</h2>
+            <p className="mt-2">This shop widget is ready for setup.</p>
+          </section>
+        );
+      })}
+    </aside>
+  );
+}
+
+function collectCategories(products: Product[]) {
+  const categories = new Map<string, { slug: string; name: string; count: number }>();
+  for (const product of products) {
+    for (const category of product.categories ?? []) {
+      const existing = categories.get(category.slug);
+      categories.set(category.slug, {
+        slug: category.slug,
+        name: category.name,
+        count: (existing?.count ?? 0) + 1,
+      });
+    }
+  }
+  return Array.from(categories.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function filterProducts(products: Product[], category: string, price: string) {
+  return products.filter((product) => {
+    const matchesCategory = !category || product.categories?.some((item) => item.slug === category);
+    const productPrice = Number(product.price);
+    const matchesPrice =
+      !price ||
+      (price === 'under-25' && productPrice < 25) ||
+      (price === '25-50' && productPrice >= 25 && productPrice <= 50) ||
+      (price === '50-100' && productPrice > 50 && productPrice <= 100) ||
+      (price === 'over-100' && productPrice > 100);
+    return matchesCategory && matchesPrice;
+  });
 }
