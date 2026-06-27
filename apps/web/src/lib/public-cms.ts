@@ -32,6 +32,12 @@ export interface PublicSiteConfig {
   menus: {
     header: SiteMenuItem[];
     footer: SiteMenuItem[];
+    custom: Array<{
+      id: string;
+      name: string;
+      location: 'header' | 'footer' | 'sidebar' | 'custom';
+      items: SiteMenuItem[];
+    }>;
   };
   theme: SiteThemeSettings;
   themeLayouts: {
@@ -54,7 +60,7 @@ const DEFAULT_PUBLIC_SITE_CONFIG: PublicSiteConfig = {
     path: '/blog',
     title: 'Blog',
   },
-  menus: DEFAULT_SITE_MENUS,
+  menus: { ...DEFAULT_SITE_MENUS, custom: [] },
   theme: { ...DEFAULT_SITE_THEME, heroPrimaryHref: '/blog' },
   themeLayouts: {
     header: null,

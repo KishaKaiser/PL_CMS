@@ -31,7 +31,7 @@ export async function PublicSiteShell({ children, siteConfig, showHeader = true,
       {showHeader && (
         config.themeLayouts.header ? (
           <header className="border-b bg-white">
-            <BuilderContent layout={config.themeLayouts.header} showChrome={false} accountLink={accountLink} />
+            <BuilderContent layout={config.themeLayouts.header} showChrome={false} accountLink={accountLink} menus={config.menus} />
           </header>
         ) : (
           <header className="border-b bg-white">
@@ -66,7 +66,7 @@ export async function PublicSiteShell({ children, siteConfig, showHeader = true,
       {showFooter && (
         config.themeLayouts.footer ? (
           <footer className="border-t bg-white">
-            <BuilderContent layout={config.themeLayouts.footer} showChrome={false} />
+            <BuilderContent layout={config.themeLayouts.footer} showChrome={false} menus={config.menus} />
           </footer>
         ) : (
           <footer className="border-t bg-white">

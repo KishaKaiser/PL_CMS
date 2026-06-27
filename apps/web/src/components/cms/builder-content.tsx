@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
-import type { BuilderBlock, BuilderLayout } from '../../lib/public-cms';
-import { getCategories, getTags } from '../../lib/public-cms';
+import type { BuilderBlock, BuilderLayout, PublicSiteConfig } from '../../lib/public-cms';
+import { getCategories, getPublicSiteConfig, getTags } from '../../lib/public-cms';
 import { PublicFormEmbed } from './public-form-embed';
 import { PublicSliderEmbed } from './public-slider-embed';
 import { AnnouncementBar, StorefrontHeader } from './storefront-header';
@@ -23,6 +23,12 @@ type StoreData = {
 };
 
 type AccountLink = ReturnType<typeof getAccountLinkFromToken>;
+type SiteMenus = PublicSiteConfig['menus'];
+const defaultSocialIconLines = [
+  'fa-brands fa-instagram|https://instagram.com|Instagram',
+  'fa-brands fa-facebook-f|https://facebook.com|Facebook',
+  'fa-brands fa-pinterest-p|https://pinterest.com|Pinterest',
+];
 
 async function getProducts(): Promise<Product[]> {
   try {
@@ -39,16 +45,24 @@ export async function BuilderContent({
   showChrome = true,
   breadcrumbLabel = 'Page',
   accountLink,
+  menus,
 }: {
   layout: BuilderLayout;
   showChrome?: boolean;
   breadcrumbLabel?: string;
   accountLink?: AccountLink;
+  menus?: SiteMenus;
 }) {
   const cookieStore = accountLink ? null : await cookies();
   const resolvedAccountLink = accountLink ?? getAccountLinkFromToken(cookieStore?.get('access_token')?.value);
-  const [products, categories, tags] = await Promise.all([getProducts(), getCategories(), getTags()]);
+  const [products, categories, tags, siteConfig] = await Promise.all([
+    getProducts(),
+    getCategories(),
+    getTags(),
+    menus ? Promise.resolve(null) : getPublicSiteConfig(),
+  ]);
   const storeData = { products, categories, tags };
+  const resolvedMenus = menus ?? siteConfig?.menus ?? { header: [], footer: [], custom: [] };
 
   return (
     <div>
@@ -72,7 +86,7 @@ export async function BuilderContent({
             >
               <div className={section.settings.layout === 'full' ? '' : 'mx-auto max-w-5xl'}>
                 {section.blocks.map((block) => (
-                  <BuilderBlockView key={block.id} block={block} storeData={storeData} accountLink={resolvedAccountLink} />
+                  <BuilderBlockView key={block.id} block={block} storeData={storeData} accountLink={resolvedAccountLink} menus={resolvedMenus} />
                 ))}
               </div>
             </section>
@@ -84,7 +98,7 @@ export async function BuilderContent({
   );
 }
 
-function BuilderBlockView({ block, storeData, accountLink }: { block: BuilderBlock; storeData: StoreData; accountLink: AccountLink }) {
+function BuilderBlockView({ block, storeData, accountLink, menus }: { block: BuilderBlock; storeData: StoreData; accountLink: AccountLink; menus: SiteMenus }) {
   if (block.type === 'heading') {
     return <h1 className="mb-4 font-bold" style={textStyle(block, 40)}>{String(block.props.text ?? '')}</h1>;
   }
@@ -131,15 +145,35 @@ function BuilderBlockView({ block, storeData, accountLink }: { block: BuilderBlo
     );
   }
   if (block.type === 'menu') {
-    const links = getMenuLinks(block);
-    const vertical = block.props.orientation === 'vertical' || block.props.orientation === 'sidebar';
+    const links = getMenuLinks(block, menus);
+    const vertical = block.props.orientation === 'vertical';
     return (
-      <nav className={`mb-4 flex ${vertical ? 'flex-col items-start' : 'flex-wrap items-center'} gap-3`}>
-        {links.map((link) => (
-          <a key={`${link.label}-${link.href}`} href={link.href} className="text-sm font-medium text-purple-700 hover:underline">
-            {link.label}
-          </a>
-        ))}
+      <nav className="mb-4">
+        {block.props.title ? <h3 className="mb-2 text-sm font-semibold text-gray-900">{String(block.props.title)}</h3> : null}
+        <div className={`flex ${vertical ? 'flex-col items-start' : 'flex-wrap items-center'} gap-3`}>
+          {links.map((link) => (
+            <a key={`${link.label}-${link.href}`} href={link.href} className="text-sm font-medium text-purple-700 hover:underline">
+              {link.label}
+            </a>
+          ))}
+        </div>
+      </nav>
+    );
+  }
+  if (block.type === 'social-icons') {
+    const links = getIconLinksFromText(block.props.linksText, defaultSocialIconLines);
+    const vertical = block.props.orientation === 'vertical';
+    return (
+      <nav className="mb-4">
+        {block.props.title ? <h3 className="mb-2 text-sm font-semibold text-gray-900">{String(block.props.title)}</h3> : null}
+        <div className={`flex ${vertical ? 'flex-col items-start' : 'flex-wrap items-center'} gap-3`}>
+          {links.map((link) => (
+            <a key={`${link.label}-${link.href}`} href={link.href} className="inline-flex items-center gap-2 text-sm hover:underline" style={{ color: String(block.props.color ?? '#6f21b6') }}>
+              <i className={link.iconClass} style={{ fontSize: `${Number(block.props.size ?? 20)}px` }} />
+              <span>{link.label}</span>
+            </a>
+          ))}
+        </div>
       </nav>
     );
   }
@@ -163,7 +197,7 @@ function BuilderBlockView({ block, storeData, accountLink }: { block: BuilderBlo
     const children = block.children ?? [];
     return (
       <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-        {children.map((child) => <BuilderBlockView key={child.id} block={child} storeData={storeData} accountLink={accountLink} />)}
+        {children.map((child) => <BuilderBlockView key={child.id} block={child} storeData={storeData} accountLink={accountLink} menus={menus} />)}
       </div>
     );
   }
@@ -218,7 +252,7 @@ function BuilderBlockView({ block, storeData, accountLink }: { block: BuilderBlo
     const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 2)));
     return (
       <div className="mb-4 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-        {(block.children ?? []).map((child) => <BuilderBlockView key={child.id} block={child} storeData={storeData} accountLink={accountLink} />)}
+        {(block.children ?? []).map((child) => <BuilderBlockView key={child.id} block={child} storeData={storeData} accountLink={accountLink} menus={menus} />)}
       </div>
     );
   }
@@ -371,7 +405,12 @@ function getLines(value: unknown, fallback: string[]) {
   return lines.length > 0 ? lines : fallback;
 }
 
-function getMenuLinks(block: BuilderBlock) {
+function getMenuLinks(block: BuilderBlock, menus: SiteMenus) {
+  const menuId = String(block.props.menuId ?? block.props.source ?? '');
+  if (menuId === 'header') return menus.header;
+  if (menuId === 'footer') return menus.footer;
+  const savedMenu = menus.custom.find((menu) => menu.id === menuId);
+  if (savedMenu) return savedMenu.items;
   if (Array.isArray(block.props.menuItems)) {
     return block.props.menuItems
       .map((item) => {
