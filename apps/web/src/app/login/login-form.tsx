@@ -73,7 +73,7 @@ export function LoginForm() {
           <img
             src="/login/login.png"
             alt="Psychic advisor illustration"
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-y-0 left-0 h-full w-[200%] max-w-none object-cover object-left"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-purple-900/10 via-transparent to-orange-100/10" />
         </div>
