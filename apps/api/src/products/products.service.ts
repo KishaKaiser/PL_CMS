@@ -203,7 +203,7 @@ function createProductData(dto: CreateProductDto): Prisma.ProductCreateInput {
   return {
     name: dto.name,
     description: dto.description ? sanitizeCmsHtml(dto.description) : null,
-    shortDescription: dto.shortDescription ?? null,
+    shortDescription: dto.shortDescription ? sanitizeCmsHtml(dto.shortDescription) : null,
     price: dto.price,
     regularPrice,
     salePrice: dto.salePrice ?? null,
@@ -232,7 +232,7 @@ function updateProductData(dto: UpdateProductDto): Prisma.ProductUpdateInput {
   return {
     ...(dto.name !== undefined ? { name: dto.name } : {}),
     ...(dto.description !== undefined ? { description: dto.description ? sanitizeCmsHtml(dto.description) : null } : {}),
-    ...(dto.shortDescription !== undefined ? { shortDescription: dto.shortDescription || null } : {}),
+    ...(dto.shortDescription !== undefined ? { shortDescription: dto.shortDescription ? sanitizeCmsHtml(dto.shortDescription) : null } : {}),
     ...(dto.price !== undefined ? { price: dto.price } : {}),
     ...(dto.regularPrice !== undefined ? { regularPrice: dto.regularPrice } : {}),
     ...(dto.salePrice !== undefined ? { salePrice: dto.salePrice } : {}),

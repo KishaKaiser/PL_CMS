@@ -95,7 +95,7 @@ export default async function ProductDetailPage({ params }: Props) {
 
           {product.shortDescription && (
             <div className="border-b border-gray-100 p-6">
-              <p className="text-lg leading-8 text-gray-600">{product.shortDescription}</p>
+              <RichContent html={product.shortDescription} className="prose max-w-none text-lg leading-8 text-gray-600" />
             </div>
           )}
 

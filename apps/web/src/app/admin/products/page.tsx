@@ -411,7 +411,7 @@ export default function AdminProductsPage() {
               className="md:col-span-2"
             />
             <label className="block text-sm font-medium text-gray-700 md:col-span-2">
-              Short Description
+              Short Description (HTML allowed)
               <textarea
                 value={form.shortDescription}
                 onChange={(event) =>

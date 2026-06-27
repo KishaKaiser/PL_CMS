@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { RichContent } from '../../components/cms/rich-content';
 import { addToCart } from '../../lib/cart';
 
 interface Product {
@@ -64,6 +65,12 @@ export function ProductGrid({ products }: Props) {
                 </span>
                 <span className="text-sm text-gray-400">{product.currency}</span>
               </div>
+              {product.shortDescription && (
+                <RichContent
+                  html={product.shortDescription}
+                  className="prose prose-sm mt-3 line-clamp-3 max-w-none text-gray-600"
+                />
+              )}
               <button
                 type="button"
                 onClick={(event) => {

@@ -273,21 +273,27 @@ function CheckoutContent() {
         />
       )}
 
-      <h1 className="mb-6 text-3xl font-bold">Checkout</h1>
+      <header className="mb-8 rounded-2xl border bg-white p-6 shadow-sm">
+        <p className="text-sm font-semibold uppercase tracking-wide text-purple-700">Secure checkout</p>
+        <h1 className="mt-2 text-4xl font-bold text-gray-950">Checkout</h1>
+        <p className="mt-2 max-w-2xl text-gray-600">
+          Review your order, enter shipping details, and complete payment.
+        </p>
+      </header>
 
       {status === 'success' && (
-        <div className="mb-6 rounded border border-green-200 bg-green-50 p-4 text-green-700">
+        <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4 text-green-700">
           {message}
         </div>
       )}
       {status === 'error' && (
-        <div className="mb-6 rounded border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
           {message}
         </div>
       )}
 
       {cart.length === 0 && status !== 'success' ? (
-        <div className="rounded-lg border bg-white p-6">
+        <div className="rounded-2xl border bg-white p-8 shadow-sm">
           <p className="text-gray-500">Your cart is empty.</p>
           <a href="/shop" className="mt-4 inline-block text-purple-600 hover:underline">
             ← Browse Shop
@@ -296,7 +302,7 @@ function CheckoutContent() {
       ) : (
         <>
           {/* Order summary */}
-          <div className="mb-6 rounded-lg border bg-white p-6 shadow-sm">
+          <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold">Order Summary</h2>
             {cart.map((item) => (
               <div key={`${item.product.id}-${item.variantId ?? ''}`} className="flex justify-between py-2 text-sm">
@@ -318,7 +324,7 @@ function CheckoutContent() {
                 <span>${shippingCost.toFixed(2)}</span>
               </div>
             )}
-            <div className="mt-4 flex justify-between border-t pt-4 text-base font-bold">
+            <div className="mt-4 flex justify-between border-t pt-4 text-lg font-bold">
               <span>Total</span>
               <span>${grandTotal.toFixed(2)} USD</span>
             </div>
@@ -326,77 +332,77 @@ function CheckoutContent() {
 
           {/* Step 1: Shipping address form */}
           {!addressSubmitted && (
-            <div className="mb-6 rounded-lg border bg-white p-6 shadow-sm">
+            <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold">1. Shipping Address</h2>
               {ratesError && (
                 <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                   {ratesError}
                 </div>
               )}
-              <form onSubmit={handleAddressSubmit} className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+              <form onSubmit={handleAddressSubmit} className="grid gap-4 md:grid-cols-2">
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700">Full Name *</label>
                   <input required value={shippingAddress.fullName}
                     onChange={(e) => setShippingAddress({ ...shippingAddress, fullName: e.target.value })}
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Email *</label>
                   <input required type="email" value={shippingAddress.email}
                     onChange={(e) => setShippingAddress({ ...shippingAddress, email: e.target.value })}
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Phone *</label>
                   <input required value={shippingAddress.phone}
                     onChange={(e) => setShippingAddress({ ...shippingAddress, phone: e.target.value })}
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
                 </div>
-                <div className="col-span-2">
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700">Address Line 1 *</label>
                   <input required value={shippingAddress.line1}
                     onChange={(e) => setShippingAddress({ ...shippingAddress, line1: e.target.value })}
                     placeholder="Street address, P.O. box"
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
                 </div>
-                <div className="col-span-2">
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700">Address Line 2</label>
                   <input value={shippingAddress.line2}
                     onChange={(e) => setShippingAddress({ ...shippingAddress, line2: e.target.value })}
                     placeholder="Apartment, suite, unit, etc."
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">City *</label>
                   <input required value={shippingAddress.city}
                     onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })}
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">State (2-letter) *</label>
                   <input required value={shippingAddress.state} maxLength={2}
                     onChange={(e) => setShippingAddress({ ...shippingAddress, state: e.target.value.toUpperCase() })}
                     placeholder="e.g. TX"
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">ZIP Code *</label>
                   <input required value={shippingAddress.postalCode}
                     onChange={(e) => setShippingAddress({ ...shippingAddress, postalCode: e.target.value })}
                     placeholder="e.g. 78701"
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Country *</label>
                   <select value={shippingAddress.country}
                     onChange={(e) => setShippingAddress({ ...shippingAddress, country: e.target.value })}
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm">
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
                     <option value="US">United States</option>
                   </select>
                 </div>
-                <div className="col-span-2">
+                <div className="md:col-span-2">
                   <button type="submit" disabled={ratesLoading}
-                    className="rounded bg-purple-600 px-6 py-2 text-sm text-white hover:bg-purple-700 disabled:opacity-50">
+                    className="rounded-lg bg-purple-700 px-6 py-3 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-50">
                     {ratesLoading ? 'Getting rates…' : 'Get Shipping Rates →'}
                   </button>
                 </div>
@@ -406,7 +412,7 @@ function CheckoutContent() {
 
           {/* Step 2: Select a shipping rate */}
           {addressSubmitted && shippingRates.length > 0 && !selectedRate && (
-            <div className="mb-6 rounded-lg border bg-white p-6 shadow-sm">
+            <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold">2. Select Shipping Method</h2>
               <p className="mb-3 text-sm text-gray-500">
                 Shipping to {shippingAddress.city}, {shippingAddress.state} {shippingAddress.postalCode}
@@ -423,7 +429,7 @@ function CheckoutContent() {
                     <button
                       key={`${rate.carrierCode}-${rate.serviceCode}`}
                       onClick={() => setSelectedRate(rate)}
-                      className="flex w-full items-center justify-between rounded border px-4 py-3 text-left text-sm hover:border-purple-400 hover:bg-purple-50"
+                      className="flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm hover:border-purple-400 hover:bg-purple-50"
                     >
                       <span className="font-medium">{rate.serviceName}</span>
                       <span className="font-semibold text-purple-700">${total.toFixed(2)}</span>
@@ -436,7 +442,7 @@ function CheckoutContent() {
 
           {/* Step 3: Payment */}
           {selectedRate && (
-            <div className="mb-6 rounded-lg border bg-white p-6 shadow-sm">
+            <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold">3. Payment</h2>
               <div className="mb-4 rounded bg-gray-50 p-3 text-sm">
                 <p className="text-gray-600">
@@ -486,7 +492,7 @@ function CheckoutContent() {
 
 export default function CheckoutPage() {
   return (
-    <main className="mx-auto max-w-xl p-8">
+    <main className="mx-auto w-full max-w-7xl p-8">
       <Suspense fallback={<p className="text-gray-500">Loading checkout…</p>}>
         <CheckoutContent />
       </Suspense>
