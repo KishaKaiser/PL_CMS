@@ -240,12 +240,13 @@ export class PublicContentService {
     };
   }
 
-  findPublishedPosts(query: PostQuery = {}) {
-    return this.prisma.post.findMany({
+  async findPublishedPosts(query: PostQuery = {}) {
+    const posts = await this.prisma.post.findMany({
       where: this.getPublishedPostWhere(query),
       orderBy: { publishedAt: 'desc' },
       select: POST_SELECT,
     });
+    return posts.map((post) => this.serializePublicPost(post));
   }
 
   async findPublishedPostBySlug(slug: string) {
@@ -259,7 +260,7 @@ export class PublicContentService {
     });
 
     if (!post) throw new NotFoundException(`Post ${slug} not found`);
-    return post;
+    return this.serializePublicPost(post);
   }
 
   async findPostComments(slug: string) {
@@ -459,7 +460,7 @@ export class PublicContentService {
       select: POST_SELECT,
     });
 
-    if (related.length >= 3) return related;
+    if (related.length >= 3) return related.map((item) => this.serializePublicPost(item));
 
     const fallback = await this.prisma.post.findMany({
       where: {
@@ -471,7 +472,17 @@ export class PublicContentService {
       select: POST_SELECT,
     });
 
-    return [...related, ...fallback];
+    return [...related, ...fallback].map((item) => this.serializePublicPost(item));
+  }
+
+  private serializePublicPost(post: Prisma.PostGetPayload<{ select: typeof POST_SELECT }>) {
+    return {
+      ...post,
+      author: {
+        ...post.author,
+        name: post.author.username || post.author.name,
+      },
+    };
   }
 
   async findArchives() {
