@@ -47,6 +47,12 @@ type PublicSiteConfig = {
   menus: {
     header: SiteMenuItem[];
     footer: SiteMenuItem[];
+    custom: Array<{
+      id: string;
+      name: string;
+      location: 'header' | 'footer' | 'sidebar' | 'custom';
+      items: SiteMenuItem[];
+    }>;
   };
   theme: SiteThemeSettings;
   themeLayouts: {
@@ -593,7 +599,7 @@ export class PublicContentService {
     postsPage: { pageSlug: string; path: string; title: string },
     extensionPoints: SiteExtensionPoints,
   ) {
-    const parsed = this.parseJsonSetting<{ header?: unknown; footer?: unknown }>(value);
+    const parsed = this.parseJsonSetting<{ header?: unknown; footer?: unknown; custom?: unknown }>(value);
     const reservedSlugs = new Set(['home']);
     if (postsPage.pageSlug) reservedSlugs.add(postsPage.pageSlug);
 
@@ -617,7 +623,36 @@ export class PublicContentService {
         footer.length > 0 ? footer : defaultMenuItems,
         extensionPoints.menu.footer,
       ),
+      custom: this.normalizeSavedMenus(parsed?.custom),
     };
+  }
+
+  private normalizeSavedMenus(value: unknown) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+        const source = item as Record<string, unknown>;
+        const items = this.normalizeMenuItems(source.items);
+        if (items.length === 0) return null;
+        return {
+          id: this.getString(source.id, `menu-${index + 1}`),
+          name: this.getString(source.name, `Menu ${index + 1}`),
+          location: this.normalizeMenuLocation(source.location),
+          items,
+        };
+      })
+      .filter((item): item is {
+        id: string;
+        name: string;
+        location: 'header' | 'footer' | 'sidebar' | 'custom';
+        items: SiteMenuItem[];
+      } => item !== null);
+  }
+
+  private normalizeMenuLocation(value: unknown): 'header' | 'footer' | 'sidebar' | 'custom' {
+    if (value === 'header' || value === 'footer' || value === 'sidebar' || value === 'custom') return value;
+    return 'custom';
   }
 
   private normalizeExtensionPoints(value: string | undefined): SiteExtensionPoints {

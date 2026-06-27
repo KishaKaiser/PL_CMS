@@ -14,6 +14,7 @@ type BuilderBlockType =
   | 'grid'
   | 'icon'
   | 'menu'
+  | 'social-icons'
   | 'announcement-bar'
   | 'store-header'
   | 'hero-slider'
@@ -103,6 +104,24 @@ interface TaxonomyPreview {
   postCount?: number;
 }
 
+interface MenuItem {
+  label: string;
+  href: string;
+}
+
+interface SavedMenu {
+  id: string;
+  name: string;
+  location: 'header' | 'footer' | 'sidebar' | 'custom';
+  items: MenuItem[];
+}
+
+interface MenusForm {
+  header: MenuItem[];
+  footer: MenuItem[];
+  custom: SavedMenu[];
+}
+
 type StorePreviewData = {
   products: ProductPreview[];
   categories: TaxonomyPreview[];
@@ -151,6 +170,7 @@ const defaultWidgets: BuilderWidget[] = [
   { type: 'columns', label: 'Columns', category: 'layout', enabled: true },
   { type: 'grid', label: 'Grid', category: 'layout', enabled: true },
   { type: 'menu', label: 'Menu', category: 'navigation', enabled: true },
+  { type: 'social-icons', label: 'Social Icons', category: 'navigation', enabled: true },
   { type: 'sidebar-widgets', label: 'Sidebar Widgets', category: 'layout', enabled: true },
   { type: 'product-grid', label: 'Products', category: 'store', enabled: true },
   { type: 'product-categories', label: 'Product Categories', category: 'store', enabled: true },
@@ -158,6 +178,12 @@ const defaultWidgets: BuilderWidget[] = [
 ];
 
 const emptyStorePreview: StorePreviewData = { products: [], categories: [], tags: [] };
+const emptyMenusForm: MenusForm = { header: [], footer: [], custom: [] };
+const defaultSocialIconLines = [
+  'fa-brands fa-instagram|https://instagram.com|Instagram',
+  'fa-brands fa-facebook-f|https://facebook.com|Facebook',
+  'fa-brands fa-pinterest-p|https://pinterest.com|Pinterest',
+];
 
 async function readApiError(res: Response, fallback: string) {
   const payload = (await res.json().catch(() => null)) as { message?: string | string[]; error?: string } | null;
@@ -170,6 +196,7 @@ export default function ThemeBuilderPage() {
   const [themes, setThemes] = useState<CmsTheme[]>([]);
   const [widgets, setWidgets] = useState<BuilderWidget[]>(defaultWidgets);
   const [storePreview, setStorePreview] = useState<StorePreviewData>(emptyStorePreview);
+  const [savedMenus, setSavedMenus] = useState<SavedMenu[]>([]);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [layout, setLayout] = useState<BuilderLayout>(emptyLayout);
   const [editorTarget, setEditorTarget] = useState<EditorTarget>('theme-header');
@@ -210,11 +237,12 @@ export default function ThemeBuilderPage() {
     setError('');
     try {
       await fetch('/api/proxy/admin/builder/defaults/ensure', { method: 'POST' });
-      const [componentsRes, themesRes, widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes] = await Promise.all([
+      const [componentsRes, themesRes, widgetsRes, mediaRes, menusRes, productsRes, categoriesRes, tagsRes] = await Promise.all([
         fetch('/api/proxy/admin/builder/components'),
         fetch('/api/proxy/admin/builder/themes'),
         fetch('/api/proxy/admin/builder/widgets'),
         fetch('/api/proxy/media'),
+        fetch('/api/proxy/settings/site_menus'),
         fetch('/api/proxy/products/all'),
         fetch('/api/proxy/admin/categories'),
         fetch('/api/proxy/admin/tags'),
@@ -231,6 +259,7 @@ export default function ThemeBuilderPage() {
       setThemes(nextThemes);
       setWidgets(nextWidgets.length > 0 ? mergeWidgets(nextWidgets) : defaultWidgets);
       setMediaAssets(mediaRes.ok ? ((await mediaRes.json()) as MediaAsset[]).filter((asset) => asset.isImage) : []);
+      setSavedMenus(menusRes.ok ? flattenSavedMenus(normalizeMenusSetting(((await menusRes.json()) as { value?: string } | null)?.value)) : []);
       setStorePreview({
         products: productsRes.ok ? ((await productsRes.json()) as ProductPreview[]) : [],
         categories: categoriesRes.ok ? ((await categoriesRes.json()) as TaxonomyPreview[]) : [],
@@ -587,6 +616,7 @@ export default function ThemeBuilderPage() {
               components={components}
               theme={previewTheme}
               storePreview={storePreview}
+              savedMenus={savedMenus}
               selectedBlockId={selectedBlockId}
               onSelectBlock={setSelectedBlockId}
               onRemoveBlock={removeBlock}
@@ -686,6 +716,7 @@ export default function ThemeBuilderPage() {
                 theme={previewTheme}
                 mediaAssets={mediaAssets}
                 widgets={mergeWidgets(widgets)}
+                savedMenus={savedMenus}
               />
             ) : (
               <p className="text-sm text-gray-500">Select content in the live preview.</p>
@@ -714,6 +745,7 @@ function BlockEditor({
   theme,
   mediaAssets,
   widgets,
+  savedMenus,
 }: {
   block: BuilderBlock;
   onChange: (props: Record<string, unknown>) => void;
@@ -722,6 +754,7 @@ function BlockEditor({
   theme: ThemePreviewStyles;
   mediaAssets: MediaAsset[];
   widgets: BuilderWidget[];
+  savedMenus: SavedMenu[];
 }) {
   const text = String(block.props.text ?? block.props.label ?? '');
   const href = String(block.props.href ?? '');
@@ -824,23 +857,36 @@ function BlockEditor({
       )}
       {block.type === 'menu' && (
         <>
-          <select value={String(block.props.source ?? 'header')} onChange={(event) => onChange({ source: event.target.value })} className="w-full rounded border px-3 py-2 text-sm">
-            <option value="header">Header menu</option>
-            <option value="footer">Footer menu</option>
-            <option value="custom">Custom links</option>
-          </select>
-          <select value={String(block.props.orientation ?? 'horizontal')} onChange={(event) => onChange({ orientation: event.target.value })} className="w-full rounded border px-3 py-2 text-sm">
-            <option value="horizontal">Horizontal</option>
-            <option value="vertical">Vertical</option>
-            <option value="sidebar">Sidebar</option>
-          </select>
-          <select value={String(block.props.placement ?? 'header')} onChange={(event) => onChange({ placement: event.target.value })} className="w-full rounded border px-3 py-2 text-sm">
-            <option value="header">Header</option>
-            <option value="footer">Footer</option>
-            <option value="sidebar">Sidebar</option>
-            <option value="content">Content</option>
-          </select>
-          <label className="block text-sm font-medium text-gray-700">Custom Links (label|url per line)<textarea value={String(block.props.linksText ?? '')} rows={4} onChange={(event) => onChange({ linksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">
+            Menu Title
+            <input value={String(block.props.title ?? '')} onChange={(event) => onChange({ title: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Optional title" />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            Select Saved Menu
+            <select value={String(block.props.menuId ?? 'header')} onChange={(event) => onChange({ menuId: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+              {savedMenus.map((menu) => (
+                <option key={menu.id} value={menu.id}>
+                  {menu.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            Layout
+            <select value={String(block.props.orientation ?? 'horizontal')} onChange={(event) => onChange({ orientation: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+              <option value="horizontal">Horizontal</option>
+              <option value="vertical">Vertical</option>
+            </select>
+          </label>
+        </>
+      )}
+      {block.type === 'social-icons' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Title<input value={String(block.props.title ?? '')} onChange={(event) => onChange({ title: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Optional title" /></label>
+          <label className="block text-sm font-medium text-gray-700">Icons (icon class|url|label per line)<textarea value={String(block.props.linksText ?? '')} rows={5} onChange={(event) => onChange({ linksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Layout<select value={String(block.props.orientation ?? 'horizontal')} onChange={(event) => onChange({ orientation: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>
+          <label className="block text-sm font-medium text-gray-700">Icon Size<input type="number" min="12" max="72" value={Number(block.props.size ?? 20)} onChange={(event) => onChange({ size: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">Color<input type="color" value={String(block.props.color ?? theme.primaryColor)} onChange={(event) => onChange({ color: event.target.value })} className="mt-1 h-10 w-full rounded border" /></label>
         </>
       )}
       {block.type === 'announcement-bar' && (
@@ -1046,6 +1092,7 @@ function BuilderPreview({
   onDragStart,
   onMoveBlock,
   onAddBlock,
+  savedMenus,
 }: {
   layout: BuilderLayout;
   activeTheme: CmsTheme | null;
@@ -1059,6 +1106,7 @@ function BuilderPreview({
   onDragStart: (id: string) => void;
   onMoveBlock: (sectionId: string, index: number) => void;
   onAddBlock: (type: BuilderBlockType, sectionId: string) => void;
+  savedMenus: SavedMenu[];
 }) {
   const headerLayout = editorTarget === 'theme-header' ? layout : activeTheme ? getThemeLayout(activeTheme, 'theme-header') : null;
   const footerLayout = editorTarget === 'theme-footer' ? layout : activeTheme ? getThemeLayout(activeTheme, 'theme-footer') : null;
@@ -1073,6 +1121,7 @@ function BuilderPreview({
           components={components}
           theme={theme}
           storePreview={storePreview}
+          savedMenus={savedMenus}
           selectedBlockId={selectedBlockId}
           onSelectBlock={onSelectBlock}
           onRemoveBlock={onRemoveBlock}
@@ -1094,6 +1143,7 @@ function BuilderPreview({
           components={components}
           theme={theme}
           storePreview={storePreview}
+          savedMenus={savedMenus}
           selectedBlockId={selectedBlockId}
           onSelectBlock={onSelectBlock}
           onRemoveBlock={onRemoveBlock}
@@ -1113,6 +1163,7 @@ function PreviewLayout({
   components,
   theme,
   storePreview,
+  savedMenus,
   selectedBlockId,
   onSelectBlock,
   onRemoveBlock,
@@ -1126,6 +1177,7 @@ function PreviewLayout({
   components: GlobalComponent[];
   theme: ThemePreviewStyles;
   storePreview: StorePreviewData;
+  savedMenus: SavedMenu[];
   selectedBlockId: string;
   onSelectBlock: (id: string) => void;
   onRemoveBlock: (id: string) => void;
@@ -1155,7 +1207,7 @@ function PreviewLayout({
                   active ? <button onClick={() => onAddBlock('heading', section.id)} className="w-full rounded border border-dashed p-10 text-sm text-gray-500">Add content</button> : null
                 ) : (
                   section.blocks.map((block, index) => (
-                    <EditableBlock key={block.id} block={block} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} onDragStart={() => active && onDragStart(block.id)} onDrop={() => active && onMoveBlock(section.id, index)} active={active} />
+                    <EditableBlock key={block.id} block={block} components={components} theme={theme} storePreview={storePreview} savedMenus={savedMenus} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} onDragStart={() => active && onDragStart(block.id)} onDrop={() => active && onMoveBlock(section.id, index)} active={active} />
                   ))
                 )}
               </div>
@@ -1173,6 +1225,7 @@ function EditableBlock({
   components,
   theme,
   storePreview,
+  savedMenus,
   selectedBlockId,
   onSelectBlock,
   onRemoveBlock,
@@ -1184,6 +1237,7 @@ function EditableBlock({
   components: GlobalComponent[];
   theme: ThemePreviewStyles;
   storePreview: StorePreviewData;
+  savedMenus: SavedMenu[];
   selectedBlockId: string;
   onSelectBlock: (id: string) => void;
   onRemoveBlock: (id: string) => void;
@@ -1197,7 +1251,7 @@ function EditableBlock({
       <div className="absolute right-2 top-2 z-20 hidden rounded bg-white shadow group-hover/block:block">
         <button onClick={(event) => { event.stopPropagation(); onRemoveBlock(block.id); }} className="px-2 py-1 text-xs text-red-600">Remove</button>
       </div>
-      <PreviewBlock block={block} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} />
+      <PreviewBlock block={block} components={components} theme={theme} storePreview={storePreview} savedMenus={savedMenus} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} />
     </div>
   );
 }
@@ -1207,6 +1261,7 @@ function PreviewBlock({
   components,
   theme,
   storePreview,
+  savedMenus,
   selectedBlockId,
   onSelectBlock,
   onRemoveBlock,
@@ -1216,6 +1271,7 @@ function PreviewBlock({
   components: GlobalComponent[];
   theme: ThemePreviewStyles;
   storePreview: StorePreviewData;
+  savedMenus: SavedMenu[];
   selectedBlockId?: string;
   onSelectBlock?: (id: string) => void;
   onRemoveBlock?: (id: string) => void;
@@ -1244,9 +1300,33 @@ function PreviewBlock({
     return <div className="mb-4 flex items-center gap-3"><i className={String(block.props.iconClass ?? 'fa-solid fa-star')} style={{ color: String(block.props.color ?? theme.primaryColor), fontSize: `${Number(block.props.size ?? 36)}px` }} /><span>{String(block.props.label ?? '')}</span></div>;
   }
   if (block.type === 'menu') {
-    const links = getMenuLinks(block);
-    const vertical = block.props.orientation === 'vertical' || block.props.orientation === 'sidebar';
-    return <nav className={`mb-4 flex ${vertical ? 'flex-col items-start' : 'flex-wrap items-center'} gap-3`}>{links.map((link) => <a key={`${link.label}-${link.href}`} href={link.href} className="text-sm font-medium hover:underline" style={{ color: theme.primaryColor }}>{link.label}</a>)}</nav>;
+    const links = getMenuLinks(block, savedMenus);
+    const vertical = block.props.orientation === 'vertical';
+    return (
+      <nav className="mb-4">
+        {block.props.title ? <h3 className="mb-2 text-sm font-semibold text-gray-900">{String(block.props.title)}</h3> : null}
+        <div className={`flex ${vertical ? 'flex-col items-start' : 'flex-wrap items-center'} gap-3`}>
+          {links.map((link) => <a key={`${link.label}-${link.href}`} href={link.href} className="text-sm font-medium hover:underline" style={{ color: theme.primaryColor }}>{link.label}</a>)}
+        </div>
+      </nav>
+    );
+  }
+  if (block.type === 'social-icons') {
+    const links = getIconLinksFromText(block.props.linksText, defaultSocialIconLines);
+    const vertical = block.props.orientation === 'vertical';
+    return (
+      <nav className="mb-4">
+        {block.props.title ? <h3 className="mb-2 text-sm font-semibold text-gray-900">{String(block.props.title)}</h3> : null}
+        <div className={`flex ${vertical ? 'flex-col items-start' : 'flex-wrap items-center'} gap-3`}>
+          {links.map((link) => (
+            <a key={`${link.label}-${link.href}`} href={link.href} className="inline-flex items-center gap-2 text-sm hover:underline" style={{ color: String(block.props.color ?? theme.primaryColor) }}>
+              <i className={link.iconClass} style={{ fontSize: `${Number(block.props.size ?? 20)}px` }} />
+              <span>{link.label}</span>
+            </a>
+          ))}
+        </div>
+      </nav>
+    );
   }
   if (block.type === 'announcement-bar') {
     return <div className="text-center text-sm font-semibold" style={{ background: String(block.props.background ?? '#6f21b6'), color: String(block.props.color ?? '#ffffff'), padding: '12px 20px' }}>{String(block.props.text ?? 'Free shipping on all domestic orders over $35')}</div>;
@@ -1260,7 +1340,7 @@ function PreviewBlock({
   if (block.type === 'grid') {
     const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 3)));
     const children = block.children ?? [];
-    return <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this grid and add widgets from the right panel.</div>}</div>;
+    return <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} theme={theme} storePreview={storePreview} savedMenus={savedMenus} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this grid and add widgets from the right panel.</div>}</div>;
   }
   if (block.type === 'image-slider') {
     const slides = getSlides(block);
@@ -1287,11 +1367,11 @@ function PreviewBlock({
   }
   if (block.type === 'global') {
     const component = components.find((item) => item.id === block.props.componentId);
-    return component ? <PreviewBlock block={component.schemaJson} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} /> : <div className="rounded border p-3 text-sm text-gray-500">Global component</div>;
+    return component ? <PreviewBlock block={component.schemaJson} components={components} theme={theme} storePreview={storePreview} savedMenus={savedMenus} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} onRemoveBlock={onRemoveBlock} active={active} /> : <div className="rounded border p-3 text-sm text-gray-500">Global component</div>;
   }
   const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 2)));
   const children = block.children ?? [];
-  return <div className="mb-4 grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} theme={theme} storePreview={storePreview} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this container and add widgets from the right panel.</div>}</div>;
+  return <div className="mb-4 grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children.length > 0 ? children.map((child) => <EditableBlock key={child.id} block={child} components={components} theme={theme} storePreview={storePreview} savedMenus={savedMenus} selectedBlockId={selectedBlockId ?? ''} onSelectBlock={onSelectBlock ?? (() => undefined)} onRemoveBlock={onRemoveBlock ?? (() => undefined)} onDragStart={() => undefined} onDrop={() => undefined} active={Boolean(active)} />) : <div className="rounded border border-dashed p-6 text-sm text-gray-500">Select this container and add widgets from the right panel.</div>}</div>;
 }
 
 function buildThemePayload(
@@ -1468,7 +1548,8 @@ function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlo
   if (type === 'hero-slider') return { id, type, props: { mediaIds: [], slides: [], mediaId: '', src: '', alt: '', heading: 'Welcome', buttonLabel: 'SHOP NOW', buttonHref: '/shop', height: 610, slideSeconds: 5 } };
   if (type === 'columns') return { id, type, props: { columns: 2 }, children: [] };
   if (type === 'grid') return { id, type, props: { columns: 3, itemsText: 'Grid item\nGrid item\nGrid item' } };
-  if (type === 'menu') return { id, type, props: { source: 'header', orientation: 'horizontal', placement: 'header', linksText: 'Home|/\nShop|/shop\nBlog|/blog' } };
+  if (type === 'menu') return { id, type, props: { title: '', menuId: 'header', orientation: 'horizontal', linksText: 'Home|/\nShop|/shop\nBlog|/blog' } };
+  if (type === 'social-icons') return { id, type, props: { title: '', orientation: 'horizontal', size: 20, color: '#6f21b6', linksText: defaultSocialIconLines.join('\n') } };
   if (type === 'sidebar-widgets') return { id, type, props: { itemsText: 'Search\nCategories\nRecent posts' } };
   if (type === 'product-grid') return { id, type, props: { limit: 3 } };
   if (type === 'product-categories') return { id, type, props: {} };
@@ -1604,7 +1685,10 @@ function getLines(value: unknown, fallback: string[]) {
   return lines.length > 0 ? lines : fallback;
 }
 
-function getMenuLinks(block: BuilderBlock) {
+function getMenuLinks(block: BuilderBlock, savedMenus: SavedMenu[]) {
+  const menuId = String(block.props.menuId ?? block.props.source ?? '');
+  const savedMenu = savedMenus.find((menu) => menu.id === menuId);
+  if (savedMenu) return savedMenu.items;
   return getLinksFromText(block.props.linksText, ['Home|/', 'Shop|/shop', 'Blog|/blog']);
 }
 
@@ -1624,6 +1708,66 @@ function getIconLinksFromText(value: unknown, fallback: string[]) {
       label: label?.trim() || 'Link',
     };
   });
+}
+
+function normalizeMenusSetting(value?: string): MenusForm {
+  if (!value) return emptyMenusForm;
+  try {
+    const parsed = JSON.parse(value) as Partial<MenusForm> | null;
+    if (!parsed || typeof parsed !== 'object') return emptyMenusForm;
+    return {
+      header: normalizeMenuItems(parsed.header),
+      footer: normalizeMenuItems(parsed.footer),
+      custom: Array.isArray(parsed.custom)
+        ? parsed.custom.map(normalizeSavedMenu).filter((menu): menu is SavedMenu => menu !== null)
+        : [],
+    };
+  } catch {
+    return emptyMenusForm;
+  }
+}
+
+function flattenSavedMenus(menus: MenusForm): SavedMenu[] {
+  const defaultMenus: SavedMenu[] = [
+    { id: 'header', name: 'Header Menu', location: 'header', items: menus.header },
+    { id: 'footer', name: 'Footer Menu', location: 'footer', items: menus.footer },
+  ];
+  return [
+    ...defaultMenus,
+    ...menus.custom,
+  ].filter((menu) => menu.items.length > 0);
+}
+
+function normalizeSavedMenu(value: unknown): SavedMenu | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const source = value as Partial<SavedMenu>;
+  const id = typeof source.id === 'string' && source.id.trim() ? source.id : '';
+  if (!id) return null;
+  return {
+    id,
+    name: typeof source.name === 'string' && source.name.trim() ? source.name : 'Saved Menu',
+    location: normalizeMenuLocation(source.location),
+    items: normalizeMenuItems(source.items),
+  };
+}
+
+function normalizeMenuItems(value: unknown): MenuItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      const source = item as Partial<MenuItem>;
+      const label = typeof source.label === 'string' ? source.label.trim() : '';
+      const href = typeof source.href === 'string' ? source.href.trim() : '';
+      return label && href ? { label, href } : null;
+    })
+    .filter((item): item is MenuItem => item !== null);
+}
+
+function normalizeMenuLocation(value: unknown): SavedMenu['location'] {
+  return value === 'header' || value === 'footer' || value === 'sidebar' || value === 'custom'
+    ? value
+    : 'custom';
 }
 
 function getSlides(block: BuilderBlock) {
