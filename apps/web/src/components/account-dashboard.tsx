@@ -1,9 +1,19 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 
 type DashboardMode = 'client' | 'advisor';
+type DashboardSection =
+  | 'messages'
+  | 'orders'
+  | 'addresses'
+  | 'payments'
+  | 'wallet'
+  | 'account'
+  | 'advisor-profile'
+  | 'payouts'
+  | 'calls';
 
 interface DashboardUser {
   id: string;
@@ -144,6 +154,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     isOnline: false,
   });
   const [payoutForm, setPayoutForm] = useState(emptyPayoutMethod);
+  const [activeSection, setActiveSection] = useState<DashboardSection>('messages');
 
   const isAdvisor = mode === 'advisor';
   const messagesHref = isAdvisor ? '/advisor/messages' : '/client/messages';
@@ -174,12 +185,6 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
   useEffect(() => {
     void fetchDashboard();
   }, [fetchDashboard]);
-
-  const orderTotal = useMemo(
-    () =>
-      data?.orders.reduce((sum, order) => sum + Number(order.totalAmount), 0) ?? 0,
-    [data],
-  );
 
   async function postJson(path: string, body: unknown, method = 'POST') {
     const res = await fetch(`/api/proxy/account/${path}`, {
@@ -290,37 +295,34 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     );
   }
 
+  const displayName = data.advisor?.profile.displayName || data.user.name;
+  const roleLabel = isAdvisor ? 'Spiritual Advisor' : data.user.role === 'CLIENT' ? 'Client' : data.user.role;
+  const walletValue = data.wallet.balanceMinutes === null ? 'Not set' : `${data.wallet.balanceMinutes} min`;
+  const navItems: Array<{ id: DashboardSection; label: string; icon: string; badge?: number }> = [
+    { id: 'messages', label: 'Messages', icon: 'fa-regular fa-comments', badge: data.messages.unreadCount },
+    { id: 'orders', label: 'Orders', icon: 'fa-solid fa-bag-shopping' },
+    { id: 'addresses', label: 'Saved Addresses', icon: 'fa-solid fa-location-dot' },
+    { id: 'payments', label: 'Saved Payments', icon: 'fa-regular fa-credit-card' },
+    { id: 'wallet', label: 'Wallet', icon: 'fa-solid fa-wallet' },
+    { id: 'account', label: 'Account Details', icon: 'fa-regular fa-user' },
+    ...(isAdvisor
+      ? [
+          { id: 'advisor-profile' as const, label: 'Advisor Profile', icon: 'fa-regular fa-id-card' },
+          { id: 'payouts' as const, label: 'Payout Info', icon: 'fa-regular fa-file-lines' },
+          { id: 'calls' as const, label: 'Call Transactions', icon: 'fa-solid fa-phone-volume' },
+        ]
+      : []),
+  ];
+  const activeLabel = navItems.find((item) => item.id === activeSection)?.label ?? 'Messages';
+
   return (
     <main className="mx-auto w-full max-w-7xl p-8">
-      <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-purple-700">
-              {isAdvisor ? 'Advisor workspace' : 'Client workspace'}
-            </p>
-            <h1 className="mt-2 text-3xl font-bold text-gray-950">
-              {isAdvisor ? 'Advisor Dashboard' : 'Client Dashboard'}
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm text-gray-600">
-              Welcome back, {data.user.name}. Manage your account, wallet, orders, and messages.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <a
-              href={messagesHref}
-              className="rounded-lg border border-purple-200 px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50"
-            >
-              Private Messages ({data.messages.unreadCount})
-            </a>
-            <a
-              href="/shop"
-              className="rounded-lg bg-purple-700 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-800"
-            >
-              Add Money
-            </a>
-          </div>
-        </div>
-      </div>
+      <header className="mb-10">
+        <h1 className="text-5xl font-bold tracking-tight text-gray-950">Dashboard</h1>
+        <p className="mt-4 text-2xl text-gray-700">
+          Welcome back, <span className="font-semibold text-purple-700">{displayName}</span>!
+        </p>
+      </header>
 
       {error && <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
       {success && (
@@ -329,335 +331,334 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
         </p>
       )}
 
-      <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryStat label="Orders" value={data.orders.length.toString()} detail="Lifetime orders" />
-        <SummaryStat label="Order Total" value={`$${orderTotal.toFixed(2)}`} detail="Total spent" />
-        <SummaryStat
-          label="Wallet Balance"
-          value={
-            data.wallet.balanceMinutes === null
-              ? 'Not set'
-              : `${data.wallet.balanceMinutes} min`
-          }
-          detail="Available call time"
-        />
-        <SummaryStat label="Unread Messages" value={data.messages.unreadCount.toString()} detail="Private inbox" />
+      <section className="mb-9 grid gap-5 lg:grid-cols-3">
+        <TopCard className="items-center text-center">
+          <div className="grid h-32 w-32 place-items-center rounded-full bg-gradient-to-br from-purple-100 via-white to-purple-200 text-5xl font-bold text-purple-700">
+            {initials(displayName)}
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-950">{displayName}</h2>
+            <p className="mt-1 text-lg text-gray-600">{roleLabel}</p>
+          </div>
+          <button className="mt-4 inline-flex items-center gap-3 rounded-lg border border-purple-500 px-8 py-3 font-semibold text-purple-700 hover:bg-purple-50">
+            <i className="fa-regular fa-image" />
+            Change Image
+          </button>
+        </TopCard>
+
+        <TopCard className="items-center text-center">
+          <IconBubble icon="fa-solid fa-phone" />
+          <h2 className="text-2xl font-bold text-gray-950">Call Availability</h2>
+          <ToggleSwitch enabled={advisorForm.isOnline} />
+          <p className={advisorForm.isOnline ? 'font-semibold text-green-600' : 'font-semibold text-gray-500'}>
+            {advisorForm.isOnline ? 'On' : 'Off'} <span className="ml-1 inline-block h-2.5 w-2.5 rounded-full bg-current" />
+          </p>
+          <p className="max-w-xs text-center text-sm text-gray-500">
+            {isAdvisor ? 'Clients will be able to call you when you are available.' : 'Advisor call availability appears here.'}
+          </p>
+        </TopCard>
+
+        <TopCard className="items-center text-center">
+          <IconBubble icon="fa-solid fa-wallet" />
+          <h2 className="text-2xl font-bold text-gray-950">Wallet Balance</h2>
+          <div>
+            <p className="text-5xl font-bold text-gray-950">{walletValue}</p>
+            <p className="mt-2 text-lg text-gray-600">Available</p>
+          </div>
+          <button type="button" onClick={() => setActiveSection('wallet')} className="mt-3 rounded-lg border border-purple-500 px-8 py-3 font-semibold text-purple-700 hover:bg-purple-50">
+            View Wallet
+          </button>
+        </TopCard>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
-        <section className="space-y-6">
-          <Panel title="Recent Orders" actionHref="/client/orders" actionLabel="View all">
-            {data.orders.length === 0 ? (
-              <EmptyText text="No orders have been placed yet." />
-            ) : (
-              <div className="divide-y">
-                {data.orders.slice(0, 5).map((order) => (
-                  <div key={order.id} className="py-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="font-mono text-xs text-gray-500">
-                          #{order.id.slice(0, 12)}
-                        </div>
-                        <div className="mt-1 text-sm text-gray-700">
-                          {order.items.map((item) => item.product.name).join(', ') || 'Order'}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-semibold text-purple-700">
-                          {order.status}
-                        </span>
-                        <div className="mt-1 text-sm font-semibold">
-                          ${Number(order.totalAmount).toFixed(2)} {order.currency}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Panel>
+      <section className="grid overflow-hidden rounded-2xl border bg-white shadow-sm lg:grid-cols-[350px_minmax(0,1fr)]">
+        <nav className="border-b bg-white p-4 lg:border-b-0 lg:border-r">
+          <div className="grid gap-2">
+            {navItems.map((item) => (
+              <DashboardNavItem
+                key={item.id}
+                item={item}
+                active={activeSection === item.id}
+                onClick={() => setActiveSection(item.id)}
+              />
+            ))}
+          </div>
+        </nav>
 
-          <Panel title="Saved Addresses">
-            <form onSubmit={handleAddressSave} className="grid gap-3 md:grid-cols-2">
-              <Input label="Label" value={addressForm.label} onChange={(label) => setAddressForm((f) => ({ ...f, label }))} required />
-              <Input label="Full name" value={addressForm.fullName} onChange={(fullName) => setAddressForm((f) => ({ ...f, fullName }))} required />
-              <Input label="Phone" value={addressForm.phone} onChange={(phone) => setAddressForm((f) => ({ ...f, phone }))} />
-              <Input label="Street address" value={addressForm.line1} onChange={(line1) => setAddressForm((f) => ({ ...f, line1 }))} required />
-              <Input label="Address line 2" value={addressForm.line2} onChange={(line2) => setAddressForm((f) => ({ ...f, line2 }))} />
-              <Input label="City" value={addressForm.city} onChange={(city) => setAddressForm((f) => ({ ...f, city }))} required />
-              <Input label="State" value={addressForm.state} onChange={(state) => setAddressForm((f) => ({ ...f, state }))} required />
-              <Input label="Postal code" value={addressForm.postalCode} onChange={(postalCode) => setAddressForm((f) => ({ ...f, postalCode }))} required />
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={addressForm.isDefault}
-                  onChange={(event) => setAddressForm((f) => ({ ...f, isDefault: event.target.checked }))}
-                  className="h-4 w-4 rounded border-gray-300 text-purple-700"
-                />
-                Default address
-              </label>
-              <div className="md:col-span-2">
-                <PrimaryButton disabled={saving === 'address'}>
-                  Save Address
-                </PrimaryButton>
-              </div>
-            </form>
-            <ListBlock>
-              {data.addresses.map((address) => (
-                <div key={address.id} className="flex justify-between gap-3 py-4">
-                  <div className="text-sm">
-                    <div className="font-medium">
-                      {address.label} {address.isDefault ? '(Default)' : ''}
-                    </div>
-                    <div className="text-gray-500">
-                      {address.line1}, {address.city}, {address.state} {address.postalCode}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void removeItem(`addresses/${address.id}`, 'Address removed.')}
-                    className="text-xs font-medium text-red-600 hover:underline"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              {data.addresses.length === 0 && <EmptyText text="No saved addresses yet." />}
-            </ListBlock>
-          </Panel>
+        <section className="min-h-[640px] p-8">
+          <div className="mb-8 flex items-center gap-5">
+            <IconBubble icon={navItems.find((item) => item.id === activeSection)?.icon ?? 'fa-regular fa-comments'} small />
+            <h2 className="text-3xl font-bold text-gray-950">{activeLabel}</h2>
+          </div>
 
-          {isAdvisor && data.advisor && (
-            <Panel title="Call Transactions">
-              {data.advisor.callTransactions.length === 0 ? (
-                <EmptyText text="No call transactions yet." />
+          {activeSection === 'messages' && (
+            <div className="flex min-h-[460px] flex-col items-center justify-center text-center">
+              <div className="relative mb-8 h-36 w-52">
+                <div className="absolute left-5 top-2 h-32 w-32 rounded-full bg-purple-100" />
+                <div className="absolute right-5 top-6 h-28 w-28 rounded-full bg-purple-700" />
+                <i className="fa-solid fa-comment-dots absolute left-12 top-8 text-7xl text-purple-200" />
+              </div>
+              <h3 className="text-3xl font-bold text-gray-950">Your messages will appear here</h3>
+              <p className="mt-4 max-w-sm text-lg text-gray-500">Open your inbox to select a conversation and view messages.</p>
+              <a href={messagesHref} className="mt-8 rounded-lg bg-purple-700 px-7 py-3 font-semibold text-white hover:bg-purple-800">
+                Open Messages
+              </a>
+            </div>
+          )}
+
+          {activeSection === 'orders' && (
+            <div>
+              {data.orders.length === 0 ? (
+                <EmptyText text="No orders have been placed yet." />
               ) : (
                 <div className="divide-y">
-                  {data.advisor.callTransactions.map((call) => (
-                    <div key={call.id} className="flex justify-between gap-3 py-4 text-sm">
+                  {data.orders.map((order) => (
+                    <div key={order.id} className="flex flex-wrap items-center justify-between gap-4 py-5">
                       <div>
-                        <div className="font-medium">
-                          {call.client?.user?.name ?? 'Client call'}
-                        </div>
-                        <div className="text-gray-500">
-                          {new Date(call.startedAt).toLocaleString()}
-                        </div>
+                        <p className="font-mono text-xs text-gray-500">#{order.id.slice(0, 12)}</p>
+                        <p className="mt-1 font-semibold text-gray-950">{order.items.map((item) => item.product.name).join(', ') || 'Order'}</p>
+                        <p className="mt-1 text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</p>
                       </div>
                       <div className="text-right">
-                        <div>{call.status}</div>
-                        <div className="text-gray-500">{call.billedMinutes ?? 0} min</div>
+                        <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">{order.status}</span>
+                        <p className="mt-2 text-lg font-bold">${Number(order.totalAmount).toFixed(2)} {order.currency}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </Panel>
+            </div>
           )}
-        </section>
 
-        <aside className="space-y-6">
-          <Panel title="Account Details">
-            <form onSubmit={handleAccountSave} className="space-y-3">
+          {activeSection === 'addresses' && (
+            <div>
+              <form onSubmit={handleAddressSave} className="grid gap-4 md:grid-cols-2">
+                <Input label="Label" value={addressForm.label} onChange={(label) => setAddressForm((f) => ({ ...f, label }))} required />
+                <Input label="Full name" value={addressForm.fullName} onChange={(fullName) => setAddressForm((f) => ({ ...f, fullName }))} required />
+                <Input label="Phone" value={addressForm.phone} onChange={(phone) => setAddressForm((f) => ({ ...f, phone }))} />
+                <Input label="Street address" value={addressForm.line1} onChange={(line1) => setAddressForm((f) => ({ ...f, line1 }))} required />
+                <Input label="Address line 2" value={addressForm.line2} onChange={(line2) => setAddressForm((f) => ({ ...f, line2 }))} />
+                <Input label="City" value={addressForm.city} onChange={(city) => setAddressForm((f) => ({ ...f, city }))} required />
+                <Input label="State" value={addressForm.state} onChange={(state) => setAddressForm((f) => ({ ...f, state }))} required />
+                <Input label="Postal code" value={addressForm.postalCode} onChange={(postalCode) => setAddressForm((f) => ({ ...f, postalCode }))} required />
+                <Checkbox checked={addressForm.isDefault} label="Default address" onChange={(isDefault) => setAddressForm((f) => ({ ...f, isDefault }))} />
+                <div className="md:col-span-2"><PrimaryButton disabled={saving === 'address'}>Save Address</PrimaryButton></div>
+              </form>
+              <ListBlock>
+                {data.addresses.map((address) => (
+                  <RemovableRow key={address.id} title={`${address.label}${address.isDefault ? ' (Default)' : ''}`} detail={`${address.line1}, ${address.city}, ${address.state} ${address.postalCode}`} onRemove={() => void removeItem(`addresses/${address.id}`, 'Address removed.')} />
+                ))}
+                {data.addresses.length === 0 && <EmptyText text="No saved addresses yet." />}
+              </ListBlock>
+            </div>
+          )}
+
+          {activeSection === 'payments' && (
+            <div>
+              <form onSubmit={handlePaymentSave} className="grid gap-4 md:grid-cols-2">
+                <Input label="Label" value={paymentForm.label} onChange={(label) => setPaymentForm((f) => ({ ...f, label }))} required />
+                <Input label="Provider" value={paymentForm.provider} onChange={(provider) => setPaymentForm((f) => ({ ...f, provider }))} required />
+                <Input label="Brand" value={paymentForm.brand} onChange={(brand) => setPaymentForm((f) => ({ ...f, brand }))} />
+                <Input label="Last 4" value={paymentForm.last4} onChange={(last4) => setPaymentForm((f) => ({ ...f, last4 }))} />
+                <Checkbox checked={paymentForm.isDefault} label="Default payment method" onChange={(isDefault) => setPaymentForm((f) => ({ ...f, isDefault }))} />
+                <div className="md:col-span-2"><PrimaryButton disabled={saving === 'payment'}>Save Payment Method</PrimaryButton></div>
+              </form>
+              <ListBlock>
+                {data.paymentMethods.map((method) => (
+                  <RemovableRow key={method.id} title={`${method.label}${method.isDefault ? ' (Default)' : ''}`} detail={`${method.provider}${method.brand ? ` · ${method.brand}` : ''} ${method.last4 ? `**** ${method.last4}` : ''}`} onRemove={() => void removeItem(`payment-methods/${method.id}`, 'Payment method removed.')} />
+                ))}
+                {data.paymentMethods.length === 0 && <EmptyText text="No payment methods saved yet." />}
+              </ListBlock>
+            </div>
+          )}
+
+          {activeSection === 'wallet' && (
+            <div>
+              <div className="mb-6 rounded-2xl bg-purple-50 p-6">
+                <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">Current balance</p>
+                <p className="mt-2 text-4xl font-bold text-gray-950">{walletValue}</p>
+                <a href="/shop" className="mt-5 inline-block rounded-lg bg-purple-700 px-6 py-3 font-semibold text-white hover:bg-purple-800">Add money to wallet</a>
+              </div>
+              {data.wallet.transactions.length === 0 ? (
+                <EmptyText text="No wallet transactions yet." />
+              ) : (
+                <div className="divide-y">
+                  {data.wallet.transactions.map((transaction) => (
+                    <div key={transaction.id} className="flex justify-between gap-4 py-4">
+                      <div>
+                        <p className="font-semibold">{transaction.type}</p>
+                        <p className="text-sm text-gray-500">{transaction.description ?? transaction.currency}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">{transaction.minutesDelta ?? Number(transaction.amount)}</p>
+                        <p className="text-xs text-gray-500">{new Date(transaction.createdAt).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeSection === 'account' && (
+            <form onSubmit={handleAccountSave} className="max-w-xl space-y-4">
               <Input label="Name" value={accountName} onChange={setAccountName} required />
               <ReadOnly label="Email" value={data.user.email} />
               <ReadOnly label="Role" value={data.user.role} />
-              <PrimaryButton disabled={saving === 'account'}>
-                Save Account
-              </PrimaryButton>
+              <PrimaryButton disabled={saving === 'account'}>Save Account</PrimaryButton>
             </form>
-          </Panel>
+          )}
 
-          <Panel title="Wallet">
-            <div className="mb-4 rounded-xl bg-purple-50 p-4">
-              <div className="text-xs font-medium uppercase text-gray-500">Current balance</div>
-              <div className="mt-1 text-2xl font-semibold text-gray-950">
-                {data.wallet.balanceMinutes === null
-                  ? 'No wallet profile'
-                  : `${data.wallet.balanceMinutes} minutes`}
-              </div>
-              <a href="/shop" className="mt-3 inline-block text-sm font-semibold text-purple-700 hover:text-purple-800">
-                Add money to wallet
-              </a>
-            </div>
-            {data.wallet.transactions.length === 0 ? (
-              <EmptyText text="No wallet transactions yet." />
-            ) : (
-              <div className="divide-y">
-                {data.wallet.transactions.map((transaction) => (
-                  <div key={transaction.id} className="flex justify-between gap-3 py-3 text-sm">
-                    <div>
-                      <div className="font-medium">{transaction.type}</div>
-                      <div className="text-gray-500">{transaction.description ?? transaction.currency}</div>
-                    </div>
-                    <div className="text-right">
-                      <div>{transaction.minutesDelta ?? Number(transaction.amount)}</div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(transaction.createdAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Panel>
-
-          <Panel title="Payment Methods">
-            <form onSubmit={handlePaymentSave} className="space-y-3">
-              <Input label="Label" value={paymentForm.label} onChange={(label) => setPaymentForm((f) => ({ ...f, label }))} required />
-              <Input label="Provider" value={paymentForm.provider} onChange={(provider) => setPaymentForm((f) => ({ ...f, provider }))} required />
-              <Input label="Brand" value={paymentForm.brand} onChange={(brand) => setPaymentForm((f) => ({ ...f, brand }))} />
-              <Input label="Last 4" value={paymentForm.last4} onChange={(last4) => setPaymentForm((f) => ({ ...f, last4 }))} />
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={paymentForm.isDefault}
-                  onChange={(event) => setPaymentForm((f) => ({ ...f, isDefault: event.target.checked }))}
-                  className="h-4 w-4 rounded border-gray-300 text-purple-700"
-                />
-                Default payment method
+          {activeSection === 'advisor-profile' && isAdvisor && (
+            <form onSubmit={handleAdvisorSave} className="max-w-2xl space-y-4">
+              <Input label="Display name" value={advisorForm.displayName} onChange={(displayNameValue) => setAdvisorForm((f) => ({ ...f, displayName: displayNameValue }))} />
+              <Input label="Rate per minute" value={advisorForm.ratePerMinute} onChange={(ratePerMinute) => setAdvisorForm((f) => ({ ...f, ratePerMinute }))} type="number" />
+              <label className="block text-sm font-medium text-gray-700">
+                Bio
+                <textarea value={advisorForm.bio} onChange={(event) => setAdvisorForm((f) => ({ ...f, bio: event.target.value }))} rows={5} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100" />
               </label>
-              <PrimaryButton disabled={saving === 'payment'}>
-                Save Payment Method
-              </PrimaryButton>
+              <Checkbox checked={advisorForm.isOnline} label="Available online" onChange={(isOnline) => setAdvisorForm((f) => ({ ...f, isOnline }))} />
+              <PrimaryButton disabled={saving === 'advisor'}>Save Advisor Profile</PrimaryButton>
             </form>
-            <ListBlock>
-              {data.paymentMethods.map((method) => (
-                <div key={method.id} className="flex justify-between gap-3 py-4 text-sm">
-                  <div>
-                    <div className="font-medium">
-                      {method.label} {method.isDefault ? '(Default)' : ''}
-                    </div>
-                    <div className="text-gray-500">
-                      {method.provider} {method.brand ? `· ${method.brand}` : ''}{' '}
-                      {method.last4 ? `•••• ${method.last4}` : ''}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void removeItem(`payment-methods/${method.id}`, 'Payment method removed.')}
-                    className="text-xs font-medium text-red-600 hover:underline"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              {data.paymentMethods.length === 0 && <EmptyText text="No payment methods saved yet." />}
-            </ListBlock>
-          </Panel>
+          )}
 
-          {isAdvisor && data.advisor && (
-            <>
-              <Panel title="Advisor Profile">
-                <form onSubmit={handleAdvisorSave} className="space-y-3">
-                  <Input label="Display name" value={advisorForm.displayName} onChange={(displayName) => setAdvisorForm((f) => ({ ...f, displayName }))} />
-                  <Input label="Rate per minute" value={advisorForm.ratePerMinute} onChange={(ratePerMinute) => setAdvisorForm((f) => ({ ...f, ratePerMinute }))} type="number" />
-                  <label className="block text-sm font-medium text-gray-700">
-                    Bio
-                    <textarea
-                      value={advisorForm.bio}
-                      onChange={(event) => setAdvisorForm((f) => ({ ...f, bio: event.target.value }))}
-                      rows={4}
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                    />
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={advisorForm.isOnline}
-                      onChange={(event) => setAdvisorForm((f) => ({ ...f, isOnline: event.target.checked }))}
-                      className="h-4 w-4 rounded border-gray-300 text-purple-700"
-                    />
-                    Available online
-                  </label>
-                  <PrimaryButton disabled={saving === 'advisor'}>
-                    Save Advisor Profile
-                  </PrimaryButton>
-                </form>
-              </Panel>
+          {activeSection === 'payouts' && isAdvisor && data.advisor && (
+            <div>
+              <form onSubmit={handlePayoutSave} className="grid gap-4 md:grid-cols-2">
+                <Input label="Label" value={payoutForm.label} onChange={(label) => setPayoutForm((f) => ({ ...f, label }))} required />
+                <Input label="Method type" value={payoutForm.methodType} onChange={(methodType) => setPayoutForm((f) => ({ ...f, methodType }))} required />
+                <Input label="Account name" value={payoutForm.accountName} onChange={(accountNameValue) => setPayoutForm((f) => ({ ...f, accountName: accountNameValue }))} required />
+                <Input label="Notes" value={payoutForm.details} onChange={(details) => setPayoutForm((f) => ({ ...f, details }))} />
+                <Checkbox checked={payoutForm.isDefault} label="Default payout method" onChange={(isDefault) => setPayoutForm((f) => ({ ...f, isDefault }))} />
+                <div className="md:col-span-2"><PrimaryButton disabled={saving === 'payout'}>Save Payout Method</PrimaryButton></div>
+              </form>
+              <ListBlock>
+                {data.advisor.payoutMethods.map((method) => (
+                  <RemovableRow key={method.id} title={`${method.label}${method.isDefault ? ' (Default)' : ''}`} detail={`${method.methodType} · ${method.accountName}`} onRemove={() => void removeItem(`payout-methods/${method.id}`, 'Payout method removed.')} />
+                ))}
+                {data.advisor.payoutMethods.length === 0 && <EmptyText text="No payout methods saved yet." />}
+              </ListBlock>
+            </div>
+          )}
 
-              <Panel title="Payout Methods">
-                <form onSubmit={handlePayoutSave} className="space-y-3">
-                  <Input label="Label" value={payoutForm.label} onChange={(label) => setPayoutForm((f) => ({ ...f, label }))} required />
-                  <Input label="Method type" value={payoutForm.methodType} onChange={(methodType) => setPayoutForm((f) => ({ ...f, methodType }))} required />
-                  <Input label="Account name" value={payoutForm.accountName} onChange={(accountNameValue) => setPayoutForm((f) => ({ ...f, accountName: accountNameValue }))} required />
-                  <Input label="Notes" value={payoutForm.details} onChange={(details) => setPayoutForm((f) => ({ ...f, details }))} />
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={payoutForm.isDefault}
-                      onChange={(event) => setPayoutForm((f) => ({ ...f, isDefault: event.target.checked }))}
-                      className="h-4 w-4 rounded border-gray-300 text-purple-700"
-                    />
-                    Default payout method
-                  </label>
-                  <PrimaryButton disabled={saving === 'payout'}>
-                    Save Payout Method
-                  </PrimaryButton>
-                </form>
-                <ListBlock>
-                  {data.advisor.payoutMethods.map((method) => (
-                    <div key={method.id} className="flex justify-between gap-3 py-4 text-sm">
+          {activeSection === 'calls' && isAdvisor && data.advisor && (
+            <div>
+              {data.advisor.callTransactions.length === 0 ? (
+                <EmptyText text="No call transactions yet." />
+              ) : (
+                <div className="divide-y">
+                  {data.advisor.callTransactions.map((call) => (
+                    <div key={call.id} className="flex justify-between gap-4 py-4">
                       <div>
-                        <div className="font-medium">
-                          {method.label} {method.isDefault ? '(Default)' : ''}
-                        </div>
-                        <div className="text-gray-500">
-                          {method.methodType} · {method.accountName}
-                        </div>
+                        <p className="font-semibold">{call.client?.user?.name ?? 'Client call'}</p>
+                        <p className="text-sm text-gray-500">{new Date(call.startedAt).toLocaleString()}</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => void removeItem(`payout-methods/${method.id}`, 'Payout method removed.')}
-                        className="text-xs font-medium text-red-600 hover:underline"
-                      >
-                        Remove
-                      </button>
+                      <div className="text-right">
+                        <p className="font-semibold">{call.status}</p>
+                        <p className="text-sm text-gray-500">{call.billedMinutes ?? 0} min</p>
+                      </div>
                     </div>
                   ))}
-                  {data.advisor.payoutMethods.length === 0 && <EmptyText text="No payout methods saved yet." />}
-                </ListBlock>
-              </Panel>
-            </>
+                </div>
+              )}
+            </div>
           )}
-        </aside>
-      </div>
+        </section>
+      </section>
     </main>
   );
 }
 
-function SummaryStat({ label, value, detail }: { label: string; value: string; detail: string }) {
+function TopCard({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className="rounded-2xl border bg-white p-5 shadow-sm">
-      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-2 text-3xl font-bold text-gray-950">{value}</div>
-      <div className="mt-1 text-sm text-gray-500">{detail}</div>
+    <article className={`flex min-h-[300px] flex-col justify-center gap-5 rounded-2xl border bg-white p-8 shadow-sm ${className}`}>
+      {children}
+    </article>
+  );
+}
+
+function IconBubble({ icon, small = false }: { icon: string; small?: boolean }) {
+  return (
+    <div className={`${small ? 'h-14 w-14 text-xl' : 'h-24 w-24 text-4xl'} grid place-items-center rounded-full bg-purple-100 text-purple-700`}>
+      <i className={icon} />
     </div>
   );
 }
 
-function Panel({
-  title,
-  children,
-  actionHref,
-  actionLabel,
+function ToggleSwitch({ enabled }: { enabled: boolean }) {
+  return (
+    <span className={`relative inline-flex h-16 w-32 items-center rounded-full p-2 ${enabled ? 'bg-purple-700' : 'bg-gray-300'}`}>
+      <span className={`h-12 w-12 rounded-full bg-white shadow transition ${enabled ? 'translate-x-16' : 'translate-x-0'}`} />
+    </span>
+  );
+}
+
+function DashboardNavItem({
+  item,
+  active,
+  onClick,
 }: {
-  title: string;
-  children: ReactNode;
-  actionHref?: string;
-  actionLabel?: string;
+  item: { id: DashboardSection; label: string; icon: string; badge?: number };
+  active: boolean;
+  onClick: () => void;
 }) {
   return (
-    <section className="rounded-2xl border bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
-        <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-        {actionHref && actionLabel && (
-          <a href={actionHref} className="text-sm font-semibold text-purple-700 hover:text-purple-800">
-            {actionLabel}
-          </a>
-        )}
-      </div>
-      {children}
-    </section>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center justify-between rounded-lg px-4 py-4 text-left text-lg transition ${
+        active ? 'bg-purple-50 text-gray-950 shadow-sm' : 'text-gray-700 hover:bg-gray-50'
+      }`}
+    >
+      <span className="flex items-center gap-4">
+        <i className={`${item.icon} w-6 text-2xl ${active ? 'text-purple-700' : 'text-gray-500'}`} />
+        <span>{item.label}</span>
+      </span>
+      {item.badge ? (
+        <span className="grid h-8 min-w-8 place-items-center rounded-full bg-purple-700 px-2 text-sm font-bold text-white">
+          {item.badge}
+        </span>
+      ) : null}
+    </button>
   );
+}
+
+function Checkbox({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-gray-700">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 rounded border-gray-300 text-purple-700"
+      />
+      {label}
+    </label>
+  );
+}
+
+function RemovableRow({ title, detail, onRemove }: { title: string; detail: string; onRemove: () => void }) {
+  return (
+    <div className="flex justify-between gap-4 py-4">
+      <div>
+        <p className="font-semibold text-gray-950">{title}</p>
+        <p className="text-sm text-gray-500">{detail}</p>
+      </div>
+      <button type="button" onClick={onRemove} className="text-sm font-semibold text-red-600 hover:underline">
+        Remove
+      </button>
+    </div>
+  );
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || 'U';
 }
 
 function Input({
