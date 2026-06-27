@@ -304,6 +304,7 @@ export default function AdminPostsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [importStatus, setImportStatus] = useState('');
+  const [importAuthorId, setImportAuthorId] = useState('');
   const [form, setForm] = useState<PostForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -344,6 +345,7 @@ export default function AdminPostsPage() {
       setCategories(nextCategories);
       setTags(nextTags);
       setSelectedIds([]);
+      setImportAuthorId((currentAuthorId) => currentAuthorId || nextAuthors[0]?.id || '');
       setForm((currentForm) => ({
         ...currentForm,
         authorId: currentForm.authorId || nextAuthors[0]?.id || '',
@@ -600,7 +602,7 @@ export default function AdminPostsPage() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    const authorId = form.authorId || authors[0]?.id;
+    const authorId = importAuthorId || authors[0]?.id;
     if (!authorId) {
       setError('Choose or create an author before importing posts.');
       return;
@@ -679,9 +681,23 @@ export default function AdminPostsPage() {
             Back to All Posts
           </button>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => exportPosts('csv')} className="rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">Export CSV</button>
             <button type="button" onClick={() => exportPosts('json')} className="rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">Export JSON</button>
+            <label className="flex items-center gap-2 rounded border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Import author</span>
+              <select
+                value={importAuthorId}
+                onChange={(event) => setImportAuthorId(event.target.value)}
+                className="min-w-44 border-0 bg-transparent text-sm outline-none"
+              >
+                {authors.map((author) => (
+                  <option key={author.id} value={author.id}>
+                    {author.username || author.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="cursor-pointer rounded border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50">
               Import
               <input type="file" accept=".csv,.json,.xml,application/json,text/csv,application/xml,text/xml" onChange={handleImportPosts} className="hidden" />
