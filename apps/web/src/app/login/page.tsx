@@ -3,20 +3,21 @@
 import { useState, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { getDashboardPathForRole } from '../../lib/account-routing';
 
 const SAFE_REDIRECT_ORIGIN = 'https://placeholder.local';
 
-function getSafeNextPath(nextPath: string | null) {
-  if (!nextPath) return '/admin';
-  if (nextPath.includes('\\')) return '/admin';
+function getSafeNextPath(nextPath: string | null, fallbackPath: string) {
+  if (!nextPath) return fallbackPath;
+  if (nextPath.includes('\\')) return fallbackPath;
 
   try {
     const parsed = new URL(nextPath, SAFE_REDIRECT_ORIGIN);
-    if (parsed.origin !== SAFE_REDIRECT_ORIGIN) return '/admin';
+    if (parsed.origin !== SAFE_REDIRECT_ORIGIN) return fallbackPath;
     const safePath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
-    return safePath.startsWith('/') ? safePath : '/admin';
+    return safePath.startsWith('/') ? safePath : fallbackPath;
   } catch {
-    return '/admin';
+    return fallbackPath;
   }
 }
 
@@ -53,7 +54,9 @@ function LoginForm() {
         return;
       }
 
-      const next = getSafeNextPath(searchParams.get('next'));
+      const data = (await res.json().catch(() => ({}))) as { role?: string };
+      const dashboardPath = getDashboardPathForRole(data.role);
+      const next = getSafeNextPath(searchParams.get('next'), dashboardPath);
       router.push(next);
     } catch {
       setError('Network error. Please try again.');

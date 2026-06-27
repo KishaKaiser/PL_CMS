@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: 'API is unavailable. Check API_BASE_URL or the API service.' }, { status: 503 });
   }
 
-  const data = (await upstream.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string; message?: string };
+  const data = (await upstream.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string; role?: string; message?: string };
 
   if (!upstream.ok || !data.accessToken || !data.refreshToken) {
     return NextResponse.json(
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const res = NextResponse.json({ ok: true });
+  const res = NextResponse.json({ ok: true, role: data.role });
 
   const isProduction = process.env.NODE_ENV === 'production';
 

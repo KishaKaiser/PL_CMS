@@ -1,10 +1,12 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import type { BuilderBlock, BuilderLayout } from '../../lib/public-cms';
 import { getCategories, getTags } from '../../lib/public-cms';
 import { PublicFormEmbed } from './public-form-embed';
 import { PublicSliderEmbed } from './public-slider-embed';
 import { AnnouncementBar, StorefrontHeader } from './storefront-header';
 import { fetchApi } from '../../lib/server-api';
+import { getAccountLinkFromToken } from '../../lib/account-routing';
 
 interface Product {
   id: string;
@@ -20,6 +22,8 @@ type StoreData = {
   tags: Array<{ id: string; slug: string; name: string }>;
 };
 
+type AccountLink = ReturnType<typeof getAccountLinkFromToken>;
+
 async function getProducts(): Promise<Product[]> {
   try {
     const res = await fetchApi('/products', { next: { revalidate: 60 } });
@@ -34,11 +38,15 @@ export async function BuilderContent({
   layout,
   showChrome = true,
   breadcrumbLabel = 'Page',
+  accountLink,
 }: {
   layout: BuilderLayout;
   showChrome?: boolean;
   breadcrumbLabel?: string;
+  accountLink?: AccountLink;
 }) {
+  const cookieStore = accountLink ? null : await cookies();
+  const resolvedAccountLink = accountLink ?? getAccountLinkFromToken(cookieStore?.get('access_token')?.value);
   const [products, categories, tags] = await Promise.all([getProducts(), getCategories(), getTags()]);
   const storeData = { products, categories, tags };
 
@@ -64,7 +72,7 @@ export async function BuilderContent({
             >
               <div className={section.settings.layout === 'full' ? '' : 'mx-auto max-w-5xl'}>
                 {section.blocks.map((block) => (
-                  <BuilderBlockView key={block.id} block={block} storeData={storeData} />
+                  <BuilderBlockView key={block.id} block={block} storeData={storeData} accountLink={resolvedAccountLink} />
                 ))}
               </div>
             </section>
@@ -76,7 +84,7 @@ export async function BuilderContent({
   );
 }
 
-function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData: StoreData }) {
+function BuilderBlockView({ block, storeData, accountLink }: { block: BuilderBlock; storeData: StoreData; accountLink: AccountLink }) {
   if (block.type === 'heading') {
     return <h1 className="mb-4 font-bold" style={textStyle(block, 40)}>{String(block.props.text ?? '')}</h1>;
   }
@@ -145,7 +153,7 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
     );
   }
   if (block.type === 'store-header') {
-    return <StoreHeaderView block={block} />;
+    return <StoreHeaderView block={block} accountLink={accountLink} />;
   }
   if (block.type === 'hero-slider') {
     return <HeroSliderView block={block} />;
@@ -155,7 +163,7 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
     const children = block.children ?? [];
     return (
       <div className="mb-6 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-        {children.map((child) => <BuilderBlockView key={child.id} block={child} storeData={storeData} />)}
+        {children.map((child) => <BuilderBlockView key={child.id} block={child} storeData={storeData} accountLink={accountLink} />)}
       </div>
     );
   }
@@ -210,7 +218,7 @@ function BuilderBlockView({ block, storeData }: { block: BuilderBlock; storeData
     const columns = Math.min(6, Math.max(2, Number(block.props.columns ?? 2)));
     return (
       <div className="mb-4 grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-        {(block.children ?? []).map((child) => <BuilderBlockView key={child.id} block={child} storeData={storeData} />)}
+        {(block.children ?? []).map((child) => <BuilderBlockView key={child.id} block={child} storeData={storeData} accountLink={accountLink} />)}
       </div>
     );
   }
@@ -254,7 +262,7 @@ function textStyle(block: BuilderBlock, fallbackSize: number) {
   };
 }
 
-function StoreHeaderView({ block }: { block: BuilderBlock }) {
+function StoreHeaderView({ block, accountLink }: { block: BuilderBlock; accountLink: AccountLink }) {
   const socialLinks = getIconLinksFromText(block.props.socialLinksText, [
     'fa-brands fa-instagram|https://instagram.com|Instagram',
     'fa-brands fa-facebook-f|https://facebook.com|Facebook',
@@ -267,7 +275,7 @@ function StoreHeaderView({ block }: { block: BuilderBlock }) {
     'fa-solid fa-magnifying-glass|/search|Search',
     'fa-regular fa-heart|/wishlist|Wishlist',
     'fa-solid fa-bag-shopping|/shop/cart|Cart',
-  ]);
+  ]).map((link) => isLoginActionLink(link) ? { ...link, href: accountLink.href, label: accountLink.label } : link);
   return (
     <StorefrontHeader
       logoText={String(block.props.logoText ?? 'The Psychic Link')}
@@ -281,6 +289,10 @@ function StoreHeaderView({ block }: { block: BuilderBlock }) {
       stickyMain={!(block.props.stickyMain === false && block.props.stickyMainTouched === true)}
     />
   );
+}
+
+function isLoginActionLink(link: { href: string; label: string; iconClass: string }) {
+  return link.href === '/login' || link.label.toLowerCase() === 'login';
 }
 
 function HeroSliderView({ block }: { block: BuilderBlock }) {
