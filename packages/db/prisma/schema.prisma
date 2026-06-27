@@ -116,6 +116,7 @@ model AdvisorProfile {
   userId        String   @unique
   displayName   String
   bio           String?
+  profileImageUrl String?
   ratePerMinute Decimal  @default(0)
   isOnline      Boolean  @default(false)
   createdAt     DateTime @default(now())

@@ -30,12 +30,14 @@ interface PrivateMessageInboxProps {
   title?: string;
   description?: string;
   backHref?: string;
+  embedded?: boolean;
 }
 
 export function PrivateMessageInbox({
   title = 'Private Messages',
   description = 'Send and receive direct messages with other users.',
   backHref,
+  embedded = false,
 }: PrivateMessageInboxProps) {
   const [contacts, setContacts] = useState<MessageUser[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -142,23 +144,25 @@ export function PrivateMessageInbox({
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-8">
-      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">{title}</h1>
-          <p className="mt-1 text-sm text-gray-600">{description}</p>
+    <div className={embedded ? '' : 'mx-auto max-w-6xl p-8'}>
+      {!embedded && (
+        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">{title}</h1>
+            <p className="mt-1 text-sm text-gray-600">{description}</p>
+          </div>
+          {backHref && (
+            <a href={backHref} className="text-sm font-medium text-indigo-600 hover:underline">
+              Back
+            </a>
+          )}
         </div>
-        {backHref && (
-          <a href={backHref} className="text-sm font-medium text-indigo-600 hover:underline">
-            Back
-          </a>
-        )}
-      </div>
+      )}
 
       {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        <aside className="rounded-lg border bg-white shadow-sm">
+        <aside className={`${embedded ? 'rounded-xl' : 'rounded-lg'} border bg-white shadow-sm`}>
           <div className="border-b px-4 py-3">
             <h2 className="text-sm font-semibold text-gray-900">Conversations</h2>
           </div>
@@ -174,7 +178,7 @@ export function PrivateMessageInbox({
                   type="button"
                   onClick={() => setSelectedUserId(conversation.participant.id)}
                   className={`block w-full px-4 py-3 text-left hover:bg-gray-50 ${
-                    selectedUserId === conversation.participant.id ? 'bg-indigo-50' : ''
+                    selectedUserId === conversation.participant.id ? 'bg-purple-50' : ''
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -183,7 +187,7 @@ export function PrivateMessageInbox({
                       <div className="text-xs text-gray-500">{conversation.participant.role}</div>
                     </div>
                     {conversation.unreadCount > 0 && (
-                      <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-xs font-semibold text-white">
+                      <span className="rounded-full bg-purple-700 px-2 py-0.5 text-xs font-semibold text-white">
                         {conversation.unreadCount}
                       </span>
                     )}
@@ -197,7 +201,7 @@ export function PrivateMessageInbox({
           )}
         </aside>
 
-        <section className="rounded-lg border bg-white shadow-sm">
+        <section className={`${embedded ? 'rounded-xl' : 'rounded-lg'} border bg-white shadow-sm`}>
           <div className="border-b px-4 py-3">
             <label className="block text-sm font-medium text-gray-700">Message recipient</label>
             <select
@@ -240,13 +244,13 @@ export function PrivateMessageInbox({
                       className={`max-w-[75%] rounded-lg px-4 py-3 text-sm ${
                         sentBySelectedUser
                           ? 'bg-gray-100 text-gray-900'
-                          : 'bg-indigo-600 text-white'
+                          : 'bg-purple-700 text-white'
                       }`}
                     >
                       <p className="whitespace-pre-wrap">{message.body}</p>
                       <p
                         className={`mt-2 text-xs ${
-                          sentBySelectedUser ? 'text-gray-500' : 'text-indigo-100'
+                          sentBySelectedUser ? 'text-gray-500' : 'text-purple-100'
                         }`}
                       >
                         {new Date(message.sentAt).toLocaleString()}
@@ -273,7 +277,7 @@ export function PrivateMessageInbox({
               <button
                 type="submit"
                 disabled={!selectedUserId || !body.trim() || sending}
-                className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded bg-purple-700 px-4 py-2 text-sm font-medium text-white hover:bg-purple-800 disabled:opacity-50"
               >
                 {sending ? 'Sending...' : 'Send Message'}
               </button>
@@ -281,6 +285,6 @@ export function PrivateMessageInbox({
           </form>
         </section>
       </div>
-    </main>
+    </div>
   );
 }

@@ -1,7 +1,8 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import type { ChangeEvent, ReactNode } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { PrivateMessageInbox } from './private-message-inbox';
 
 type DashboardMode = 'client' | 'advisor';
 type DashboardSection =
@@ -70,6 +71,7 @@ interface AdvisorProfile {
   id: string;
   displayName: string;
   bio?: string | null;
+  profileImageUrl?: string | null;
   ratePerMinute: number | string;
   isOnline: boolean;
 }
@@ -144,6 +146,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
   const [saving, setSaving] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [uploadingProfileImage, setUploadingProfileImage] = useState(false);
   const [accountName, setAccountName] = useState('');
   const [addressForm, setAddressForm] = useState(emptyAddress);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentMethod);
@@ -158,6 +161,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
 
   const isAdvisor = mode === 'advisor';
   const messagesHref = isAdvisor ? '/advisor/messages' : '/client/messages';
+  const profileImageInputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchDashboard = useCallback(async () => {
     setError('');
@@ -285,6 +289,38 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     );
   }
 
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
+    window.location.href = '/';
+  }
+
+  async function handleProfileImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !isAdvisor) return;
+    setUploadingProfileImage(true);
+    setError('');
+    setSuccess('');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/proxy/account/advisor-profile/image', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(body?.message ?? 'Profile image upload failed');
+      }
+      setSuccess('Profile image updated.');
+      await fetchDashboard();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Profile image upload failed');
+    } finally {
+      setUploadingProfileImage(false);
+    }
+  }
+
   if (!data) {
     return (
       <main className="mx-auto w-full max-w-7xl p-8">
@@ -297,6 +333,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
 
   const displayName = data.advisor?.profile.displayName || data.user.name;
   const roleLabel = isAdvisor ? 'Spiritual Advisor' : data.user.role === 'CLIENT' ? 'Client' : data.user.role;
+  const profileImageUrl = data.advisor?.profile.profileImageUrl ?? null;
   const walletValue = data.wallet.balanceMinutes === null ? 'Not set' : `${data.wallet.balanceMinutes} min`;
   const navItems: Array<{ id: DashboardSection; label: string; icon: string; badge?: number }> = [
     { id: 'messages', label: 'Messages', icon: 'fa-regular fa-comments', badge: data.messages.unreadCount },
@@ -333,17 +370,31 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
 
       <section className="mb-9 grid gap-5 lg:grid-cols-3">
         <TopCard className="items-center text-center">
-          <div className="grid h-32 w-32 place-items-center rounded-full bg-gradient-to-br from-purple-100 via-white to-purple-200 text-5xl font-bold text-purple-700">
-            {initials(displayName)}
-          </div>
+          {profileImageUrl ? (
+            <img src={profileImageUrl} alt={displayName} className="h-32 w-32 rounded-full object-cover" />
+          ) : (
+            <div className="grid h-32 w-32 place-items-center rounded-full bg-gradient-to-br from-purple-100 via-white to-purple-200 text-5xl font-bold text-purple-700">
+              {initials(displayName)}
+            </div>
+          )}
           <div>
             <h2 className="text-2xl font-bold text-gray-950">{displayName}</h2>
             <p className="mt-1 text-lg text-gray-600">{roleLabel}</p>
           </div>
-          <button className="mt-4 inline-flex items-center gap-3 rounded-lg border border-purple-500 px-8 py-3 font-semibold text-purple-700 hover:bg-purple-50">
-            <i className="fa-regular fa-image" />
-            Change Image
-          </button>
+          {isAdvisor && (
+            <>
+              <input ref={profileImageInputRef} type="file" accept="image/*" onChange={handleProfileImageChange} className="hidden" />
+              <button
+                type="button"
+                onClick={() => profileImageInputRef.current?.click()}
+                disabled={uploadingProfileImage}
+                className="mt-4 inline-flex items-center gap-3 rounded-lg border border-purple-500 px-8 py-3 font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-50"
+              >
+                <i className="fa-regular fa-image" />
+                {uploadingProfileImage ? 'Uploading...' : 'Change Image'}
+              </button>
+            </>
+          )}
         </TopCard>
 
         <TopCard className="items-center text-center">
@@ -382,6 +433,14 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                 onClick={() => setActiveSection(item.id)}
               />
             ))}
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="flex w-full items-center gap-4 rounded-lg px-4 py-4 text-left text-lg text-gray-700 transition hover:bg-gray-50"
+            >
+              <i className="fa-solid fa-arrow-right-from-bracket w-6 text-2xl text-gray-500" />
+              <span>Log Out</span>
+            </button>
           </div>
         </nav>
 
@@ -392,18 +451,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
           </div>
 
           {activeSection === 'messages' && (
-            <div className="flex min-h-[460px] flex-col items-center justify-center text-center">
-              <div className="relative mb-8 h-36 w-52">
-                <div className="absolute left-5 top-2 h-32 w-32 rounded-full bg-purple-100" />
-                <div className="absolute right-5 top-6 h-28 w-28 rounded-full bg-purple-700" />
-                <i className="fa-solid fa-comment-dots absolute left-12 top-8 text-7xl text-purple-200" />
-              </div>
-              <h3 className="text-3xl font-bold text-gray-950">Your messages will appear here</h3>
-              <p className="mt-4 max-w-sm text-lg text-gray-500">Open your inbox to select a conversation and view messages.</p>
-              <a href={messagesHref} className="mt-8 rounded-lg bg-purple-700 px-7 py-3 font-semibold text-white hover:bg-purple-800">
-                Open Messages
-              </a>
-            </div>
+            <PrivateMessageInbox title="Messages" description="Send and receive private messages." backHref={messagesHref} embedded />
           )}
 
           {activeSection === 'orders' && (

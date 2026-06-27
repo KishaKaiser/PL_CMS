@@ -52,6 +52,7 @@ export interface AdvisorProfileDto {
   userId: string;
   displayName: string;
   bio?: string;
+  profileImageUrl?: string | null;
   ratePerMinute: number;
   isOnline: boolean;
 }
