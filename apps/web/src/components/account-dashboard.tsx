@@ -273,50 +273,65 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
   }
 
   if (loading) {
-    return <main className="p-8 text-gray-500">Loading dashboard...</main>;
+    return (
+      <main className="mx-auto w-full max-w-7xl p-8">
+        <div className="rounded-2xl border bg-white p-8 text-gray-500 shadow-sm">Loading dashboard...</div>
+      </main>
+    );
   }
 
   if (!data) {
-    return <main className="p-8 text-red-600">{error || 'Dashboard unavailable.'}</main>;
+    return (
+      <main className="mx-auto w-full max-w-7xl p-8">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-red-700 shadow-sm">
+          {error || 'Dashboard unavailable.'}
+        </div>
+      </main>
+    );
   }
 
   return (
-    <main className="mx-auto max-w-7xl p-8">
-      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">
-            {isAdvisor ? 'Advisor Dashboard' : 'Client Dashboard'}
-          </h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Welcome back, {data.user.name}. Manage your account, wallet, orders, and messages.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <a
-            href={messagesHref}
-            className="rounded border px-4 py-2 text-sm font-medium hover:bg-gray-100"
-          >
-            Private Messages
-          </a>
-          <a
-            href="/shop"
-            className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
-            Add Money
-          </a>
+    <main className="mx-auto w-full max-w-7xl p-8">
+      <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-purple-700">
+              {isAdvisor ? 'Advisor workspace' : 'Client workspace'}
+            </p>
+            <h1 className="mt-2 text-3xl font-bold text-gray-950">
+              {isAdvisor ? 'Advisor Dashboard' : 'Client Dashboard'}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-gray-600">
+              Welcome back, {data.user.name}. Manage your account, wallet, orders, and messages.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <a
+              href={messagesHref}
+              className="rounded-lg border border-purple-200 px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50"
+            >
+              Private Messages ({data.messages.unreadCount})
+            </a>
+            <a
+              href="/shop"
+              className="rounded-lg bg-purple-700 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-800"
+            >
+              Add Money
+            </a>
+          </div>
         </div>
       </div>
 
-      {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
       {success && (
-        <p className="mb-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {success}
         </p>
       )}
 
-      <section className="mb-6 grid gap-4 md:grid-cols-4">
-        <SummaryStat label="Orders" value={data.orders.length.toString()} />
-        <SummaryStat label="Order Total" value={`$${orderTotal.toFixed(2)}`} />
+      <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryStat label="Orders" value={data.orders.length.toString()} detail="Lifetime orders" />
+        <SummaryStat label="Order Total" value={`$${orderTotal.toFixed(2)}`} detail="Total spent" />
         <SummaryStat
           label="Wallet Balance"
           value={
@@ -324,11 +339,12 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
               ? 'Not set'
               : `${data.wallet.balanceMinutes} min`
           }
+          detail="Available call time"
         />
-        <SummaryStat label="Unread Messages" value={data.messages.unreadCount.toString()} />
+        <SummaryStat label="Unread Messages" value={data.messages.unreadCount.toString()} detail="Private inbox" />
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
         <section className="space-y-6">
           <Panel title="Recent Orders" actionHref="/client/orders" actionLabel="View all">
             {data.orders.length === 0 ? (
@@ -336,7 +352,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
             ) : (
               <div className="divide-y">
                 {data.orders.slice(0, 5).map((order) => (
-                  <div key={order.id} className="py-3">
+                  <div key={order.id} className="py-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="font-mono text-xs text-gray-500">
@@ -347,7 +363,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+                        <span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-semibold text-purple-700">
                           {order.status}
                         </span>
                         <div className="mt-1 text-sm font-semibold">
@@ -376,18 +392,19 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                   type="checkbox"
                   checked={addressForm.isDefault}
                   onChange={(event) => setAddressForm((f) => ({ ...f, isDefault: event.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300 text-purple-700"
                 />
                 Default address
               </label>
               <div className="md:col-span-2">
-                <button disabled={saving === 'address'} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                <PrimaryButton disabled={saving === 'address'}>
                   Save Address
-                </button>
+                </PrimaryButton>
               </div>
             </form>
             <ListBlock>
               {data.addresses.map((address) => (
-                <div key={address.id} className="flex justify-between gap-3 py-3">
+                <div key={address.id} className="flex justify-between gap-3 py-4">
                   <div className="text-sm">
                     <div className="font-medium">
                       {address.label} {address.isDefault ? '(Default)' : ''}
@@ -405,6 +422,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                   </button>
                 </div>
               ))}
+              {data.addresses.length === 0 && <EmptyText text="No saved addresses yet." />}
             </ListBlock>
           </Panel>
 
@@ -415,7 +433,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
               ) : (
                 <div className="divide-y">
                   {data.advisor.callTransactions.map((call) => (
-                    <div key={call.id} className="flex justify-between gap-3 py-3 text-sm">
+                    <div key={call.id} className="flex justify-between gap-3 py-4 text-sm">
                       <div>
                         <div className="font-medium">
                           {call.client?.user?.name ?? 'Client call'}
@@ -442,21 +460,21 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
               <Input label="Name" value={accountName} onChange={setAccountName} required />
               <ReadOnly label="Email" value={data.user.email} />
               <ReadOnly label="Role" value={data.user.role} />
-              <button disabled={saving === 'account'} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+              <PrimaryButton disabled={saving === 'account'}>
                 Save Account
-              </button>
+              </PrimaryButton>
             </form>
           </Panel>
 
           <Panel title="Wallet">
-            <div className="mb-4 rounded-lg bg-gray-50 p-4">
+            <div className="mb-4 rounded-xl bg-purple-50 p-4">
               <div className="text-xs font-medium uppercase text-gray-500">Current balance</div>
-              <div className="mt-1 text-2xl font-semibold">
+              <div className="mt-1 text-2xl font-semibold text-gray-950">
                 {data.wallet.balanceMinutes === null
                   ? 'No wallet profile'
                   : `${data.wallet.balanceMinutes} minutes`}
               </div>
-              <a href="/shop" className="mt-3 inline-block text-sm font-medium text-indigo-600 hover:underline">
+              <a href="/shop" className="mt-3 inline-block text-sm font-semibold text-purple-700 hover:text-purple-800">
                 Add money to wallet
               </a>
             </div>
@@ -465,7 +483,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
             ) : (
               <div className="divide-y">
                 {data.wallet.transactions.map((transaction) => (
-                  <div key={transaction.id} className="flex justify-between gap-3 py-2 text-sm">
+                  <div key={transaction.id} className="flex justify-between gap-3 py-3 text-sm">
                     <div>
                       <div className="font-medium">{transaction.type}</div>
                       <div className="text-gray-500">{transaction.description ?? transaction.currency}</div>
@@ -493,16 +511,17 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                   type="checkbox"
                   checked={paymentForm.isDefault}
                   onChange={(event) => setPaymentForm((f) => ({ ...f, isDefault: event.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300 text-purple-700"
                 />
                 Default payment method
               </label>
-              <button disabled={saving === 'payment'} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+              <PrimaryButton disabled={saving === 'payment'}>
                 Save Payment Method
-              </button>
+              </PrimaryButton>
             </form>
             <ListBlock>
               {data.paymentMethods.map((method) => (
-                <div key={method.id} className="flex justify-between gap-3 py-3 text-sm">
+                <div key={method.id} className="flex justify-between gap-3 py-4 text-sm">
                   <div>
                     <div className="font-medium">
                       {method.label} {method.isDefault ? '(Default)' : ''}
@@ -521,6 +540,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                   </button>
                 </div>
               ))}
+              {data.paymentMethods.length === 0 && <EmptyText text="No payment methods saved yet." />}
             </ListBlock>
           </Panel>
 
@@ -536,7 +556,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                       value={advisorForm.bio}
                       onChange={(event) => setAdvisorForm((f) => ({ ...f, bio: event.target.value }))}
                       rows={4}
-                      className="mt-1 w-full rounded border border-gray-200 px-3 py-2 text-sm"
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
                     />
                   </label>
                   <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -544,12 +564,13 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                       type="checkbox"
                       checked={advisorForm.isOnline}
                       onChange={(event) => setAdvisorForm((f) => ({ ...f, isOnline: event.target.checked }))}
+                      className="h-4 w-4 rounded border-gray-300 text-purple-700"
                     />
                     Available online
                   </label>
-                  <button disabled={saving === 'advisor'} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                  <PrimaryButton disabled={saving === 'advisor'}>
                     Save Advisor Profile
-                  </button>
+                  </PrimaryButton>
                 </form>
               </Panel>
 
@@ -564,16 +585,17 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                       type="checkbox"
                       checked={payoutForm.isDefault}
                       onChange={(event) => setPayoutForm((f) => ({ ...f, isDefault: event.target.checked }))}
+                      className="h-4 w-4 rounded border-gray-300 text-purple-700"
                     />
                     Default payout method
                   </label>
-                  <button disabled={saving === 'payout'} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                  <PrimaryButton disabled={saving === 'payout'}>
                     Save Payout Method
-                  </button>
+                  </PrimaryButton>
                 </form>
                 <ListBlock>
                   {data.advisor.payoutMethods.map((method) => (
-                    <div key={method.id} className="flex justify-between gap-3 py-3 text-sm">
+                    <div key={method.id} className="flex justify-between gap-3 py-4 text-sm">
                       <div>
                         <div className="font-medium">
                           {method.label} {method.isDefault ? '(Default)' : ''}
@@ -591,6 +613,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                       </button>
                     </div>
                   ))}
+                  {data.advisor.payoutMethods.length === 0 && <EmptyText text="No payout methods saved yet." />}
                 </ListBlock>
               </Panel>
             </>
@@ -601,11 +624,12 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
   );
 }
 
-function SummaryStat({ label, value }: { label: string; value: string }) {
+function SummaryStat({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-lg border bg-white p-4 shadow-sm">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-gray-900">{value}</div>
+    <div className="rounded-2xl border bg-white p-5 shadow-sm">
+      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="mt-2 text-3xl font-bold text-gray-950">{value}</div>
+      <div className="mt-1 text-sm text-gray-500">{detail}</div>
     </div>
   );
 }
@@ -622,11 +646,11 @@ function Panel({
   actionLabel?: string;
 }) {
   return (
-    <section className="rounded-lg border bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <section className="rounded-2xl border bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
         <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
         {actionHref && actionLabel && (
-          <a href={actionHref} className="text-sm font-medium text-indigo-600 hover:underline">
+          <a href={actionHref} className="text-sm font-semibold text-purple-700 hover:text-purple-800">
             {actionLabel}
           </a>
         )}
@@ -657,7 +681,7 @@ function Input({
         required={required}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded border border-gray-200 px-3 py-2 text-sm"
+        className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
       />
     </label>
   );
@@ -667,7 +691,7 @@ function ReadOnly({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-sm font-medium text-gray-700">{label}</div>
-      <div className="mt-1 rounded border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+      <div className="mt-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
         {value}
       </div>
     </div>
@@ -675,9 +699,20 @@ function ReadOnly({ label, value }: { label: string; value: string }) {
 }
 
 function ListBlock({ children }: { children: ReactNode }) {
-  return <div className="mt-4 divide-y border-t">{children}</div>;
+  return <div className="mt-4 divide-y border-t border-gray-100">{children}</div>;
 }
 
 function EmptyText({ text }: { text: string }) {
-  return <p className="text-sm text-gray-500">{text}</p>;
+  return <p className="rounded-xl border border-dashed bg-gray-50 p-4 text-sm text-gray-500">{text}</p>;
+}
+
+function PrimaryButton({ children, disabled }: { children: ReactNode; disabled?: boolean }) {
+  return (
+    <button
+      disabled={disabled}
+      className="rounded-lg bg-purple-700 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-50"
+    >
+      {children}
+    </button>
+  );
 }
