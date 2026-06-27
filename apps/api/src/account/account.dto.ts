@@ -96,6 +96,11 @@ export class UpdateAdvisorProfileDto {
   bio?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  profileImageUrl?: string;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   ratePerMinute?: number;

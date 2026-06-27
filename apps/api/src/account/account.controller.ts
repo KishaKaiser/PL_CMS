@@ -7,9 +7,22 @@ import {
   Patch,
   Post,
   Request,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
+  UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { mkdirSync } from 'fs';
+import {
+  ALLOWED_MEDIA_MIME_TYPES,
+  MAX_MEDIA_FILE_SIZE,
+  generateMediaStorageKey,
+  getMediaUploadDirectory,
+  isImageMimeType,
+} from '../admin/admin-media/media.util';
 import {
   SaveAddressDto,
   SavePaymentMethodDto,
@@ -84,6 +97,36 @@ export class AccountController {
     @Body() dto: UpdateAdvisorProfileDto,
   ) {
     return this.accountService.updateAdvisorProfile(req.user.id, dto);
+  }
+
+  @Post('advisor-profile/image')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (_req: unknown, _file: unknown, callback: (error: Error | null, destination: string) => void) => {
+          const uploadDirectory = getMediaUploadDirectory();
+          mkdirSync(uploadDirectory, { recursive: true });
+          callback(null, uploadDirectory);
+        },
+        filename: (_req: unknown, file: { originalname: string }, callback: (error: Error | null, filename: string) => void) => {
+          callback(null, generateMediaStorageKey(file.originalname));
+        },
+      }),
+      fileFilter: (_req, file, callback) => {
+        if (!ALLOWED_MEDIA_MIME_TYPES.has(file.mimetype) || !isImageMimeType(file.mimetype)) {
+          callback(new UnsupportedMediaTypeException('Only JPG, PNG, GIF, and WEBP profile images are supported.'), false);
+          return;
+        }
+        callback(null, true);
+      },
+      limits: { fileSize: MAX_MEDIA_FILE_SIZE },
+    }),
+  )
+  uploadAdvisorProfileImage(
+    @Request() req: AuthenticatedRequest,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    return this.accountService.uploadAdvisorProfileImage(req.user.id, file);
   }
 
   @Post('payout-methods')

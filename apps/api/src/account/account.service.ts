@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { Prisma } from '@pl-cms/db';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
+import { deriveMediaTitle, serializeMediaAsset } from '../admin/admin-media/media.util';
 import {
   SaveAddressDto,
   SavePaymentMethodDto,
@@ -184,12 +185,34 @@ export class AccountService {
       data: {
         ...(dto.displayName !== undefined ? { displayName: dto.displayName.trim() } : {}),
         ...(dto.bio !== undefined ? { bio: dto.bio.trim() || null } : {}),
+        ...(dto.profileImageUrl !== undefined ? { profileImageUrl: dto.profileImageUrl.trim() || null } : {}),
         ...(dto.ratePerMinute !== undefined
           ? { ratePerMinute: new Decimal(dto.ratePerMinute) }
           : {}),
         ...(dto.isOnline !== undefined ? { isOnline: dto.isOnline } : {}),
       },
     });
+  }
+
+  async uploadAdvisorProfileImage(userId: string, file: Express.Multer.File | undefined) {
+    if (!file) throw new BadRequestException('Choose a profile image to upload.');
+    const advisor = await this.getAdvisorProfileForUser(userId);
+    const asset = await this.prisma.mediaAsset.create({
+      data: {
+        originalName: file.originalname,
+        storageKey: file.filename,
+        title: deriveMediaTitle(file.originalname),
+        altText: advisor.displayName,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+      },
+    });
+    const media = serializeMediaAsset(asset);
+    const profile = await this.prisma.advisorProfile.update({
+      where: { id: advisor.id },
+      data: { profileImageUrl: media.url },
+    });
+    return { profile, media };
   }
 
   async createPayoutMethod(userId: string, dto: SavePayoutMethodDto) {
