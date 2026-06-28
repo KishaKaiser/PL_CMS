@@ -11,8 +11,17 @@ export interface SliderLayer {
   y: number;
   width: number;
   fontSize: number;
+  fontFamily?: string;
   color: string;
   background: string;
+  borderColor?: string;
+  borderWidth?: number;
+  borderRadius?: number;
+  paddingX?: number;
+  paddingY?: number;
+  hoverBackground?: string;
+  hoverColor?: string;
+  buttonStyle?: 'solid' | 'outline';
 }
 
 export interface SliderSlide {
@@ -27,6 +36,7 @@ export interface SliderSlide {
 
 export interface SliderSettings {
   height: number;
+  width?: 'content' | 'wide' | 'full';
   autoPlay: boolean;
   slideSeconds: number;
   transition: string;
@@ -46,6 +56,13 @@ export function PublicSliderEmbed({ slug, slider: providedSlider }: { slug?: str
   const [slider, setSlider] = useState<CmsSlider | null>(providedSlider ?? null);
   const [loading, setLoading] = useState(Boolean(slug) && !providedSlider);
   const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    if (providedSlider) {
+      setSlider(providedSlider);
+      setActiveIndex((current) => Math.min(current, Math.max(0, (providedSlider.slides?.length ?? 1) - 1)));
+    }
+  }, [providedSlider]);
 
   useEffect(() => {
     async function loadSlider() {
@@ -79,7 +96,7 @@ export function PublicSliderEmbed({ slug, slider: providedSlider }: { slug?: str
   const activeSlide = slides[Math.min(activeIndex, slides.length - 1)];
 
   return (
-    <section className="relative mb-8 overflow-hidden bg-neutral-950" style={{ height: settings.height }}>
+    <section className={sliderWidthClass(settings.width)} style={{ height: settings.height }}>
       <SliderMedia slide={activeSlide} />
       <div className="absolute inset-0 bg-black/20" />
       {activeSlide.layers.map((layer) => (
@@ -120,11 +137,34 @@ function SliderLayerView({ layer }: { layer: SliderLayer }) {
     width: `${layer.width}%`,
     color: layer.color,
     fontSize: `${layer.fontSize}px`,
+    fontFamily: layer.fontFamily,
   };
 
   if (layer.type === 'button') {
+    const isOutline = layer.buttonStyle === 'outline';
     return (
-      <a href={layer.href || '#'} className="absolute z-10 inline-flex w-fit rounded px-5 py-3 font-semibold text-white shadow" style={{ ...style, background: layer.background }}>
+      <a
+        href={layer.href || '#'}
+        className="absolute z-10 inline-flex w-fit font-semibold shadow transition"
+        style={{
+          ...style,
+          background: isOutline ? 'transparent' : layer.background,
+          borderColor: layer.borderColor ?? layer.background,
+          borderStyle: 'solid',
+          borderWidth: `${layer.borderWidth ?? (isOutline ? 2 : 0)}px`,
+          borderRadius: `${layer.borderRadius ?? 8}px`,
+          color: isOutline ? (layer.borderColor ?? layer.color) : layer.color,
+          padding: `${layer.paddingY ?? 12}px ${layer.paddingX ?? 20}px`,
+        }}
+        onMouseEnter={(event) => {
+          if (layer.hoverBackground) event.currentTarget.style.background = layer.hoverBackground;
+          if (layer.hoverColor) event.currentTarget.style.color = layer.hoverColor;
+        }}
+        onMouseLeave={(event) => {
+          event.currentTarget.style.background = isOutline ? 'transparent' : layer.background;
+          event.currentTarget.style.color = isOutline ? (layer.borderColor ?? layer.color) : layer.color;
+        }}
+      >
         {layer.text}
       </a>
     );
@@ -140,10 +180,18 @@ function SliderLayerView({ layer }: { layer: SliderLayer }) {
 function normalizeSettings(settings?: Partial<SliderSettings>): SliderSettings {
   return {
     height: clampNumber(settings?.height, 180, 900, 480),
+    width: settings?.width === 'wide' || settings?.width === 'full' ? settings.width : 'content',
     autoPlay: settings?.autoPlay !== false,
     slideSeconds: clampNumber(settings?.slideSeconds, 2, 30, 5),
     transition: settings?.transition ?? 'slide',
   };
+}
+
+function sliderWidthClass(width?: SliderSettings['width']) {
+  const base = 'relative mb-8 overflow-hidden bg-neutral-950';
+  if (width === 'full') return `${base} left-1/2 w-screen -translate-x-1/2`;
+  if (width === 'wide') return `${base} mx-auto w-full max-w-[1680px]`;
+  return `${base} w-full`;
 }
 
 export function normalizeSlides(slides?: SliderSlide[]): SliderSlide[] {
@@ -165,8 +213,17 @@ export function normalizeSlides(slides?: SliderSlide[]): SliderSlide[] {
           y: clampNumber(layer.y, 0, 100, 35),
           width: clampNumber(layer.width, 10, 100, 36),
           fontSize: clampNumber(layer.fontSize, 10, 96, 32),
+          fontFamily: layer.fontFamily ?? '',
           color: layer.color ?? '#ffffff',
           background: layer.background ?? '#6f21b6',
+          borderColor: layer.borderColor ?? layer.background ?? '#6f21b6',
+          borderWidth: clampNumber(layer.borderWidth, 0, 12, 0),
+          borderRadius: clampNumber(layer.borderRadius, 0, 80, 8),
+          paddingX: clampNumber(layer.paddingX, 4, 80, 20),
+          paddingY: clampNumber(layer.paddingY, 4, 50, 12),
+          hoverBackground: layer.hoverBackground ?? '',
+          hoverColor: layer.hoverColor ?? '',
+          buttonStyle: layer.buttonStyle === 'outline' ? 'outline' : 'solid',
         }))
       : [],
   }));
