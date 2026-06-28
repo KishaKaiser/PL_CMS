@@ -28,6 +28,7 @@ type StoreData = {
   products: Product[];
   categories: Array<{ id: string; slug: string; name: string }>;
   tags: Array<{ id: string; slug: string; name: string }>;
+  primaryColor?: string;
 };
 
 type AccountLink = ReturnType<typeof getAccountLinkFromToken>;
@@ -69,7 +70,7 @@ export async function BuilderContent({
     getTags(),
     menus ? Promise.resolve(null) : getPublicSiteConfig(),
   ]);
-  const storeData = { products, categories, tags };
+  const storeData = { products, categories, tags, primaryColor: siteConfig?.theme.primaryColor };
   const resolvedMenus = menus ?? siteConfig?.menus ?? { header: [], footer: [], custom: [] };
 
   return (
@@ -267,23 +268,27 @@ function BuilderBlockView({ block, storeData, accountLink, menus }: { block: Bui
   if (block.type === 'product-grid') {
     const products = getProductWidgetItems(storeData.products, block);
     const title = String(block.props.title ?? '').trim();
+    const description = String(block.props.description ?? '').trim();
     return (
       <div className="mb-8">
         {title && <h2 className="mb-5 text-2xl font-semibold text-gray-950">{title}</h2>}
-        <ProductWidgetGrid products={products} />
+        {description && <p className="mb-5 max-w-3xl text-gray-600">{description}</p>}
+        <ProductWidgetGrid products={products} primaryColor={storeData.primaryColor} />
       </div>
     );
   }
   if (block.type === 'product-categories') {
+    const vertical = block.props.orientation === 'vertical';
     return (
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className={`mb-6 flex ${vertical ? 'flex-col items-start' : 'flex-wrap'} gap-2`}>
         {storeData.categories.map((category) => <span key={category.id} className="rounded-full border px-3 py-1 text-sm">{category.name}</span>)}
       </div>
     );
   }
   if (block.type === 'product-tags') {
+    const vertical = block.props.orientation === 'vertical';
     return (
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className={`mb-6 flex ${vertical ? 'flex-col items-start' : 'flex-wrap'} gap-2`}>
         {storeData.tags.map((tag) => <span key={tag.id} className="rounded bg-gray-100 px-3 py-1 text-sm">#{tag.name}</span>)}
       </div>
     );
@@ -344,9 +349,12 @@ function getProductWidgetItems(products: Product[], block: BuilderBlock): Produc
     id: product.id,
     name: product.name,
     price: product.price,
+    regularPrice: product.regularPrice,
+    salePrice: product.salePrice,
     currency: product.currency || 'USD',
     imageSrc: getProductImageSrc(product),
     imageAlt: product.featuredMedia?.altText || product.featuredMedia?.title || product.name,
+    isOnSale: isProductOnSale(product),
   }));
 }
 

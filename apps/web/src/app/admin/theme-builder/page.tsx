@@ -191,6 +191,20 @@ const defaultSocialIconLines = [
   'fa-brands fa-facebook-f|https://facebook.com|Facebook',
   'fa-brands fa-pinterest-p|https://pinterest.com|Pinterest',
 ];
+const fontLibrary = [
+  { label: 'Inter', value: 'Inter, Arial, sans-serif' },
+  { label: 'Arial', value: 'Arial, Helvetica, sans-serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
+  { label: 'Verdana', value: 'Verdana, Geneva, sans-serif' },
+  { label: 'Trebuchet MS', value: '"Trebuchet MS", Arial, sans-serif' },
+  { label: 'Courier New', value: '"Courier New", Courier, monospace' },
+  { label: 'Poppins', value: 'Poppins, Arial, sans-serif' },
+  { label: 'Montserrat', value: 'Montserrat, Arial, sans-serif' },
+  { label: 'Playfair Display', value: '"Playfair Display", Georgia, serif' },
+  { label: 'Lora', value: 'Lora, Georgia, serif' },
+  { label: 'Cormorant Garamond', value: '"Cormorant Garamond", Georgia, serif' },
+];
 
 async function readApiError(res: Response, fallback: string) {
   const payload = (await res.json().catch(() => null)) as { message?: string | string[]; error?: string } | null;
@@ -648,7 +662,13 @@ export default function ThemeBuilderPage() {
                 <label className="text-xs font-medium text-gray-600">Primary<input type="color" value={themeForm.primaryColor} onChange={(event) => setThemeForm((current) => ({ ...current, primaryColor: event.target.value }))} className="mt-1 h-10 w-full rounded border" /></label>
                 <label className="text-xs font-medium text-gray-600">Accent<input type="color" value={themeForm.accentColor} onChange={(event) => setThemeForm((current) => ({ ...current, accentColor: event.target.value }))} className="mt-1 h-10 w-full rounded border" /></label>
               </div>
-              <input value={themeForm.fontFamily} onChange={(event) => setThemeForm((current) => ({ ...current, fontFamily: event.target.value }))} placeholder="Font family" className="w-full rounded border px-3 py-2 text-sm" />
+              <label className="block text-xs font-medium text-gray-600">
+                Site Font
+                <select value={themeForm.fontFamily} onChange={(event) => setThemeForm((current) => ({ ...current, fontFamily: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+                  {!fontLibrary.some((font) => font.value === themeForm.fontFamily) && <option value={themeForm.fontFamily}>Custom font</option>}
+                  {fontLibrary.map((font) => <option key={font.value} value={font.value}>{font.label}</option>)}
+                </select>
+              </label>
               {activeTheme && (
                 <button type="button" onClick={() => void saveCurrentTarget()} className="w-full rounded bg-indigo-600 px-3 py-2 text-sm text-white hover:bg-indigo-700">
                   Save Active Theme
@@ -989,9 +1009,13 @@ function BlockEditor({
       {block.type === 'product-grid' && (
         <>
           <label className="block text-sm font-medium text-gray-700">Widget Title<input value={String(block.props.title ?? '')} onChange={(event) => onChange({ title: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Featured Products" /></label>
+          <label className="block text-sm font-medium text-gray-700">Widget Description<textarea value={String(block.props.description ?? '')} rows={3} onChange={(event) => onChange({ description: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Optional short introduction above the products." /></label>
           <label className="block text-sm font-medium text-gray-700">Product Filter<select value={String(block.props.filter ?? 'latest')} onChange={(event) => onChange({ filter: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="latest">Latest products</option><option value="sale">On sale</option><option value="top-sellers">Top sellers</option></select></label>
           <label className="block text-sm font-medium text-gray-700">Products to Show<input type="number" min="1" max="24" value={Number(block.props.limit ?? 3)} onChange={(event) => onChange({ limit: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
         </>
+      )}
+      {(block.type === 'product-categories' || block.type === 'product-tags') && (
+        <label className="block text-sm font-medium text-gray-700">Display Direction<select value={String(block.props.orientation ?? 'horizontal')} onChange={(event) => onChange({ orientation: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>
       )}
     </div>
   );
@@ -1369,37 +1393,56 @@ function PreviewBlock({
   if (block.type === 'product-grid') {
     const products = getProductPreviewItems(storePreview.products, block);
     const title = String(block.props.title ?? '').trim();
+    const description = String(block.props.description ?? '').trim();
     return (
       <div className="mb-8">
         {title && <h2 className="mb-5 text-2xl font-semibold text-gray-950">{title}</h2>}
+        {description && <p className="mb-5 max-w-3xl text-gray-600">{description}</p>}
         <div className="grid gap-4 md:grid-cols-3">
-          {products.map((product) => (
-            <div key={product.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
-              <div className="aspect-[4/3] bg-gray-100">
-                {product.imageSrc ? (
-                  <img src={product.imageSrc} alt={product.imageAlt} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-gray-400">No image</div>
-                )}
+          {products.map((product) => {
+            const regularPrice = Number(product.regularPrice);
+            const price = Number(product.price);
+            const showSalePrice = product.isOnSale && Number.isFinite(regularPrice) && regularPrice > price;
+            return (
+              <div key={product.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
+                <div className="aspect-[4/3] bg-gray-100">
+                  {product.imageSrc ? (
+                    <img src={product.imageSrc} alt={product.imageAlt} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-gray-400">No image</div>
+                  )}
+                </div>
+                <div className="p-4">
+                  <h3 className="font-semibold text-gray-950">{product.name}</h3>
+                  {showSalePrice ? (
+                    <div className="mt-3">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-sm text-gray-400 line-through">${regularPrice.toFixed(2)}</span>
+                        <span className="text-xl font-bold" style={{ color: theme.primaryColor }}>${price.toFixed(2)}</span>
+                      </div>
+                      <p className="mt-1 text-sm font-medium text-emerald-700">Save ${(regularPrice - price).toFixed(2)}</p>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xl font-bold" style={{ color: theme.primaryColor }}>${price.toFixed(2)}</p>
+                  )}
+                  <span className="mt-4 inline-block rounded px-4 py-2 text-sm font-medium text-white" style={{ backgroundColor: theme.primaryColor }}>
+                    Add to Cart
+                  </span>
+                </div>
               </div>
-              <div className="p-4">
-                <h3 className="font-semibold text-gray-950">{product.name}</h3>
-                <p className="mt-3 text-xl font-bold" style={{ color: theme.primaryColor }}>${Number(product.price).toFixed(2)}</p>
-                <span className="mt-4 inline-block rounded px-4 py-2 text-sm font-medium text-white" style={{ backgroundColor: theme.primaryColor }}>
-                  Add to Cart
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
   }
   if (block.type === 'product-categories') {
-    return <div className="mb-6 flex flex-wrap gap-2">{storePreview.categories.map((category) => <span key={category.id} className="rounded-full border px-3 py-1 text-sm">{category.name}</span>)}</div>;
+    const vertical = block.props.orientation === 'vertical';
+    return <div className={`mb-6 flex ${vertical ? 'flex-col items-start' : 'flex-wrap'} gap-2`}>{storePreview.categories.map((category) => <span key={category.id} className="rounded-full border px-3 py-1 text-sm">{category.name}</span>)}</div>;
   }
   if (block.type === 'product-tags') {
-    return <div className="mb-6 flex flex-wrap gap-2">{storePreview.tags.map((tag) => <span key={tag.id} className="rounded bg-gray-100 px-3 py-1 text-sm">#{tag.name}</span>)}</div>;
+    const vertical = block.props.orientation === 'vertical';
+    return <div className={`mb-6 flex ${vertical ? 'flex-col items-start' : 'flex-wrap'} gap-2`}>{storePreview.tags.map((tag) => <span key={tag.id} className="rounded bg-gray-100 px-3 py-1 text-sm">#{tag.name}</span>)}</div>;
   }
   if (block.type === 'global') {
     const component = components.find((item) => item.id === block.props.componentId);
@@ -1587,9 +1630,9 @@ function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlo
   if (type === 'menu') return { id, type, props: { title: '', menuId: 'header', orientation: 'horizontal', linksText: 'Home|/\nShop|/shop\nBlog|/blog' } };
   if (type === 'social-icons') return { id, type, props: { title: '', orientation: 'horizontal', size: 20, color: '#6f21b6', linksText: defaultSocialIconLines.join('\n') } };
   if (type === 'sidebar-widgets') return { id, type, props: { itemsText: 'Search\nCategories\nRecent posts' } };
-  if (type === 'product-grid') return { id, type, props: { title: 'Featured Products', filter: 'latest', limit: 3 } };
-  if (type === 'product-categories') return { id, type, props: {} };
-  if (type === 'product-tags') return { id, type, props: {} };
+  if (type === 'product-grid') return { id, type, props: { title: 'Featured Products', description: '', filter: 'latest', limit: 3 } };
+  if (type === 'product-categories') return { id, type, props: { orientation: 'horizontal' } };
+  if (type === 'product-tags') return { id, type, props: { orientation: 'horizontal' } };
   return { id, type: 'global', props: {} };
 }
 
@@ -1860,8 +1903,11 @@ function getProductPreviewItems(products: ProductPreview[], block: BuilderBlock)
     id: product.id,
     name: product.name,
     price: product.price,
+    regularPrice: product.regularPrice,
+    salePrice: product.salePrice,
     imageSrc: product.featuredMedia?.url || product.imageUrl || null,
     imageAlt: product.featuredMedia?.altText || product.featuredMedia?.title || product.name,
+    isOnSale: isProductOnSale(product),
   }));
 }
 

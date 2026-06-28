@@ -69,13 +69,13 @@ export function LoginForm() {
   return (
     <main className="min-h-[calc(100vh-96px)] bg-[radial-gradient(circle_at_top_left,#fff3dc_0,#fff7ed_26%,#faf5ff_72%,#ffffff_100%)] px-4 py-12 sm:px-8 lg:py-20">
       <section className="mx-auto grid w-full max-w-7xl overflow-hidden rounded-3xl bg-white shadow-2xl shadow-purple-950/10 lg:grid-cols-[1fr_1fr]">
-        <div className="relative hidden min-h-[620px] overflow-hidden bg-purple-100 lg:block">
+        <div className="relative hidden min-h-[620px] overflow-hidden bg-gradient-to-br from-[#443282] via-[#a893cc] to-[#f5a05d] lg:block">
           <img
-            src="/login/login.png"
+            src="/login/login-art.png"
             alt="Psychic advisor illustration"
-            className="absolute inset-y-0 left-0 h-full w-[200%] max-w-none object-cover object-left"
+            className="absolute inset-x-0 bottom-0 mx-auto h-[96%] w-auto max-w-full object-contain"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-purple-900/10 via-transparent to-orange-100/10" />
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-900/10 via-transparent to-orange-100/15" />
         </div>
 
         <div className="flex items-center justify-center px-6 py-10 sm:px-10 lg:px-16">

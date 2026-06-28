@@ -7,9 +7,12 @@ export interface ProductWidgetItem {
   id: string;
   name: string;
   price: string | number;
+  regularPrice?: string | number | null;
+  salePrice?: string | number | null;
   currency?: string;
   imageSrc?: string | null;
   imageAlt?: string | null;
+  isOnSale?: boolean;
 }
 
 interface Props {
@@ -23,6 +26,10 @@ export function ProductWidgetGrid({ products, primaryColor = '#6f21b6' }: Props)
       {products.map((product) => {
         const price = Number(product.price);
         const displayPrice = Number.isFinite(price) ? price : 0;
+        const regularPrice = Number(product.regularPrice);
+        const salePrice = Number(product.salePrice);
+        const showSalePrice = Boolean(product.isOnSale && Number.isFinite(regularPrice) && regularPrice > displayPrice);
+        const savings = showSalePrice ? regularPrice - displayPrice : 0;
         const currency = product.currency || 'USD';
 
         return (
@@ -45,11 +52,26 @@ export function ProductWidgetGrid({ products, primaryColor = '#6f21b6' }: Props)
               <Link href={`/shop/${product.id}`} className="text-lg font-semibold text-gray-950 hover:underline" style={{ textDecorationColor: primaryColor }}>
                 {product.name}
               </Link>
-              <div className="mt-3 flex items-baseline gap-1">
-                <span className="text-2xl font-bold" style={{ color: primaryColor }}>
-                  ${displayPrice.toFixed(2)}
-                </span>
-                <span className="text-sm text-gray-400">{currency}</span>
+              <div className="mt-3">
+                {showSalePrice ? (
+                  <div>
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-sm text-gray-400 line-through">${regularPrice.toFixed(2)}</span>
+                      <span className="text-2xl font-bold" style={{ color: primaryColor }}>
+                        ${(Number.isFinite(salePrice) ? salePrice : displayPrice).toFixed(2)}
+                      </span>
+                      <span className="text-sm text-gray-400">{currency}</span>
+                    </div>
+                    <p className="mt-1 text-sm font-medium text-emerald-700">Save ${savings.toFixed(2)}</p>
+                  </div>
+                ) : (
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-bold" style={{ color: primaryColor }}>
+                      ${displayPrice.toFixed(2)}
+                    </span>
+                    <span className="text-sm text-gray-400">{currency}</span>
+                  </div>
+                )}
               </div>
               <button
                 type="button"
