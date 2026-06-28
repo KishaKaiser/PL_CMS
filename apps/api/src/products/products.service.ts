@@ -179,6 +179,7 @@ const productInclude = {
   featuredMedia: true,
   categories: { orderBy: { name: 'asc' as const } },
   tags: { orderBy: { name: 'asc' as const } },
+  _count: { select: { orderItems: true } },
 };
 
 const activeProductInclude = {
@@ -334,6 +335,7 @@ function normalizeComment(value?: string) {
 
 function serializeProduct<
   T extends {
+    _count?: { orderItems?: number } | null;
     featuredMedia: {
       id: string;
       originalName: string;
@@ -348,6 +350,8 @@ function serializeProduct<
 >(product: T) {
   return {
     ...product,
+    orderCount: product._count?.orderItems ?? 0,
+    _count: undefined,
     featuredMedia: product.featuredMedia ? serializeMediaAsset(product.featuredMedia) : null,
   };
 }

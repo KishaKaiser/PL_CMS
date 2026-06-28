@@ -94,7 +94,14 @@ interface ProductPreview {
   name: string;
   description?: string;
   price: string | number;
+  regularPrice?: string | number | null;
+  salePrice?: string | number | null;
+  saleStartsAt?: string | null;
+  saleEndsAt?: string | null;
   currency?: string;
+  imageUrl?: string | null;
+  featuredMedia?: { url: string; altText?: string | null; title?: string | null } | null;
+  orderCount?: number;
 }
 
 interface TaxonomyPreview {
@@ -980,7 +987,11 @@ function BlockEditor({
         <label className="block text-sm font-medium text-gray-700">Widgets (one per line)<textarea value={String(block.props.itemsText ?? 'Search\\nCategories\\nRecent posts')} rows={4} onChange={(event) => onChange({ itemsText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
       )}
       {block.type === 'product-grid' && (
-        <label className="block text-sm font-medium text-gray-700">Products to Show<input type="number" min="1" max="12" value={Number(block.props.limit ?? 3)} onChange={(event) => onChange({ limit: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+        <>
+          <label className="block text-sm font-medium text-gray-700">Widget Title<input value={String(block.props.title ?? '')} onChange={(event) => onChange({ title: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Featured Products" /></label>
+          <label className="block text-sm font-medium text-gray-700">Product Filter<select value={String(block.props.filter ?? 'latest')} onChange={(event) => onChange({ filter: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="latest">Latest products</option><option value="sale">On sale</option><option value="top-sellers">Top sellers</option></select></label>
+          <label className="block text-sm font-medium text-gray-700">Products to Show<input type="number" min="1" max="24" value={Number(block.props.limit ?? 3)} onChange={(event) => onChange({ limit: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+        </>
       )}
     </div>
   );
@@ -1356,8 +1367,33 @@ function PreviewBlock({
     return <aside className="mb-6 rounded border bg-gray-50 p-4">{getLines(block.props.itemsText, ['Search', 'Categories', 'Recent posts']).map((item) => <div key={item} className="border-b py-2 text-sm last:border-b-0">{item}</div>)}</aside>;
   }
   if (block.type === 'product-grid') {
-    const products = storePreview.products.slice(0, Number(block.props.limit ?? 3));
-    return <div className="mb-6 grid gap-4 md:grid-cols-3">{products.map((product) => <div key={product.id} className="rounded border bg-white p-4 shadow-sm"><h3 className="font-semibold">{product.name}</h3><p className="mt-1 text-sm text-gray-500">{product.description}</p><p className="mt-3 text-xl font-bold" style={{ color: theme.primaryColor }}>${Number(product.price).toFixed(2)}</p></div>)}</div>;
+    const products = getProductPreviewItems(storePreview.products, block);
+    const title = String(block.props.title ?? '').trim();
+    return (
+      <div className="mb-8">
+        {title && <h2 className="mb-5 text-2xl font-semibold text-gray-950">{title}</h2>}
+        <div className="grid gap-4 md:grid-cols-3">
+          {products.map((product) => (
+            <div key={product.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
+              <div className="aspect-[4/3] bg-gray-100">
+                {product.imageSrc ? (
+                  <img src={product.imageSrc} alt={product.imageAlt} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-gray-400">No image</div>
+                )}
+              </div>
+              <div className="p-4">
+                <h3 className="font-semibold text-gray-950">{product.name}</h3>
+                <p className="mt-3 text-xl font-bold" style={{ color: theme.primaryColor }}>${Number(product.price).toFixed(2)}</p>
+                <span className="mt-4 inline-block rounded px-4 py-2 text-sm font-medium text-white" style={{ backgroundColor: theme.primaryColor }}>
+                  Add to Cart
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
   if (block.type === 'product-categories') {
     return <div className="mb-6 flex flex-wrap gap-2">{storePreview.categories.map((category) => <span key={category.id} className="rounded-full border px-3 py-1 text-sm">{category.name}</span>)}</div>;
@@ -1551,7 +1587,7 @@ function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlo
   if (type === 'menu') return { id, type, props: { title: '', menuId: 'header', orientation: 'horizontal', linksText: 'Home|/\nShop|/shop\nBlog|/blog' } };
   if (type === 'social-icons') return { id, type, props: { title: '', orientation: 'horizontal', size: 20, color: '#6f21b6', linksText: defaultSocialIconLines.join('\n') } };
   if (type === 'sidebar-widgets') return { id, type, props: { itemsText: 'Search\nCategories\nRecent posts' } };
-  if (type === 'product-grid') return { id, type, props: { limit: 3 } };
+  if (type === 'product-grid') return { id, type, props: { title: 'Featured Products', filter: 'latest', limit: 3 } };
   if (type === 'product-categories') return { id, type, props: {} };
   if (type === 'product-tags') return { id, type, props: {} };
   return { id, type: 'global', props: {} };
@@ -1807,6 +1843,34 @@ function pageShellClass(layout?: string) {
   if (layout === 'sidebar-left') return 'mx-auto grid max-w-6xl gap-6 p-6 lg:grid-cols-[260px_minmax(0,1fr)]';
   if (layout === 'sidebar-right') return 'mx-auto grid max-w-6xl gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_260px]';
   return 'mx-auto max-w-5xl';
+}
+
+function getProductPreviewItems(products: ProductPreview[], block: BuilderBlock) {
+  const limit = Math.min(24, Math.max(1, Number(block.props.limit ?? 3) || 3));
+  const filter = String(block.props.filter ?? 'latest');
+  let filtered = [...products];
+
+  if (filter === 'sale') {
+    filtered = filtered.filter(isProductOnSale);
+  } else if (filter === 'top-sellers') {
+    filtered.sort((a, b) => Number(b.orderCount ?? 0) - Number(a.orderCount ?? 0));
+  }
+
+  return filtered.slice(0, limit).map((product) => ({
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    imageSrc: product.featuredMedia?.url || product.imageUrl || null,
+    imageAlt: product.featuredMedia?.altText || product.featuredMedia?.title || product.name,
+  }));
+}
+
+function isProductOnSale(product: ProductPreview) {
+  if (product.salePrice == null) return false;
+  const now = Date.now();
+  const startsAt = product.saleStartsAt ? new Date(product.saleStartsAt).getTime() : null;
+  const endsAt = product.saleEndsAt ? new Date(product.saleEndsAt).getTime() : null;
+  return (startsAt == null || startsAt <= now) && (endsAt == null || endsAt >= now);
 }
 
 function PreviewSidebar() {
