@@ -7,13 +7,21 @@ import { PublicSliderEmbed } from './public-slider-embed';
 import { AnnouncementBar, StorefrontHeader } from './storefront-header';
 import { fetchApi } from '../../lib/server-api';
 import { getAccountLinkFromToken } from '../../lib/account-routing';
+import { ProductWidgetGrid, type ProductWidgetItem } from './product-widget-grid';
 
 interface Product {
   id: string;
   name: string;
   description?: string;
   price: string | number;
+  regularPrice?: string | number | null;
+  salePrice?: string | number | null;
+  saleStartsAt?: string | Date | null;
+  saleEndsAt?: string | Date | null;
   currency?: string;
+  imageUrl?: string | null;
+  featuredMedia?: { url: string; altText?: string | null; title?: string | null } | null;
+  orderCount?: number;
 }
 
 type StoreData = {
@@ -257,16 +265,12 @@ function BuilderBlockView({ block, storeData, accountLink, menus }: { block: Bui
     );
   }
   if (block.type === 'product-grid') {
-    const products = storeData.products.slice(0, Number(block.props.limit ?? 3));
+    const products = getProductWidgetItems(storeData.products, block);
+    const title = String(block.props.title ?? '').trim();
     return (
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        {products.map((product) => (
-          <Link key={product.id} href={`/shop/${product.id}`} className="rounded border bg-white p-4 shadow-sm hover:shadow">
-            <h3 className="font-semibold">{product.name}</h3>
-            {product.description && <p className="mt-1 text-sm text-gray-500">{product.description}</p>}
-            <p className="mt-3 text-xl font-bold text-purple-700">${Number(product.price).toFixed(2)}</p>
-          </Link>
-        ))}
+      <div className="mb-8">
+        {title && <h2 className="mb-5 text-2xl font-semibold text-gray-950">{title}</h2>}
+        <ProductWidgetGrid products={products} />
       </div>
     );
   }
@@ -323,6 +327,39 @@ function StoreHeaderView({ block, accountLink }: { block: BuilderBlock; accountL
       stickyMain={!(block.props.stickyMain === false && block.props.stickyMainTouched === true)}
     />
   );
+}
+
+function getProductWidgetItems(products: Product[], block: BuilderBlock): ProductWidgetItem[] {
+  const limit = Math.min(24, Math.max(1, Number(block.props.limit ?? 3) || 3));
+  const filter = String(block.props.filter ?? 'latest');
+  let filtered = [...products];
+
+  if (filter === 'sale') {
+    filtered = filtered.filter(isProductOnSale);
+  } else if (filter === 'top-sellers') {
+    filtered.sort((a, b) => Number(b.orderCount ?? 0) - Number(a.orderCount ?? 0));
+  }
+
+  return filtered.slice(0, limit).map((product) => ({
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    currency: product.currency || 'USD',
+    imageSrc: getProductImageSrc(product),
+    imageAlt: product.featuredMedia?.altText || product.featuredMedia?.title || product.name,
+  }));
+}
+
+function isProductOnSale(product: Product) {
+  if (product.salePrice == null) return false;
+  const now = Date.now();
+  const startsAt = product.saleStartsAt ? new Date(product.saleStartsAt).getTime() : null;
+  const endsAt = product.saleEndsAt ? new Date(product.saleEndsAt).getTime() : null;
+  return (startsAt == null || startsAt <= now) && (endsAt == null || endsAt >= now);
+}
+
+function getProductImageSrc(product: Product) {
+  return product.featuredMedia?.url || product.imageUrl || null;
 }
 
 function isLoginActionLink(link: { href: string; label: string; iconClass: string }) {
