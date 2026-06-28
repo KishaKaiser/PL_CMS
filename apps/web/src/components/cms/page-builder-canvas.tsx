@@ -178,9 +178,9 @@ export function createBlock(type: BuilderBlockType, widget?: BuilderWidget): Bui
   if (type === 'menu') return { id, type, props: { source: 'header', orientation: 'horizontal', placement: 'header', linksText: 'Home|/\nShop|/shop\nBlog|/blog' } };
   if (type === 'sidebar-widgets') return { id, type, props: { itemsText: 'Search\nCategories\nRecent posts' } };
   if (type === 'saved-form') return { id, type, props: { formId: '', formSlug: '', formTitle: '', displayTitle: true } };
-  if (type === 'product-grid') return { id, type, props: { title: 'Featured Products', filter: 'latest', limit: 3 } };
-  if (type === 'product-categories') return { id, type, props: {} };
-  if (type === 'product-tags') return { id, type, props: {} };
+  if (type === 'product-grid') return { id, type, props: { title: 'Featured Products', description: '', filter: 'latest', limit: 3 } };
+  if (type === 'product-categories') return { id, type, props: { orientation: 'horizontal' } };
+  if (type === 'product-tags') return { id, type, props: { orientation: 'horizontal' } };
   return { id, type: 'global', props: {} };
 }
 
@@ -259,8 +259,11 @@ function getProductPreviewItems(products: ProductPreview[], block: BuilderBlock)
     id: product.id,
     name: product.name,
     price: product.price,
+    regularPrice: product.regularPrice,
+    salePrice: product.salePrice,
     imageSrc: product.featuredMedia?.url || product.imageUrl || null,
     imageAlt: product.featuredMedia?.altText || product.featuredMedia?.title || product.name,
+    isOnSale: isProductOnSale(product),
   }));
 }
 
@@ -621,37 +624,56 @@ export function PreviewBlock({
   if (block.type === 'product-grid') {
     const products = getProductPreviewItems(storePreview.products, block);
     const title = String(block.props.title ?? '').trim();
+    const description = String(block.props.description ?? '').trim();
     return (
       <div className="mb-8">
         {title && <h2 className="mb-5 text-2xl font-semibold text-gray-950">{title}</h2>}
+        {description && <p className="mb-5 max-w-3xl text-gray-600">{description}</p>}
         <div className="grid gap-4 md:grid-cols-3">
-          {products.map((product) => (
-            <div key={product.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
-              <div className="aspect-[4/3] bg-gray-100">
-                {product.imageSrc ? (
-                  <img src={product.imageSrc} alt={product.imageAlt} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-gray-400">No image</div>
-                )}
+          {products.map((product) => {
+            const regularPrice = Number(product.regularPrice);
+            const price = Number(product.price);
+            const showSalePrice = product.isOnSale && Number.isFinite(regularPrice) && regularPrice > price;
+            return (
+              <div key={product.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
+                <div className="aspect-[4/3] bg-gray-100">
+                  {product.imageSrc ? (
+                    <img src={product.imageSrc} alt={product.imageAlt} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-gray-400">No image</div>
+                  )}
+                </div>
+                <div className="p-4">
+                  <h3 className="font-semibold text-gray-950">{product.name}</h3>
+                  {showSalePrice ? (
+                    <div className="mt-3">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-sm text-gray-400 line-through">${regularPrice.toFixed(2)}</span>
+                        <span className="text-xl font-bold" style={{ color: theme.primaryColor }}>${price.toFixed(2)}</span>
+                      </div>
+                      <p className="mt-1 text-sm font-medium text-emerald-700">Save ${(regularPrice - price).toFixed(2)}</p>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xl font-bold" style={{ color: theme.primaryColor }}>${price.toFixed(2)}</p>
+                  )}
+                  <span className="mt-4 inline-block rounded px-4 py-2 text-sm font-medium text-white" style={{ backgroundColor: theme.primaryColor }}>
+                    Add to Cart
+                  </span>
+                </div>
               </div>
-              <div className="p-4">
-                <h3 className="font-semibold text-gray-950">{product.name}</h3>
-                <p className="mt-3 text-xl font-bold" style={{ color: theme.primaryColor }}>${Number(product.price).toFixed(2)}</p>
-                <span className="mt-4 inline-block rounded px-4 py-2 text-sm font-medium text-white" style={{ backgroundColor: theme.primaryColor }}>
-                  Add to Cart
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
   }
   if (block.type === 'product-categories') {
-    return <div className="mb-6 flex flex-wrap gap-2">{storePreview.categories.map((category) => <span key={category.id} className="rounded-full border px-3 py-1 text-sm">{category.name}</span>)}</div>;
+    const vertical = block.props.orientation === 'vertical';
+    return <div className={`mb-6 flex ${vertical ? 'flex-col items-start' : 'flex-wrap'} gap-2`}>{storePreview.categories.map((category) => <span key={category.id} className="rounded-full border px-3 py-1 text-sm">{category.name}</span>)}</div>;
   }
   if (block.type === 'product-tags') {
-    return <div className="mb-6 flex flex-wrap gap-2">{storePreview.tags.map((tag) => <span key={tag.id} className="rounded bg-gray-100 px-3 py-1 text-sm">#{tag.name}</span>)}</div>;
+    const vertical = block.props.orientation === 'vertical';
+    return <div className={`mb-6 flex ${vertical ? 'flex-col items-start' : 'flex-wrap'} gap-2`}>{storePreview.tags.map((tag) => <span key={tag.id} className="rounded bg-gray-100 px-3 py-1 text-sm">#{tag.name}</span>)}</div>;
   }
   if (block.type === 'global') {
     const component = components.find((item) => item.id === block.props.componentId);
@@ -1181,9 +1203,13 @@ export function BlockEditor({
       {block.type === 'product-grid' && (
         <>
           <label className="block text-sm font-medium text-gray-700">Widget Title<input value={String(block.props.title ?? '')} onChange={(event) => onChange({ title: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Featured Products" /></label>
+          <label className="block text-sm font-medium text-gray-700">Widget Description<textarea value={String(block.props.description ?? '')} rows={3} onChange={(event) => onChange({ description: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Optional short introduction above the products." /></label>
           <label className="block text-sm font-medium text-gray-700">Product Filter<select value={String(block.props.filter ?? 'latest')} onChange={(event) => onChange({ filter: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="latest">Latest products</option><option value="sale">On sale</option><option value="top-sellers">Top sellers</option></select></label>
           <label className="block text-sm font-medium text-gray-700">Products to Show<input type="number" min="1" max="24" value={Number(block.props.limit ?? 3)} onChange={(event) => onChange({ limit: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
         </>
+      )}
+      {(block.type === 'product-categories' || block.type === 'product-tags') && (
+        <label className="block text-sm font-medium text-gray-700">Display Direction<select value={String(block.props.orientation ?? 'horizontal')} onChange={(event) => onChange({ orientation: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>
       )}
       {block.type === 'saved-form' && (
         <>

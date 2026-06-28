@@ -68,6 +68,7 @@ interface ThemeSectionForm {
 interface SiteThemeForm {
   primaryColor: string;
   accentColor: string;
+  fontFamily: string;
   heroTitle: string;
   heroBody: string;
   heroPrimaryLabel: string;
@@ -123,6 +124,20 @@ const defaultPostsPageForm: SitePostsPageForm = {
 const defaultThemeForm: SiteThemeForm = {
   ...DEFAULT_SITE_THEME,
 };
+const fontLibrary = [
+  { label: 'Inter', value: 'Inter, Arial, sans-serif' },
+  { label: 'Arial', value: 'Arial, Helvetica, sans-serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
+  { label: 'Verdana', value: 'Verdana, Geneva, sans-serif' },
+  { label: 'Trebuchet MS', value: '"Trebuchet MS", Arial, sans-serif' },
+  { label: 'Courier New', value: '"Courier New", Courier, monospace' },
+  { label: 'Poppins', value: 'Poppins, Arial, sans-serif' },
+  { label: 'Montserrat', value: 'Montserrat, Arial, sans-serif' },
+  { label: 'Playfair Display', value: '"Playfair Display", Georgia, serif' },
+  { label: 'Lora', value: 'Lora, Georgia, serif' },
+  { label: 'Cormorant Garamond', value: '"Cormorant Garamond", Georgia, serif' },
+];
 
 const defaultHomepageBlocks = buildDefaultHomepageBlocks('/blog');
 
@@ -210,6 +225,7 @@ export default function AdminSettingsPage() {
     setThemeForm({
       primaryColor: readString(theme?.primaryColor, defaultThemeForm.primaryColor),
       accentColor: readString(theme?.accentColor, defaultThemeForm.accentColor),
+      fontFamily: readString(theme?.fontFamily, defaultThemeForm.fontFamily),
       heroTitle: readString(theme?.heroTitle, defaultThemeForm.heroTitle),
       heroBody: readString(theme?.heroBody, defaultThemeForm.heroBody),
       heroPrimaryLabel: readString(theme?.heroPrimaryLabel, defaultThemeForm.heroPrimaryLabel),
@@ -657,6 +673,21 @@ export default function AdminSettingsPage() {
                 onChange={(event) => setThemeForm((currentForm) => ({ ...currentForm, accentColor: event.target.value }))}
                 className="mt-1 h-11 w-full rounded border px-2 py-1"
               />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700">Site font</label>
+              <select
+                value={themeForm.fontFamily}
+                onChange={(event) => setThemeForm((currentForm) => ({ ...currentForm, fontFamily: event.target.value }))}
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              >
+                {!fontLibrary.some((font) => font.value === themeForm.fontFamily) && <option value={themeForm.fontFamily}>Custom font</option>}
+                {fontLibrary.map((font) => (
+                  <option key={font.value} value={font.value}>
+                    {font.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Hero title</label>
