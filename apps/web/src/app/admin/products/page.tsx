@@ -1,7 +1,7 @@
 'use client';
 
 import type { ChangeEvent, InputHTMLAttributes } from 'react';
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 interface Inventory {
   onHand: number;
@@ -104,6 +104,12 @@ export default function AdminProductsPage() {
   const [variantForms, setVariantForms] = useState<Record<string, typeof emptyVariantForm>>({});
   const [variantErrors, setVariantErrors] = useState<Record<string, string>>({});
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+  const [filters, setFilters] = useState({
+    search: '',
+    categoryId: '',
+    stockStatus: '',
+    status: '',
+  });
 
   const imageMedia = useMemo(
     () => mediaAssets.filter((asset) => asset.isImage),
@@ -114,6 +120,24 @@ export default function AdminProductsPage() {
     () => imageMedia.find((asset) => asset.id === form.featuredMediaId),
     [form.featuredMediaId, imageMedia],
   );
+
+  const filteredProducts = useMemo(() => {
+    const query = filters.search.trim().toLowerCase();
+    return products.filter((product) => {
+      const matchesSearch =
+        !query ||
+        product.name.toLowerCase().includes(query) ||
+        product.categories.some((category) => category.name.toLowerCase().includes(query)) ||
+        product.tags.some((tag) => tag.name.toLowerCase().includes(query));
+      const matchesCategory = !filters.categoryId || product.categories.some((category) => category.id === filters.categoryId);
+      const matchesStock = !filters.stockStatus || product.stockStatus === filters.stockStatus;
+      const matchesStatus =
+        !filters.status ||
+        (filters.status === 'active' && product.isActive) ||
+        (filters.status === 'inactive' && !product.isActive);
+      return matchesSearch && matchesCategory && matchesStock && matchesStatus;
+    });
+  }, [filters, products]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -387,6 +411,44 @@ export default function AdminProductsPage() {
       {error && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
       {importStatus && <p className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{importStatus}</p>}
 
+      <section className="mb-6 rounded-lg border bg-white p-4 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_160px_150px]">
+          <label className="block text-sm font-medium text-gray-700">
+            Search products
+            <input
+              value={filters.search}
+              onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              placeholder="Search by product, category, or tag"
+            />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            Category
+            <select value={filters.categoryId} onChange={(event) => setFilters((current) => ({ ...current, categoryId: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+              <option value="">All categories</option>
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            </select>
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            Stock
+            <select value={filters.stockStatus} onChange={(event) => setFilters((current) => ({ ...current, stockStatus: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+              <option value="">All stock</option>
+              <option value="IN_STOCK">In stock</option>
+              <option value="OUT_OF_STOCK">Out of stock</option>
+              <option value="BACKORDER">Backorder</option>
+            </select>
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            Status
+            <select value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+              <option value="">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
       {showEditor && (
         <section className="mb-8 rounded-lg border bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -604,7 +666,7 @@ export default function AdminProductsPage() {
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-xl font-semibold">All Products</h2>
-          <span className="text-sm text-gray-500">{products.length} total</span>
+          <span className="text-sm text-gray-500">{filteredProducts.length} of {products.length} total</span>
         </div>
 
         {loading ? (
@@ -621,14 +683,26 @@ export default function AdminProductsPage() {
             </button>
           </div>
         ) : (
-          <div className="space-y-4">
-            {products.map((product) => {
+          <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">Product</th>
+                  <th className="px-4 py-3 font-semibold">Stock</th>
+                  <th className="px-4 py-3 font-semibold">Price</th>
+                  <th className="px-4 py-3 font-semibold">Category</th>
+                  <th className="px-4 py-3 text-right font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+            {filteredProducts.map((product) => {
               const imageUrl = product.featuredMedia?.url ?? product.imageUrl;
               return (
-                <div key={product.id} className="rounded-lg border bg-white shadow-sm">
-                  <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
-                    <div className="flex gap-4">
-                      <div className="h-20 w-20 shrink-0 overflow-hidden rounded border bg-gray-50">
+                <Fragment key={product.id}>
+                <tr className="align-middle hover:bg-gray-50">
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded border bg-gray-50">
                         {imageUrl ? (
                           <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
                         ) : (
@@ -647,35 +721,30 @@ export default function AdminProductsPage() {
                         >
                           {product.name}
                         </button>
-                        <div className="mt-1 flex flex-wrap gap-2 text-sm text-gray-600">
-                          <span>${Number(product.regularPrice ?? product.price).toFixed(2)}</span>
-                          {product.salePrice != null && (
-                            <span className="text-red-600">
-                              Sale ${Number(product.salePrice).toFixed(2)}
-                            </span>
-                          )}
-                          <span>{product.stockStatus.replaceAll('_', ' ')}</span>
-                          {product.trackStock && <span>{product.stockQuantity ?? 0} in stock</span>}
+                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
                           <span>{product.variants.length} variant{product.variants.length === 1 ? '' : 's'}</span>
-                        </div>
-                        {product.shortDescription && (
-                          <p className="mt-2 max-w-2xl text-sm text-gray-500">{product.shortDescription}</p>
-                        )}
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {product.categories.map((category) => (
-                            <span key={category.id} className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">
-                              {category.name}
-                            </span>
-                          ))}
-                          {product.tags.map((tag) => (
-                            <span key={tag.id} className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-600">
-                              {tag.name}
-                            </span>
-                          ))}
+                          {!product.isActive && <span className="text-red-600">Inactive</span>}
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className={stockBadgeClass(product.stockStatus)}>{product.stockStatus.replaceAll('_', ' ')}</span>
+                    <p className="mt-1 text-xs text-gray-500">{product.trackStock ? `${product.stockQuantity ?? 0} available` : 'Not tracked'}</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className="font-semibold text-gray-900">${Number(product.regularPrice ?? product.price).toFixed(2)}</span>
+                    {product.salePrice != null && <p className="text-xs text-red-600">Sale ${Number(product.salePrice).toFixed(2)}</p>}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-wrap gap-1.5">
+                      {product.categories.length > 0 ? product.categories.map((category) => (
+                        <span key={category.id} className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">{category.name}</span>
+                      )) : <span className="text-xs text-gray-400">No category</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    <div className="inline-flex flex-wrap justify-end gap-2">
                       <button
                         type="button"
                         onClick={() => openEditForm(product)}
@@ -691,9 +760,11 @@ export default function AdminProductsPage() {
                         Delete
                       </button>
                     </div>
-                  </div>
-
+                  </td>
+                </tr>
                   {expandedProductId === product.id && (
+                    <tr>
+                      <td colSpan={5} className="bg-gray-50 p-0">
                     <VariantPanel
                       product={product}
                       variantForm={variantForms[product.id] ?? emptyVariantForm}
@@ -704,15 +775,26 @@ export default function AdminProductsPage() {
                       onAdd={() => handleAddVariant(product.id)}
                       onDelete={(variantId) => handleDeleteVariant(product.id, variantId)}
                     />
+                      </td>
+                    </tr>
                   )}
-                </div>
+                </Fragment>
               );
             })}
+              </tbody>
+            </table>
+            {filteredProducts.length === 0 && <p className="p-6 text-center text-sm text-gray-500">No products match these filters.</p>}
           </div>
         )}
       </section>
     </main>
   );
+}
+
+function stockBadgeClass(status: string) {
+  if (status === 'OUT_OF_STOCK') return 'rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700';
+  if (status === 'BACKORDER') return 'rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700';
+  return 'rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700';
 }
 
 function buildProductPayload(form: typeof emptyProductForm, clearBlankValues: boolean) {

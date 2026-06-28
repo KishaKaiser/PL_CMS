@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MediaAsset } from '../../../components/admin/media-library';
-import { PublicSliderEmbed, type CmsSlider, type SliderLayer, type SliderSlide } from '../../../components/cms/public-slider-embed';
+import type { CmsSlider, SliderLayer, SliderSlide } from '../../../components/cms/public-slider-embed';
 
 type SliderStatus = 'DRAFT' | 'PUBLISHED';
 
@@ -17,6 +17,16 @@ const emptySlide: SliderSlide = {
     { id: 'layer-2', type: 'button', text: 'Learn More', href: '#', x: 12, y: 58, width: 20, fontSize: 16, color: '#ffffff', background: '#6f21b6' },
   ],
 };
+const fontLibrary = [
+  { label: 'Inter', value: 'Inter, Arial, sans-serif' },
+  { label: 'Arial', value: 'Arial, Helvetica, sans-serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Poppins', value: 'Poppins, Arial, sans-serif' },
+  { label: 'Montserrat', value: 'Montserrat, Arial, sans-serif' },
+  { label: 'Playfair Display', value: '"Playfair Display", Georgia, serif' },
+  { label: 'Lora', value: 'Lora, Georgia, serif' },
+  { label: 'Cormorant Garamond', value: '"Cormorant Garamond", Georgia, serif' },
+];
 
 const emptySlider: Omit<CmsSlider, 'id'> = {
   slug: '',
@@ -24,7 +34,7 @@ const emptySlider: Omit<CmsSlider, 'id'> = {
   description: '',
   status: 'DRAFT',
   slides: [emptySlide],
-  settings: { height: 480, autoPlay: true, slideSeconds: 5, transition: 'slide' },
+  settings: { height: 480, width: 'content', autoPlay: true, slideSeconds: 5, transition: 'slide' },
 };
 
 export default function AdminSlidersPage() {
@@ -71,7 +81,7 @@ export default function AdminSlidersPage() {
       description: selectedSlider.description ?? '',
       status: (selectedSlider.status as SliderStatus) ?? 'DRAFT',
       slides: selectedSlider.slides?.length ? selectedSlider.slides : [emptySlide],
-      settings: { ...{ height: 480, autoPlay: true, slideSeconds: 5, transition: 'slide' }, ...selectedSlider.settings },
+      settings: { ...{ height: 480, width: 'content' as const, autoPlay: true, slideSeconds: 5, transition: 'slide' }, ...selectedSlider.settings },
     });
     setActiveSlideIndex(0);
   }, [selectedSlider]);
@@ -162,6 +172,15 @@ export default function AdminSlidersPage() {
       fontSize: type === 'button' ? 16 : 36,
       color: '#ffffff',
       background: type === 'button' ? '#6f21b6' : 'transparent',
+      borderColor: '#6f21b6',
+      borderRadius: type === 'button' ? 8 : 0,
+      borderWidth: type === 'button' ? 0 : 0,
+      paddingX: type === 'button' ? 20 : 0,
+      paddingY: type === 'button' ? 12 : 0,
+      buttonStyle: 'solid',
+      hoverBackground: type === 'button' ? '#5b1a93' : '',
+      hoverColor: '#ffffff',
+      fontFamily: 'Inter, Arial, sans-serif',
     };
     updateSlide(activeSlideIndex, { layers: [...(slider.slides[activeSlideIndex]?.layers ?? []), layer] });
   }
@@ -223,6 +242,7 @@ export default function AdminSlidersPage() {
               <label className="block text-sm font-medium text-gray-700">Slug<input required value={slider.slug} onChange={(event) => setSlider((current) => ({ ...current, slug: slugify(event.target.value) }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 font-mono text-sm" /></label>
               <label className="block text-sm font-medium text-gray-700">Status<select value={slider.status} onChange={(event) => setSlider((current) => ({ ...current, status: event.target.value as SliderStatus }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"><option value="DRAFT">Draft</option><option value="PUBLISHED">Published</option></select></label>
               <label className="block text-sm font-medium text-gray-700">Height<input type="number" min="180" max="900" value={slider.settings.height} onChange={(event) => setSlider((current) => ({ ...current, settings: { ...current.settings, height: Number(event.target.value) } }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700">Width<select value={slider.settings.width ?? 'content'} onChange={(event) => setSlider((current) => ({ ...current, settings: { ...current.settings, width: event.target.value as 'content' | 'wide' | 'full' } }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"><option value="content">Content width</option><option value="wide">Wide</option><option value="full">Full browser width</option></select></label>
               <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700"><input type="checkbox" checked={slider.settings.autoPlay !== false} onChange={(event) => setSlider((current) => ({ ...current, settings: { ...current.settings, autoPlay: event.target.checked } }))} /> Auto play</label>
               <label className="block text-sm font-medium text-gray-700">Slide seconds<input type="number" min="2" max="30" value={slider.settings.slideSeconds} onChange={(event) => setSlider((current) => ({ ...current, settings: { ...current.settings, slideSeconds: Number(event.target.value) } }))} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" /></label>
             </div>
@@ -238,7 +258,12 @@ export default function AdminSlidersPage() {
                     <button type="button" onClick={() => addSlide('video')} className="rounded border px-3 py-1.5 text-xs hover:bg-gray-50">Add Video Slide</button>
                   </div>
                 </div>
-                <PublicSliderEmbed slider={{ ...slider, slug: slider.slug || 'preview' }} />
+                <EditorSlidePreview
+                  slide={activeSlide}
+                  height={Number(slider.settings.height ?? 480)}
+                  width={slider.settings.width ?? 'content'}
+                  onLayerChange={(layerIndex, nextLayer) => updateLayer(activeSlideIndex, layerIndex, nextLayer)}
+                />
               </div>
 
               <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -286,6 +311,13 @@ export default function AdminSlidersPage() {
                       <div className="space-y-2">
                         <label className="block text-xs font-medium text-gray-700">Text<input value={layer.text} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { text: event.target.value })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
                         {layer.type === 'button' && <label className="block text-xs font-medium text-gray-700">Link<input value={layer.href ?? ''} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { href: event.target.value })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>}
+                        <label className="block text-xs font-medium text-gray-700">
+                          Font
+                          <select value={layer.fontFamily ?? ''} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { fontFamily: event.target.value })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm">
+                            <option value="">Site default</option>
+                            {fontLibrary.map((font) => <option key={font.value} value={font.value}>{font.label}</option>)}
+                          </select>
+                        </label>
                         <div className="grid grid-cols-2 gap-2">
                           <label className="block text-xs font-medium text-gray-700">X %<input type="number" value={layer.x} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { x: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
                           <label className="block text-xs font-medium text-gray-700">Y %<input type="number" value={layer.y} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { y: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
@@ -294,6 +326,18 @@ export default function AdminSlidersPage() {
                           <label className="block text-xs font-medium text-gray-700">Color<input type="color" value={layer.color} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { color: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
                           <label className="block text-xs font-medium text-gray-700">Background<input type="color" value={layer.background === 'transparent' ? '#6f21b6' : layer.background} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { background: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
                         </div>
+                        {layer.type === 'button' && (
+                          <div className="grid grid-cols-2 gap-2 border-t border-gray-200 pt-2">
+                            <label className="block text-xs font-medium text-gray-700">Style<select value={layer.buttonStyle ?? 'solid'} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { buttonStyle: event.target.value as 'solid' | 'outline' })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm"><option value="solid">Solid</option><option value="outline">Outline</option></select></label>
+                            <label className="block text-xs font-medium text-gray-700">Border<input type="color" value={layer.borderColor ?? layer.background ?? '#6f21b6'} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { borderColor: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
+                            <label className="block text-xs font-medium text-gray-700">Border px<input type="number" min="0" max="12" value={Number(layer.borderWidth ?? 0)} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { borderWidth: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
+                            <label className="block text-xs font-medium text-gray-700">Round px<input type="number" min="0" max="80" value={Number(layer.borderRadius ?? 8)} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { borderRadius: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
+                            <label className="block text-xs font-medium text-gray-700">Width pad<input type="number" min="4" max="80" value={Number(layer.paddingX ?? 20)} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { paddingX: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
+                            <label className="block text-xs font-medium text-gray-700">Height pad<input type="number" min="4" max="50" value={Number(layer.paddingY ?? 12)} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { paddingY: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
+                            <label className="block text-xs font-medium text-gray-700">Hover bg<input type="color" value={layer.hoverBackground || '#5b1a93'} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { hoverBackground: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
+                            <label className="block text-xs font-medium text-gray-700">Hover text<input type="color" value={layer.hoverColor || '#ffffff'} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { hoverColor: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -305,6 +349,116 @@ export default function AdminSlidersPage() {
       </div>
     </div>
   );
+}
+
+function EditorSlidePreview({
+  slide,
+  height,
+  width,
+  onLayerChange,
+}: {
+  slide?: SliderSlide;
+  height: number;
+  width: 'content' | 'wide' | 'full';
+  onLayerChange: (layerIndex: number, nextLayer: Partial<SliderLayer>) => void;
+}) {
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  const [dragLayerIndex, setDragLayerIndex] = useState<number | null>(null);
+
+  function moveLayer(clientX: number, clientY: number, layerIndex: number) {
+    const rect = previewRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
+    onLayerChange(layerIndex, { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
+  }
+
+  if (!slide) {
+    return <div className="grid h-80 place-items-center rounded bg-gray-900 text-sm text-white">Add a slide to preview it.</div>;
+  }
+
+  return (
+    <div
+      ref={previewRef}
+      className={`relative overflow-hidden rounded-lg bg-neutral-950 ${previewWidthClass(width)}`}
+      style={{ height: Math.min(Math.max(height, 260), 720) }}
+      onMouseMove={(event) => {
+        if (dragLayerIndex == null) return;
+        moveLayer(event.clientX, event.clientY, dragLayerIndex);
+      }}
+      onMouseUp={() => setDragLayerIndex(null)}
+      onMouseLeave={() => setDragLayerIndex(null)}
+    >
+      <EditorSlideMedia slide={slide} />
+      <div className="absolute inset-0 bg-black/20" />
+      {slide.layers.map((layer, layerIndex) => (
+        <button
+          key={layer.id}
+          type="button"
+          className="absolute z-10 cursor-move text-left ring-2 ring-transparent transition hover:ring-white/70"
+          style={layerPreviewStyle(layer)}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            setDragLayerIndex(layerIndex);
+            moveLayer(event.clientX, event.clientY, layerIndex);
+          }}
+        >
+          {layer.type === 'button' ? (
+            <span style={buttonLayerInnerStyle(layer)}>{layer.text}</span>
+          ) : (
+            <span className="font-semibold leading-tight drop-shadow">{layer.text}</span>
+          )}
+        </button>
+      ))}
+      <p className="absolute bottom-3 left-3 rounded bg-black/50 px-3 py-1 text-xs text-white">
+        Drag text or button layers to place them.
+      </p>
+    </div>
+  );
+}
+
+function previewWidthClass(width: 'content' | 'wide' | 'full') {
+  if (width === 'full') return 'w-full';
+  if (width === 'wide') return 'mx-auto w-full max-w-[1200px]';
+  return 'mx-auto w-full max-w-5xl';
+}
+
+function EditorSlideMedia({ slide }: { slide: SliderSlide }) {
+  if (slide.type === 'video') {
+    return <div className="absolute inset-0 grid place-items-center bg-gray-900 text-sm text-white">Video preview</div>;
+  }
+  if (!slide.src) {
+    return <div className="absolute inset-0 grid place-items-center bg-gray-800 text-sm text-white">Choose an image</div>;
+  }
+  return <img src={slide.src} alt={slide.alt ?? ''} className="absolute inset-0 h-full w-full object-cover" />;
+}
+
+function layerPreviewStyle(layer: SliderLayer) {
+  return {
+    left: `${layer.x}%`,
+    top: `${layer.y}%`,
+    width: `${layer.width}%`,
+    color: layer.color,
+    fontSize: `${layer.fontSize}px`,
+    fontFamily: layer.fontFamily || undefined,
+  };
+}
+
+function buttonLayerInnerStyle(layer: SliderLayer) {
+  const isOutline = layer.buttonStyle === 'outline';
+  return {
+    display: 'inline-flex',
+    width: 'fit-content',
+    background: isOutline ? 'transparent' : layer.background,
+    borderColor: layer.borderColor ?? layer.background,
+    borderStyle: 'solid',
+    borderWidth: `${layer.borderWidth ?? (isOutline ? 2 : 0)}px`,
+    borderRadius: `${layer.borderRadius ?? 8}px`,
+    color: isOutline ? (layer.borderColor ?? layer.color) : layer.color,
+    padding: `${layer.paddingY ?? 12}px ${layer.paddingX ?? 20}px`,
+    fontWeight: 700,
+    boxShadow: '0 12px 28px rgba(0,0,0,0.22)',
+  };
 }
 
 function createId(prefix: string) {
