@@ -23,7 +23,8 @@ export type BuilderBlockType =
   | 'saved-form'
   | 'product-grid'
   | 'product-categories'
-  | 'product-tags';
+  | 'product-tags'
+  | 'blog-posts';
 
 export type ResponsiveMode = 'desktop' | 'tablet' | 'mobile';
 
@@ -90,6 +91,14 @@ interface TaxonomyPreview {
   postCount?: number;
 }
 
+interface PostPreview {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt?: string | null;
+  featuredImageUrl?: string | null;
+}
+
 interface SavedFormLite {
   id: string;
   slug: string;
@@ -119,6 +128,7 @@ export type StorePreviewData = {
   products: ProductPreview[];
   categories: TaxonomyPreview[];
   tags: TaxonomyPreview[];
+  posts: PostPreview[];
 };
 
 export type ThemePreviewStyles = {
@@ -149,12 +159,13 @@ export const defaultWidgets: BuilderWidget[] = [
   { type: 'menu', label: 'Menu', category: 'navigation', enabled: true },
   { type: 'sidebar-widgets', label: 'Sidebar Widgets', category: 'layout', enabled: true },
   { type: 'saved-form', label: 'Saved Form', category: 'forms', enabled: true },
+  { type: 'blog-posts', label: 'Blog Posts', category: 'content', enabled: true },
   { type: 'product-grid', label: 'Products', category: 'store', enabled: true },
   { type: 'product-categories', label: 'Product Categories', category: 'store', enabled: true },
   { type: 'product-tags', label: 'Product Tags', category: 'store', enabled: true },
 ];
 
-const emptyStorePreview: StorePreviewData = { products: [], categories: [], tags: [] };
+const emptyStorePreview: StorePreviewData = { products: [], categories: [], tags: [], posts: [] };
 
 export function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -171,13 +182,14 @@ export function createBlock(type: BuilderBlockType, widget?: BuilderWidget): Bui
   if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#' } };
   if (type === 'icon') return { id, type, props: { iconClass: 'fa-solid fa-star', label: 'Icon label', size: 36, color: '#6f21b6' } };
   if (type === 'announcement-bar') return { id, type, props: { text: 'Free shipping on all domestic orders over $35', background: '#6f21b6', color: '#ffffff' } };
-  if (type === 'store-header') return { id, type, props: { logoMode: 'text', logoText: 'The Psychic Link', logoMediaId: '', logoSrc: '', logoAlt: 'The Psychic Link', socialLinksText: 'fa-brands fa-instagram|https://instagram.com|Instagram\nfa-brands fa-facebook-f|https://facebook.com|Facebook\nfa-brands fa-pinterest-p|https://pinterest.com|Pinterest', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', actionLinksText: 'text|/login|Login\nfa-solid fa-magnifying-glass|/search|Search\nfa-regular fa-heart|/wishlist|Wishlist\nfa-solid fa-bag-shopping|/shop/cart|Cart', showActions: true, stickyMain: true } };
+  if (type === 'store-header') return { id, type, props: { logoMode: 'text', logoText: 'The Psychic Link', logoMediaId: '', logoSrc: '', logoAlt: 'The Psychic Link', logoMaxWidth: 220, logoMaxHeight: 64, socialLinksText: 'fa-brands fa-instagram|https://instagram.com|Instagram\nfa-brands fa-facebook-f|https://facebook.com|Facebook\nfa-brands fa-pinterest-p|https://pinterest.com|Pinterest', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', actionLinksText: 'text|/login|Login\nfa-solid fa-magnifying-glass|/search|Search\nfa-regular fa-heart|/wishlist|Wishlist\nfa-solid fa-bag-shopping|/shop/cart|Cart', showActions: true, stickyMain: true } };
   if (type === 'hero-slider') return { id, type, props: { mediaIds: [], slides: [], mediaId: '', src: '', alt: '', heading: 'Welcome', buttonLabel: 'SHOP NOW', buttonHref: '/shop', height: 610, slideSeconds: 5 } };
   if (type === 'columns') return { id, type, props: { columns: 2 }, children: [] };
   if (type === 'grid') return { id, type, props: { columns: 3, itemsText: 'Grid item\nGrid item\nGrid item' } };
   if (type === 'menu') return { id, type, props: { source: 'header', orientation: 'horizontal', placement: 'header', linksText: 'Home|/\nShop|/shop\nBlog|/blog' } };
   if (type === 'sidebar-widgets') return { id, type, props: { itemsText: 'Search\nCategories\nRecent posts' } };
   if (type === 'saved-form') return { id, type, props: { formId: '', formSlug: '', formTitle: '', displayTitle: true } };
+  if (type === 'blog-posts') return { id, type, props: { title: 'Latest Posts', description: '' } };
   if (type === 'product-grid') return { id, type, props: { title: 'Featured Products', description: '', filter: 'latest', limit: 3 } };
   if (type === 'product-categories') return { id, type, props: { orientation: 'horizontal' } };
   if (type === 'product-tags') return { id, type, props: { orientation: 'horizontal' } };
@@ -465,7 +477,12 @@ export function StoreHeaderPreview({ block }: { block: BuilderBlock }) {
         </nav>
         <div className="justify-self-center">
           {block.props.logoMode === 'image' && block.props.logoSrc ? (
-            <img src={String(block.props.logoSrc)} alt={String(block.props.logoAlt ?? block.props.logoText ?? 'The Psychic Link')} className="max-h-16 max-w-[220px] object-contain" />
+            <img
+              src={String(block.props.logoSrc)}
+              alt={String(block.props.logoAlt ?? block.props.logoText ?? 'The Psychic Link')}
+              className="object-contain"
+              style={{ maxWidth: `${Number(block.props.logoMaxWidth ?? 220)}px`, maxHeight: `${Number(block.props.logoMaxHeight ?? 64)}px` }}
+            />
           ) : (
             <div className="font-serif text-3xl italic text-black">{String(block.props.logoText ?? 'The Psychic Link')}</div>
           )}
@@ -674,6 +691,35 @@ export function PreviewBlock({
   if (block.type === 'product-tags') {
     const vertical = block.props.orientation === 'vertical';
     return <div className={`mb-6 flex ${vertical ? 'flex-col items-start' : 'flex-wrap'} gap-2`}>{storePreview.tags.map((tag) => <span key={tag.id} className="rounded bg-gray-100 px-3 py-1 text-sm">#{tag.name}</span>)}</div>;
+  }
+  if (block.type === 'blog-posts') {
+    const posts = storePreview.posts.slice(0, 4);
+    const title = String(block.props.title ?? '').trim();
+    const description = String(block.props.description ?? '').trim();
+    return (
+      <div className="mb-8">
+        {title && <h2 className="mb-3 text-2xl font-semibold text-gray-950">{title}</h2>}
+        {description && <p className="mb-5 max-w-3xl text-gray-600">{description}</p>}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {posts.map((post) => (
+            <article key={post.id} className="overflow-hidden rounded-lg border bg-white shadow-sm">
+              {post.featuredImageUrl ? (
+                <img src={post.featuredImageUrl} alt={post.title} className="aspect-[4/3] w-full object-cover" />
+              ) : (
+                <div className="grid aspect-[4/3] place-items-center bg-gray-100 text-sm text-gray-400">No image</div>
+              )}
+              <div className="p-4">
+                <h3 className="font-semibold text-gray-950">{post.title}</h3>
+                {post.excerpt && <p className="mt-2 line-clamp-3 text-sm text-gray-600">{post.excerpt}</p>}
+                <span className="mt-4 inline-block rounded px-4 py-2 text-sm font-medium text-white" style={{ backgroundColor: theme.primaryColor }}>
+                  Read More
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    );
   }
   if (block.type === 'global') {
     const component = components.find((item) => item.id === block.props.componentId);
@@ -1079,24 +1125,28 @@ export function BlockEditor({
           </label>
           <label className="block text-sm font-medium text-gray-700">Logo Text<input value={String(block.props.logoText ?? 'The Psychic Link')} onChange={(event) => onChange({ logoText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           {String(block.props.logoMode ?? 'text') === 'image' && (
-            <label className="block text-sm font-medium text-gray-700">
-              Logo Image
-              <select
-                value={String(block.props.logoMediaId ?? '')}
-                onChange={(event) => {
-                  const asset = mediaAssets.find((item) => item.id === event.target.value);
-                  onChange(asset ? { logoMediaId: asset.id, logoSrc: asset.url, logoAlt: asset.altText || asset.title || asset.originalName } : { logoMediaId: '', logoSrc: '', logoAlt: '' });
-                }}
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-              >
-                <option value="">Choose from media library</option>
-                {mediaAssets.map((asset) => (
-                  <option key={asset.id} value={asset.id}>
-                    {asset.title || asset.originalName}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <>
+              <label className="block text-sm font-medium text-gray-700">
+                Logo Image
+                <select
+                  value={String(block.props.logoMediaId ?? '')}
+                  onChange={(event) => {
+                    const asset = mediaAssets.find((item) => item.id === event.target.value);
+                    onChange(asset ? { logoMediaId: asset.id, logoSrc: asset.url, logoAlt: asset.altText || asset.title || asset.originalName } : { logoMediaId: '', logoSrc: '', logoAlt: '' });
+                  }}
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                >
+                  <option value="">Choose from media library</option>
+                  {mediaAssets.map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.title || asset.originalName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm font-medium text-gray-700">Logo Max Width<input type="number" min="60" max="600" value={Number(block.props.logoMaxWidth ?? 220)} onChange={(event) => onChange({ logoMaxWidth: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700">Logo Max Height<input type="number" min="24" max="240" value={Number(block.props.logoMaxHeight ?? 64)} onChange={(event) => onChange({ logoMaxHeight: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+            </>
           )}
           <label className="block text-sm font-medium text-gray-700">Social Icons (icon class|url|label per line)<textarea value={String(block.props.socialLinksText ?? '')} rows={4} onChange={(event) => onChange({ socialLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
           <label className="block text-sm font-medium text-gray-700">Top Links (label|url per line)<textarea value={String(block.props.topLinksText ?? '')} rows={3} onChange={(event) => onChange({ topLinksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
@@ -1208,6 +1258,13 @@ export function BlockEditor({
           <label className="block text-sm font-medium text-gray-700">Products to Show<input type="number" min="1" max="24" value={Number(block.props.limit ?? 3)} onChange={(event) => onChange({ limit: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
         </>
       )}
+      {block.type === 'blog-posts' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Widget Title<input value={String(block.props.title ?? '')} onChange={(event) => onChange({ title: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Latest Posts" /></label>
+          <label className="block text-sm font-medium text-gray-700">Widget Description<textarea value={String(block.props.description ?? '')} rows={3} onChange={(event) => onChange({ description: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Optional introduction above the posts." /></label>
+          <p className="rounded border border-dashed px-3 py-2 text-xs text-gray-500">This widget automatically shows the latest four published blog posts.</p>
+        </>
+      )}
       {(block.type === 'product-categories' || block.type === 'product-tags') && (
         <label className="block text-sm font-medium text-gray-700">Display Direction<select value={String(block.props.orientation ?? 'horizontal')} onChange={(event) => onChange({ orientation: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>
       )}
@@ -1296,12 +1353,13 @@ export function PageDesignCanvas({
 
   const fetchResources = useCallback(async () => {
     try {
-      const [widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes, componentsRes, formsRes, slidersRes, menusRes] = await Promise.all([
+      const [widgetsRes, mediaRes, productsRes, categoriesRes, tagsRes, postsRes, componentsRes, formsRes, slidersRes, menusRes] = await Promise.all([
         fetch('/api/proxy/admin/builder/widgets'),
         fetch('/api/proxy/media'),
         fetch('/api/proxy/products/all'),
         fetch('/api/proxy/admin/categories'),
         fetch('/api/proxy/admin/tags'),
+        fetch('/api/proxy/public/posts'),
         fetch('/api/proxy/admin/builder/components'),
         fetch('/api/proxy/admin/forms'),
         fetch('/api/proxy/admin/sliders'),
@@ -1312,12 +1370,13 @@ export function PageDesignCanvas({
         setWidgets(nextWidgets.length > 0 ? mergeWidgets(nextWidgets) : defaultWidgets);
       }
       if (mediaRes.ok) setMediaAssets(((await mediaRes.json()) as MediaAsset[]).filter((asset) => asset.isImage));
-      const [products, categories, tags] = await Promise.all([
+      const [products, categories, tags, posts] = await Promise.all([
         productsRes.ok ? productsRes.json() : [],
         categoriesRes.ok ? categoriesRes.json() : [],
         tagsRes.ok ? tagsRes.json() : [],
+        postsRes.ok ? postsRes.json() : [],
       ]);
-      setStorePreview({ products, categories, tags });
+      setStorePreview({ products, categories, tags, posts });
       if (componentsRes.ok) setComponents((await componentsRes.json()) as GlobalComponentLite[]);
       if (formsRes.ok) setSavedForms((await formsRes.json()) as SavedFormLite[]);
       if (slidersRes.ok) setSavedSliders((await slidersRes.json()) as SavedSliderLite[]);

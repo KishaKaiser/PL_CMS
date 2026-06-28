@@ -45,6 +45,8 @@ export function StorefrontHeader({
   logoText,
   logoSrc,
   logoAlt,
+  logoMaxWidth = 220,
+  logoMaxHeight = 64,
   socialLinks,
   topLinks,
   navLinks,
@@ -55,6 +57,8 @@ export function StorefrontHeader({
   logoText: string;
   logoSrc?: string;
   logoAlt?: string;
+  logoMaxWidth?: number;
+  logoMaxHeight?: number;
   socialLinks: StorefrontIconLink[];
   topLinks: StorefrontLink[];
   navLinks: StorefrontLink[];
@@ -136,7 +140,12 @@ export function StorefrontHeader({
 
         <a href="/" className="justify-self-center">
           {logoSrc ? (
-            <img src={logoSrc} alt={logoAlt || logoText} className="max-h-16 max-w-[220px] object-contain" />
+            <img
+              src={logoSrc}
+              alt={logoAlt || logoText}
+              className="object-contain"
+              style={{ maxWidth: `${logoMaxWidth}px`, maxHeight: `${logoMaxHeight}px` }}
+            />
           ) : (
             <span className="text-center font-serif text-3xl italic text-black">{logoText}</span>
           )}

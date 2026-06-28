@@ -1,9 +1,11 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { RichContent } from '../../../components/cms/rich-content';
 import { ReviewSection } from '../../../components/reviews/review-section';
-import { getSafeImageSrc } from '../../../lib/public-cms';
+import { getPublicSiteConfig, getSafeImageSrc } from '../../../lib/public-cms';
 import { fetchApi } from '../../../lib/server-api';
+import { buildSeoMetadata, getSeoDescription, getSeoTitle } from '../../../lib/seo';
 import ProductDetailClient from './ProductDetailClient';
 
 interface Inventory {
@@ -53,6 +55,29 @@ async function getProduct(id: string): Promise<Product | null> {
 }
 
 type Props = { params: Promise<{ id: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const [product, siteConfig] = await Promise.all([getProduct(id), getPublicSiteConfig()]);
+
+  if (!product || !product.isActive) {
+    return buildSeoMetadata({
+      title: 'Product Not Found',
+      description: siteConfig.identity.tagline,
+      path: `/shop/${id}`,
+      siteName: siteConfig.identity.title,
+    });
+  }
+
+  return buildSeoMetadata({
+    title: getSeoTitle(product.name),
+    description: getSeoDescription(product.shortDescription, product.description, `Shop ${product.name}`),
+    path: `/shop/${product.id}`,
+    imageUrl: product.featuredMedia?.url ?? product.imageUrl ?? siteConfig.identity.logoUrl,
+    siteName: siteConfig.identity.title,
+    type: 'website',
+  });
+}
 
 export default async function ProductDetailPage({ params }: Props) {
   const { id } = await params;

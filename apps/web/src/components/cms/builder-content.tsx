@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import type { BuilderBlock, BuilderLayout, PublicSiteConfig } from '../../lib/public-cms';
-import { getCategories, getPublicSiteConfig, getTags } from '../../lib/public-cms';
+import { getCategories, getPublishedPosts, getPublicSiteConfig, getTags, type PublicPost } from '../../lib/public-cms';
 import { PublicFormEmbed } from './public-form-embed';
 import { PublicSliderEmbed } from './public-slider-embed';
 import { AnnouncementBar, StorefrontHeader } from './storefront-header';
@@ -28,6 +28,7 @@ type StoreData = {
   products: Product[];
   categories: Array<{ id: string; slug: string; name: string }>;
   tags: Array<{ id: string; slug: string; name: string }>;
+  posts: PublicPost[];
   primaryColor?: string;
 };
 
@@ -64,13 +65,14 @@ export async function BuilderContent({
 }) {
   const cookieStore = accountLink ? null : await cookies();
   const resolvedAccountLink = accountLink ?? getAccountLinkFromToken(cookieStore?.get('access_token')?.value);
-  const [products, categories, tags, siteConfig] = await Promise.all([
+  const [products, categories, tags, posts, siteConfig] = await Promise.all([
     getProducts(),
     getCategories(),
     getTags(),
+    getPublishedPosts(),
     menus ? Promise.resolve(null) : getPublicSiteConfig(),
   ]);
-  const storeData = { products, categories, tags, primaryColor: siteConfig?.theme.primaryColor };
+  const storeData = { products, categories, tags, posts, primaryColor: siteConfig?.theme.primaryColor };
   const resolvedMenus = menus ?? siteConfig?.menus ?? { header: [], footer: [], custom: [] };
 
   return (
@@ -293,6 +295,39 @@ function BuilderBlockView({ block, storeData, accountLink, menus }: { block: Bui
       </div>
     );
   }
+  if (block.type === 'blog-posts') {
+    const title = String(block.props.title ?? 'Latest Posts').trim();
+    const description = String(block.props.description ?? '').trim();
+    const posts = storeData.posts.slice(0, 4);
+    return (
+      <div className="mb-8">
+        {title && <h2 className="mb-3 text-2xl font-semibold text-gray-950">{title}</h2>}
+        {description && <p className="mb-5 max-w-3xl text-gray-600">{description}</p>}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {posts.map((post) => (
+            <article key={post.id} className="flex h-full flex-col overflow-hidden rounded-lg border bg-white shadow-sm">
+              {post.featuredImageUrl ? (
+                <a href={`/blog/${post.slug}`} className="block aspect-[4/3] bg-gray-100">
+                  <img src={post.featuredImageUrl} alt={post.title} className="h-full w-full object-cover" />
+                </a>
+              ) : (
+                <div className="grid aspect-[4/3] place-items-center bg-gray-100 text-sm text-gray-400">No image</div>
+              )}
+              <div className="flex flex-1 flex-col p-4">
+                <h3 className="text-base font-semibold text-gray-950">
+                  <a href={`/blog/${post.slug}`} className="hover:underline">{post.title}</a>
+                </h3>
+                {post.excerpt && <p className="mt-2 line-clamp-3 text-sm text-gray-600">{post.excerpt}</p>}
+                <a href={`/blog/${post.slug}`} className="mt-auto inline-flex w-fit rounded px-4 py-2 text-sm font-medium text-white" style={{ backgroundColor: storeData.primaryColor ?? '#6f21b6' }}>
+                  Read More
+                </a>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    );
+  }
   return null;
 }
 
@@ -324,6 +359,8 @@ function StoreHeaderView({ block, accountLink }: { block: BuilderBlock; accountL
       logoText={String(block.props.logoText ?? 'The Psychic Link')}
       logoSrc={block.props.logoMode === 'image' ? String(block.props.logoSrc ?? '') : ''}
       logoAlt={String(block.props.logoAlt ?? block.props.logoText ?? 'The Psychic Link')}
+      logoMaxWidth={Number(block.props.logoMaxWidth ?? 220)}
+      logoMaxHeight={Number(block.props.logoMaxHeight ?? 64)}
       socialLinks={socialLinks}
       topLinks={topLinks}
       navLinks={navLinks}

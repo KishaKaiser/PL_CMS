@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
 import { RichContent } from '../../components/cms/rich-content';
 import { getPublishedPage, getPublicSiteConfig, getSafeImageSrc, type PublicSiteConfig } from '../../lib/public-cms';
 import { fetchApi } from '../../lib/server-api';
+import { buildSeoMetadata, getSeoDescription, getSeoTitle } from '../../lib/seo';
 import { ProductGrid } from './ProductGrid';
 
 interface Product {
@@ -30,6 +32,19 @@ async function getProducts(): Promise<Product[]> {
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type Props = { searchParams?: Promise<SearchParams> };
+
+export async function generateMetadata(): Promise<Metadata> {
+  const [page, siteConfig] = await Promise.all([getPublishedPage('shop'), getPublicSiteConfig()]);
+  return buildSeoMetadata({
+    title: page ? getSeoTitle(page.title, page.metaTitle) : 'Shop',
+    description: page
+      ? getSeoDescription(page.metaDescription, page.content, siteConfig.identity.tagline)
+      : getSeoDescription('Browse available products and services.', siteConfig.identity.tagline),
+    path: '/shop',
+    imageUrl: page?.featuredImageUrl ?? siteConfig.identity.logoUrl,
+    siteName: siteConfig.identity.title,
+  });
+}
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
