@@ -21,6 +21,7 @@ export type BuilderBlockType =
   | 'sidebar-widgets'
   | 'global'
   | 'saved-form'
+  | 'newsletter-signup'
   | 'product-grid'
   | 'product-categories'
   | 'product-tags'
@@ -159,6 +160,7 @@ export const defaultWidgets: BuilderWidget[] = [
   { type: 'menu', label: 'Menu', category: 'navigation', enabled: true },
   { type: 'sidebar-widgets', label: 'Sidebar Widgets', category: 'layout', enabled: true },
   { type: 'saved-form', label: 'Saved Form', category: 'forms', enabled: true },
+  { type: 'newsletter-signup', label: 'Newsletter Signup', category: 'forms', enabled: true },
   { type: 'blog-posts', label: 'Blog Posts', category: 'content', enabled: true },
   { type: 'product-grid', label: 'Products', category: 'store', enabled: true },
   { type: 'product-categories', label: 'Product Categories', category: 'store', enabled: true },
@@ -189,6 +191,7 @@ export function createBlock(type: BuilderBlockType, widget?: BuilderWidget): Bui
   if (type === 'menu') return { id, type, props: { source: 'header', orientation: 'horizontal', placement: 'header', linksText: 'Home|/\nShop|/shop\nBlog|/blog' } };
   if (type === 'sidebar-widgets') return { id, type, props: { itemsText: 'Search\nCategories\nRecent posts' } };
   if (type === 'saved-form') return { id, type, props: { formId: '', formSlug: '', formTitle: '', displayTitle: true } };
+  if (type === 'newsletter-signup') return { id, type, props: { title: 'Join Our Newsletter', description: '', layout: 'vertical', placeholder: 'Email address', buttonLabel: 'Subscribe' } };
   if (type === 'blog-posts') return { id, type, props: { title: 'Latest Posts', description: '' } };
   if (type === 'product-grid') return { id, type, props: { title: 'Featured Products', description: '', filter: 'latest', limit: 3 } };
   if (type === 'product-categories') return { id, type, props: { orientation: 'horizontal' } };
@@ -633,6 +636,23 @@ export function PreviewBlock({
           <div className="h-24 rounded border bg-white" />
           <span className="inline-block rounded px-4 py-2 text-sm font-medium text-white" style={{ backgroundColor: theme.primaryColor }}>
             Submit
+          </span>
+        </div>
+      </div>
+    );
+  }
+  if (block.type === 'newsletter-signup') {
+    const title = String(block.props.title ?? 'Join Our Newsletter').trim();
+    const description = String(block.props.description ?? '').trim();
+    const horizontal = block.props.layout === 'horizontal';
+    return (
+      <div className="mb-6 rounded-xl border bg-white p-6 shadow-sm">
+        {title && <h2 className="text-2xl font-semibold text-gray-950">{title}</h2>}
+        {description && <p className="mt-2 text-sm text-gray-600">{description}</p>}
+        <div className={`mt-5 ${horizontal ? 'grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]' : 'space-y-3'}`}>
+          <div className="rounded-lg border bg-white px-4 py-3 text-sm text-gray-400">{String(block.props.placeholder ?? 'Email address')}</div>
+          <span className="rounded-lg px-5 py-3 text-center text-sm font-medium text-white" style={{ backgroundColor: theme.primaryColor }}>
+            {String(block.props.buttonLabel ?? 'Subscribe')}
           </span>
         </div>
       </div>
@@ -1305,6 +1325,15 @@ export function BlockEditor({
               Create a form under Admin Forms, then refresh this editor to select it.
             </p>
           )}
+        </>
+      )}
+      {block.type === 'newsletter-signup' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Widget Title<input value={String(block.props.title ?? '')} onChange={(event) => onChange({ title: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Join Our Newsletter" /></label>
+          <label className="block text-sm font-medium text-gray-700">Widget Description<textarea value={String(block.props.description ?? '')} rows={3} onChange={(event) => onChange({ description: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Optional message above the signup form." /></label>
+          <label className="block text-sm font-medium text-gray-700">Display Direction<select value={String(block.props.layout ?? 'vertical')} onChange={(event) => onChange({ layout: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="vertical">Vertical</option><option value="horizontal">Horizontal</option></select></label>
+          <label className="block text-sm font-medium text-gray-700">Email Placeholder<input value={String(block.props.placeholder ?? '')} onChange={(event) => onChange({ placeholder: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Email address" /></label>
+          <label className="block text-sm font-medium text-gray-700">Button Label<input value={String(block.props.buttonLabel ?? '')} onChange={(event) => onChange({ buttonLabel: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Subscribe" /></label>
         </>
       )}
     </div>

@@ -4,6 +4,7 @@ import type { BuilderBlock, BuilderLayout, PublicSiteConfig } from '../../lib/pu
 import { getCategories, getPublishedPosts, getPublicSiteConfig, getTags, type PublicPost } from '../../lib/public-cms';
 import { PublicFormEmbed } from './public-form-embed';
 import { PublicSliderEmbed } from './public-slider-embed';
+import { NewsletterSubscribeForm } from './newsletter-subscribe-form';
 import { AnnouncementBar, StorefrontHeader } from './storefront-header';
 import { fetchApi } from '../../lib/server-api';
 import { getAccountLinkFromToken } from '../../lib/account-routing';
@@ -256,6 +257,17 @@ function BuilderBlockView({ block, storeData, accountLink, menus }: { block: Bui
         slug={String(block.props.formSlug ?? '')}
         fallbackTitle={String(block.props.formTitle ?? 'Form')}
         showTitle={block.props.displayTitle !== false}
+      />
+    );
+  }
+  if (block.type === 'newsletter-signup') {
+    return (
+      <NewsletterSubscribeForm
+        title={String(block.props.title ?? 'Join Our Newsletter')}
+        description={String(block.props.description ?? '')}
+        layout={block.props.layout === 'horizontal' ? 'horizontal' : 'vertical'}
+        placeholder={String(block.props.placeholder ?? 'Email address')}
+        buttonLabel={String(block.props.buttonLabel ?? 'Subscribe')}
       />
     );
   }

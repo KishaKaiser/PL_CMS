@@ -57,6 +57,14 @@ export default function AdminSidebarsPage() {
     updateWidgets(widgets.map((widget, widgetIndex) => (widgetIndex === index ? { ...widget, ...patch } : widget)));
   }
 
+  function updateWidgetSettings(index: number, patch: Record<string, string | number | boolean>) {
+    updateWidgets(widgets.map((widget, widgetIndex) => (
+      widgetIndex === index
+        ? { ...widget, settings: { ...(widget.settings ?? {}), ...patch } }
+        : widget
+    )));
+  }
+
   function addWidget(type: SiteSidebarWidgetType) {
     updateWidgets([
       ...widgets,
@@ -141,6 +149,10 @@ export default function AdminSidebarsPage() {
                 <input type="checkbox" checked={widget.enabled} onChange={(event) => updateWidget(index, { enabled: event.target.checked })} />
                 Show this widget
               </label>
+              <WidgetSettingsFields
+                widget={widget}
+                onChange={(patch) => updateWidgetSettings(index, patch)}
+              />
             </div>
           ))}
         </section>
@@ -158,6 +170,76 @@ export default function AdminSidebarsPage() {
       </div>
     </div>
   );
+}
+
+function WidgetSettingsFields({
+  widget,
+  onChange,
+}: {
+  widget: SiteSidebarWidget;
+  onChange: (patch: Record<string, string | number | boolean>) => void;
+}) {
+  const settings = widget.settings ?? {};
+  const read = (key: string, fallback = '') => {
+    const value = settings[key];
+    return typeof value === 'string' ? value : fallback;
+  };
+
+  if (widget.type === 'image') {
+    return (
+      <div className="mt-4 grid gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 md:grid-cols-2">
+        <label className="block text-sm font-medium text-gray-700">
+          Image URL
+          <input value={read('imageUrl')} onChange={(event) => onChange({ imageUrl: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="/uploads/example.jpg" />
+        </label>
+        <label className="block text-sm font-medium text-gray-700">
+          Link URL
+          <input value={read('imageHref')} onChange={(event) => onChange({ imageHref: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="/shop" />
+        </label>
+        <label className="block text-sm font-medium text-gray-700 md:col-span-2">
+          Image Alt Text
+          <input value={read('imageAlt')} onChange={(event) => onChange({ imageAlt: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Describe the image" />
+        </label>
+      </div>
+    );
+  }
+
+  if (widget.type === 'form') {
+    return (
+      <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
+        <label className="block text-sm font-medium text-gray-700">
+          Saved Form Slug
+          <input value={read('formSlug')} onChange={(event) => onChange({ formSlug: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="contact-us" />
+        </label>
+      </div>
+    );
+  }
+
+  if (widget.type === 'menu') {
+    return (
+      <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
+        <label className="block text-sm font-medium text-gray-700">
+          Menu Links
+          <textarea value={read('linksText', 'Shop|/shop\nBlog|/blog\nContact|/contact')} rows={4} onChange={(event) => onChange({ linksText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+        </label>
+        <p className="mt-2 text-xs text-gray-500">Add one link per line as Label|URL.</p>
+      </div>
+    );
+  }
+
+  if (widget.type === 'color_filter') {
+    return (
+      <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
+        <label className="block text-sm font-medium text-gray-700">
+          Color Options
+          <textarea value={read('colorsText')} rows={3} onChange={(event) => onChange({ colorsText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Purple&#10;White&#10;Gold" />
+        </label>
+        <p className="mt-2 text-xs text-gray-500">Leave blank to use colors from product variants when available.</p>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function normalizeSidebars(value: unknown): SiteSidebarsSettings {
