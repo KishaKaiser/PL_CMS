@@ -6,9 +6,7 @@ import {
   DEFAULT_POSTS_PAGE_SETTINGS,
   DEFAULT_SITE_EXTENSION_POINTS,
   DEFAULT_SITE_IDENTITY,
-  DEFAULT_SITE_THEME,
   SITE_SETTING_KEYS,
-  buildDefaultHomepageBlocks,
 } from '@pl-cms/shared';
 
 interface Setting {
@@ -21,6 +19,16 @@ interface PageSummary {
   slug: string;
   title: string;
   publishedAt: string | null;
+}
+
+interface MediaAsset {
+  id: string;
+  title?: string | null;
+  originalName?: string | null;
+  url: string;
+  mimeType?: string | null;
+  altText?: string | null;
+  isImage?: boolean;
 }
 
 interface SiteIdentityForm {
@@ -60,32 +68,9 @@ interface SitePostsPageForm {
   pageSlug: string;
 }
 
-interface ThemeSectionForm {
-  enabled: boolean;
-  title: string;
-}
-
-interface SiteThemeForm {
-  primaryColor: string;
-  accentColor: string;
-  fontFamily: string;
-  heroTitle: string;
-  heroBody: string;
-  heroPrimaryLabel: string;
-  heroPrimaryHref: string;
-  heroSecondaryLabel: string;
-  heroSecondaryHref: string;
-  homepageSections: {
-    pages: ThemeSectionForm;
-    posts: ThemeSectionForm;
-  };
-}
-
 const SITE_IDENTITY_KEY = SITE_SETTING_KEYS.SITE_IDENTITY;
 const SITE_HOMEPAGE_KEY = SITE_SETTING_KEYS.SITE_HOMEPAGE;
 const SITE_POSTS_PAGE_KEY = SITE_SETTING_KEYS.SITE_POSTS_PAGE;
-const SITE_THEME_KEY = SITE_SETTING_KEYS.SITE_THEME;
-const SITE_HOMEPAGE_BLOCKS_KEY = SITE_SETTING_KEYS.SITE_HOMEPAGE_BLOCKS;
 const SITE_EXTENSION_POINTS_KEY = SITE_SETTING_KEYS.SITE_EXTENSION_POINTS;
 const BILLING_API_SETTINGS_KEY = 'billing_api_settings';
 const SHIPPING_API_SETTINGS_KEY = 'shipping_api_settings';
@@ -121,30 +106,6 @@ const defaultPostsPageForm: SitePostsPageForm = {
   ...DEFAULT_POSTS_PAGE_SETTINGS,
 };
 
-const defaultThemeForm: SiteThemeForm = {
-  ...DEFAULT_SITE_THEME,
-};
-const fontLibrary = [
-  { label: 'Inter', value: 'Inter, Arial, sans-serif' },
-  { label: 'Arial', value: 'Arial, Helvetica, sans-serif' },
-  { label: 'Georgia', value: 'Georgia, serif' },
-  { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
-  { label: 'Verdana', value: 'Verdana, Geneva, sans-serif' },
-  { label: 'Trebuchet MS', value: '"Trebuchet MS", Arial, sans-serif' },
-  { label: 'Courier New', value: '"Courier New", Courier, monospace' },
-  { label: 'Poppins', value: 'Poppins, Arial, sans-serif' },
-  { label: 'Montserrat', value: 'Montserrat, Arial, sans-serif' },
-  { label: 'Playfair Display', value: '"Playfair Display", Georgia, serif' },
-  { label: 'Lora', value: 'Lora, Georgia, serif' },
-  { label: 'Cormorant Garamond', value: '"Cormorant Garamond", Georgia, serif' },
-];
-
-const defaultHomepageBlocks = buildDefaultHomepageBlocks('/blog');
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
 function parseJsonValue<T>(value: string | undefined): T | null {
   if (!value) return null;
 
@@ -157,10 +118,6 @@ function parseJsonValue<T>(value: string | undefined): T | null {
 
 function readString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
-}
-
-function readBoolean(value: unknown, fallback = false) {
-  return typeof value === 'boolean' ? value : fallback;
 }
 
 function readOption<T extends string>(value: unknown, options: readonly T[], fallback: T) {
@@ -184,7 +141,7 @@ export default function AdminSettingsPage() {
   const [identityForm, setIdentityForm] = useState<SiteIdentityForm>(defaultIdentityForm);
   const [homepageForm, setHomepageForm] = useState<SiteHomepageForm>(defaultHomepageForm);
   const [postsPageForm, setPostsPageForm] = useState<SitePostsPageForm>(defaultPostsPageForm);
-  const [themeForm, setThemeForm] = useState<SiteThemeForm>(defaultThemeForm);
+  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [billingApiForm, setBillingApiForm] = useState<BillingApiForm>(defaultBillingApiForm);
   const [shippingApiForm, setShippingApiForm] = useState<ShippingApiForm>(defaultShippingApiForm);
 
@@ -197,12 +154,8 @@ export default function AdminSettingsPage() {
     const identity = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_IDENTITY_KEY));
     const homepage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_HOMEPAGE_KEY));
     const postsPage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_POSTS_PAGE_KEY));
-    const theme = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_THEME_KEY));
     const billingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, BILLING_API_SETTINGS_KEY));
     const shippingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SHIPPING_API_SETTINGS_KEY));
-    const homepageSections = isRecord(theme?.homepageSections) ? theme.homepageSections : null;
-    const pageSection = isRecord(homepageSections?.pages) ? homepageSections.pages : null;
-    const postSection = isRecord(homepageSections?.posts) ? homepageSections.posts : null;
 
     setIdentityForm({
       title: readString(identity?.title, defaultIdentityForm.title),
@@ -221,27 +174,6 @@ export default function AdminSettingsPage() {
     setPostsPageForm({
       type: postsPage?.type === 'page' ? 'page' : defaultPostsPageForm.type,
       pageSlug: readString(postsPage?.pageSlug, defaultPostsPageForm.pageSlug),
-    });
-    setThemeForm({
-      primaryColor: readString(theme?.primaryColor, defaultThemeForm.primaryColor),
-      accentColor: readString(theme?.accentColor, defaultThemeForm.accentColor),
-      fontFamily: readString(theme?.fontFamily, defaultThemeForm.fontFamily),
-      heroTitle: readString(theme?.heroTitle, defaultThemeForm.heroTitle),
-      heroBody: readString(theme?.heroBody, defaultThemeForm.heroBody),
-      heroPrimaryLabel: readString(theme?.heroPrimaryLabel, defaultThemeForm.heroPrimaryLabel),
-      heroPrimaryHref: readString(theme?.heroPrimaryHref, defaultThemeForm.heroPrimaryHref),
-      heroSecondaryLabel: readString(theme?.heroSecondaryLabel, defaultThemeForm.heroSecondaryLabel),
-      heroSecondaryHref: readString(theme?.heroSecondaryHref, defaultThemeForm.heroSecondaryHref),
-      homepageSections: {
-        pages: {
-          enabled: readBoolean(pageSection?.enabled, defaultThemeForm.homepageSections.pages.enabled),
-          title: readString(pageSection?.title, defaultThemeForm.homepageSections.pages.title),
-        },
-        posts: {
-          enabled: readBoolean(postSection?.enabled, defaultThemeForm.homepageSections.posts.enabled),
-          title: readString(postSection?.title, defaultThemeForm.homepageSections.posts.title),
-        },
-      },
     });
     setBillingApiForm({
       provider: readOption(billingApi?.provider, ['manual', 'paypal', 'stripe'] as const, defaultBillingApiForm.provider),
@@ -291,9 +223,10 @@ export default function AdminSettingsPage() {
     setLoading(true);
 
     try {
-      const [settingsRes, pagesRes] = await Promise.all([
+      const [settingsRes, pagesRes, mediaRes] = await Promise.all([
         fetch('/api/proxy/settings'),
         fetch('/api/proxy/pages'),
+        fetch('/api/proxy/media'),
       ]);
 
       if (!settingsRes.ok) throw new Error('Failed to load settings');
@@ -301,6 +234,7 @@ export default function AdminSettingsPage() {
 
       const settingsData = (await settingsRes.json()) as Setting[];
       const pagesData = (await pagesRes.json()) as PageSummary[];
+      const mediaData = mediaRes.ok ? ((await mediaRes.json()) as MediaAsset[]) : [];
       const values: Record<string, string> = {};
 
       settingsData.forEach((setting) => {
@@ -309,6 +243,7 @@ export default function AdminSettingsPage() {
 
       setSettings(settingsData);
       setPages(pagesData);
+      setMediaAssets(mediaData.filter((asset) => asset.isImage || (asset.mimeType ?? '').startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|ico)$/i.test(asset.url)));
       setEditValues(values);
       hydrateManagedForms(settingsData);
     } catch (err: unknown) {
@@ -501,6 +436,21 @@ export default function AdminSettingsPage() {
               />
             </div>
             <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700">Logo from media library</label>
+              <select
+                value={identityForm.logoUrl}
+                onChange={(event) => setIdentityForm((currentForm) => ({ ...currentForm, logoUrl: event.target.value }))}
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              >
+                <option value="">Choose a logo image</option>
+                {mediaAssets.map((asset) => (
+                  <option key={asset.id} value={asset.url}>
+                    {asset.title || asset.originalName || asset.url}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700">Logo URL</label>
               <input
                 value={identityForm.logoUrl}
@@ -508,6 +458,24 @@ export default function AdminSettingsPage() {
                 placeholder="https://example.com/logo.png"
                 className="mt-1 w-full rounded border px-3 py-2 text-sm"
               />
+              {identityForm.logoUrl && (
+                <img src={identityForm.logoUrl} alt="Selected logo" className="mt-3 max-h-20 max-w-xs rounded border bg-gray-50 object-contain p-2" />
+              )}
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700">Favicon from media library</label>
+              <select
+                value={identityForm.faviconUrl}
+                onChange={(event) => setIdentityForm((currentForm) => ({ ...currentForm, faviconUrl: event.target.value }))}
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              >
+                <option value="">Choose a favicon image</option>
+                {mediaAssets.map((asset) => (
+                  <option key={asset.id} value={asset.url}>
+                    {asset.title || asset.originalName || asset.url}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700">Favicon URL</label>
@@ -517,6 +485,9 @@ export default function AdminSettingsPage() {
                 placeholder="https://example.com/favicon.ico"
                 className="mt-1 w-full rounded border px-3 py-2 text-sm"
               />
+              {identityForm.faviconUrl && (
+                <img src={identityForm.faviconUrl} alt="Selected favicon" className="mt-3 h-12 w-12 rounded border bg-gray-50 object-contain p-2" />
+              )}
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700">Footer text</label>
@@ -646,218 +617,6 @@ export default function AdminSettingsPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </section>
-
-        <section className="rounded-xl border bg-white p-6 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold">Theme options</h2>
-            <p className="text-sm text-gray-500">Set lightweight presentation controls for colors, hero copy, and homepage sections.</p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Primary color</label>
-              <input
-                type="color"
-                value={themeForm.primaryColor}
-                onChange={(event) => setThemeForm((currentForm) => ({ ...currentForm, primaryColor: event.target.value }))}
-                className="mt-1 h-11 w-full rounded border px-2 py-1"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Accent color</label>
-              <input
-                type="color"
-                value={themeForm.accentColor}
-                onChange={(event) => setThemeForm((currentForm) => ({ ...currentForm, accentColor: event.target.value }))}
-                className="mt-1 h-11 w-full rounded border px-2 py-1"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Site font</label>
-              <select
-                value={themeForm.fontFamily}
-                onChange={(event) => setThemeForm((currentForm) => ({ ...currentForm, fontFamily: event.target.value }))}
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-              >
-                {!fontLibrary.some((font) => font.value === themeForm.fontFamily) && <option value={themeForm.fontFamily}>Custom font</option>}
-                {fontLibrary.map((font) => (
-                  <option key={font.value} value={font.value}>
-                    {font.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Hero title</label>
-              <input
-                value={themeForm.heroTitle}
-                onChange={(event) => setThemeForm((currentForm) => ({ ...currentForm, heroTitle: event.target.value }))}
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Hero primary button label</label>
-              <input
-                value={themeForm.heroPrimaryLabel}
-                onChange={(event) => setThemeForm((currentForm) => ({ ...currentForm, heroPrimaryLabel: event.target.value }))}
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Hero body</label>
-              <textarea
-                value={themeForm.heroBody}
-                onChange={(event) => setThemeForm((currentForm) => ({ ...currentForm, heroBody: event.target.value }))}
-                rows={3}
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Hero primary button link</label>
-              <input
-                value={themeForm.heroPrimaryHref}
-                onChange={(event) => setThemeForm((currentForm) => ({ ...currentForm, heroPrimaryHref: event.target.value }))}
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Hero secondary button label</label>
-              <input
-                value={themeForm.heroSecondaryLabel}
-                onChange={(event) => setThemeForm((currentForm) => ({ ...currentForm, heroSecondaryLabel: event.target.value }))}
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Hero secondary button link</label>
-              <input
-                value={themeForm.heroSecondaryHref}
-                onChange={(event) => setThemeForm((currentForm) => ({ ...currentForm, heroSecondaryHref: event.target.value }))}
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <div className="rounded-lg border border-gray-200 p-4">
-              <label htmlFor="show-homepage-pages-section" className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <input
-                  id="show-homepage-pages-section"
-                  type="checkbox"
-                  checked={themeForm.homepageSections.pages.enabled}
-                  onChange={(event) =>
-                    setThemeForm((currentForm) => ({
-                      ...currentForm,
-                      homepageSections: {
-                        ...currentForm.homepageSections,
-                        pages: {
-                          ...currentForm.homepageSections.pages,
-                          enabled: event.target.checked,
-                        },
-                      },
-                    }))
-                  }
-                />
-                Show pages section on landing homepage
-              </label>
-              <input
-                value={themeForm.homepageSections.pages.title}
-                onChange={(event) =>
-                  setThemeForm((currentForm) => ({
-                    ...currentForm,
-                    homepageSections: {
-                      ...currentForm.homepageSections,
-                      pages: {
-                        ...currentForm.homepageSections.pages,
-                        title: event.target.value,
-                      },
-                    },
-                  }))
-                }
-                className="mt-3 w-full rounded border px-3 py-2 text-sm"
-                placeholder="Pages section title"
-              />
-            </div>
-
-            <div className="rounded-lg border border-gray-200 p-4">
-              <label htmlFor="show-homepage-posts-section" className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <input
-                  id="show-homepage-posts-section"
-                  type="checkbox"
-                  checked={themeForm.homepageSections.posts.enabled}
-                  onChange={(event) =>
-                    setThemeForm((currentForm) => ({
-                      ...currentForm,
-                      homepageSections: {
-                        ...currentForm.homepageSections,
-                        posts: {
-                          ...currentForm.homepageSections.posts,
-                          enabled: event.target.checked,
-                        },
-                      },
-                    }))
-                  }
-                />
-                Show posts section on landing homepage
-              </label>
-              <input
-                value={themeForm.homepageSections.posts.title}
-                onChange={(event) =>
-                  setThemeForm((currentForm) => ({
-                    ...currentForm,
-                    homepageSections: {
-                      ...currentForm.homepageSections,
-                      posts: {
-                        ...currentForm.homepageSections.posts,
-                        title: event.target.value,
-                      },
-                    },
-                  }))
-                }
-                className="mt-3 w-full rounded border px-3 py-2 text-sm"
-                placeholder="Posts section title"
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              onClick={() => void saveManagedSetting(SITE_THEME_KEY, themeForm)}
-              disabled={saving[SITE_THEME_KEY] || loading}
-              className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {saving[SITE_THEME_KEY] ? 'Saving…' : 'Save theme options'}
-            </button>
-          </div>
-        </section>
-
-        <section className="rounded-xl border bg-white p-6 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold">Homepage blocks</h2>
-            <p className="text-sm text-gray-500">
-              The public landing page now renders reusable blocks from the <code className="font-mono text-xs">{SITE_HOMEPAGE_BLOCKS_KEY}</code> setting.
-              Use reset to reapply a safe starter block layout.
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-600">
-            <p>
-              Starter blocks include featured pages, latest posts, and an optional CTA block. Advanced users can fine-tune the JSON value in <strong>All settings</strong>.
-            </p>
-          </div>
-
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              onClick={() => void saveManagedSetting(SITE_HOMEPAGE_BLOCKS_KEY, defaultHomepageBlocks)}
-              disabled={saving[SITE_HOMEPAGE_BLOCKS_KEY] || loading}
-              className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {saving[SITE_HOMEPAGE_BLOCKS_KEY] ? 'Saving…' : 'Reset starter blocks'}
-            </button>
           </div>
         </section>
 

@@ -165,6 +165,7 @@ export class DefaultContentService implements OnModuleInit {
 
   async ensureDefaults() {
     await this.ensureSettings();
+    await this.ensureModules();
     const theme = await this.ensureDefaultTheme();
     await this.ensureDefaultPages(theme.id);
     return {
@@ -192,6 +193,14 @@ export class DefaultContentService implements OnModuleInit {
         create: setting,
       });
     }
+  }
+
+  private async ensureModules() {
+    await this.prisma.module.upsert({
+      where: { name: 'newsletter' },
+      update: {},
+      create: { name: 'newsletter', version: '1.0.0', enabled: true },
+    });
   }
 
   private async ensureDefaultTheme() {

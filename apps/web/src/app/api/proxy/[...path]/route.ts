@@ -24,6 +24,7 @@ const ALLOWED_PATH_PREFIXES = [
   'messages',
   'forms',
   'sliders',
+  'newsletter',
   'public',
 ];
 
