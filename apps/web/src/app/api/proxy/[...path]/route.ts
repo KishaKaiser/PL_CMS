@@ -25,6 +25,7 @@ const ALLOWED_PATH_PREFIXES = [
   'forms',
   'sliders',
   'newsletter',
+  'store',
   'public',
 ];
 

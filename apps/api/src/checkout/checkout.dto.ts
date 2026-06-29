@@ -50,5 +50,8 @@ export class CreateCheckoutDto {
   @IsNumber()
   @Min(0)
   shippingAmount?: number;
-}
 
+  @IsOptional()
+  @IsString()
+  couponCode?: string;
+}

@@ -202,6 +202,8 @@ export class InstallService {
       { name: 'forms', version: '1.0.0', enabled: true },
       { name: 'sliders', version: '1.0.0', enabled: true },
       { name: 'newsletter', version: '1.0.0', enabled: true },
+      { name: 'store', version: '1.0.0', enabled: true },
+      { name: 'shipstation', version: '1.0.0', enabled: true },
     ];
 
     for (const m of modules) {

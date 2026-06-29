@@ -14,6 +14,16 @@ import {
 
 const SHIPSTATION_BASE = 'https://ssapi.shipstation.com';
 const WAREHOUSE_ADDRESS_KEY = 'warehouse_address';
+const SHIPSTATION_SERVICES = [
+  { carrierCode: 'stamps_com', carrierName: 'United States Post Office', serviceCode: 'usps_ground_advantage', serviceName: 'USPS Ground Advantage' },
+  { carrierCode: 'stamps_com', carrierName: 'United States Post Office', serviceCode: 'usps_priority_mail', serviceName: 'USPS Priority Mail' },
+  { carrierCode: 'ups', carrierName: 'UPS', serviceCode: 'ups_ground', serviceName: 'UPS Ground' },
+  { carrierCode: 'ups', carrierName: 'UPS', serviceCode: 'ups_2nd_day_air', serviceName: 'UPS 2nd Day Air' },
+  { carrierCode: 'fedex', carrierName: 'FedEx', serviceCode: 'fedex_ground', serviceName: 'FedEx Ground' },
+  { carrierCode: 'fedex', carrierName: 'FedEx', serviceCode: 'fedex_2day', serviceName: 'FedEx 2Day' },
+  { carrierCode: 'globalpost', carrierName: 'GlobalPost', serviceCode: 'globalpost_economy_intl', serviceName: 'GlobalPost Economy International' },
+  { carrierCode: 'globalpost', carrierName: 'GlobalPost', serviceCode: 'globalpost_standard_intl', serviceName: 'GlobalPost Standard International' },
+];
 /** Default weight per item when no weight is provided by the product (16 oz = 1 lb). */
 const DEFAULT_ITEM_WEIGHT_OZ = 16;
 
@@ -93,6 +103,10 @@ export class ShippingService {
     return dto;
   }
 
+  getShipStationServices() {
+    return SHIPSTATION_SERVICES;
+  }
+
   /** Calls ShipStation /shipments/getrates and returns available rates. */
   async getShippingQuote(dto: GetShippingQuoteDto): Promise<ShippingRate[]> {
     const warehouse = await this.getWarehouseAddress();
@@ -146,7 +160,7 @@ export class ShippingService {
       carrierCode: r.carrierCode,
       shipmentCost: r.shipmentCost,
       otherCost: r.otherCost,
-    }));
+    })).filter((rate) => isSupportedCarrier(rate.carrierCode));
   }
 
   /** Calls ShipStation /addresses/validate and returns the result. */
@@ -202,4 +216,9 @@ export class ShippingService {
       message: data.message,
     };
   }
+}
+
+function isSupportedCarrier(carrierCode: string) {
+  const normalized = carrierCode.toLowerCase();
+  return ['stamps', 'usps', 'ups', 'fedex', 'globalpost'].some((carrier) => normalized.includes(carrier));
 }

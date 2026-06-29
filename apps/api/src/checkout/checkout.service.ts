@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateCheckoutDto } from './checkout.dto';
 import { PaypalService } from './paypal.service';
 import { Decimal } from '@prisma/client/runtime/library';
+import { StoreService } from '../store/store.service';
 
 @Injectable()
 export class CheckoutService {
@@ -19,6 +20,7 @@ export class CheckoutService {
     private readonly prisma: PrismaService,
     private readonly paypal: PaypalService,
     private readonly config: ConfigService,
+    private readonly store: StoreService,
   ) {}
 
   /** Build and persist an Order row; returns it with items. */
@@ -65,7 +67,7 @@ export class CheckoutService {
       return sum.add(unitPrice.mul(item.quantity));
     }, new Decimal(0));
 
-    const shippingDecimal =
+    let shippingDecimal =
       dto.shippingAmount != null ? new Decimal(dto.shippingAmount) : new Decimal(0);
 
     // Require carrier and service when a non-zero shipping amount is provided,
@@ -76,7 +78,22 @@ export class CheckoutService {
       );
     }
 
-    const totalAmount = itemSubtotalBeforeTx.add(shippingDecimal);
+    const freeShipping = await this.store.getFreeShippingSettings();
+    if (
+      freeShipping.enabled &&
+      itemSubtotalBeforeTx.greaterThanOrEqualTo(new Decimal(freeShipping.minimumSubtotal ?? 0))
+    ) {
+      shippingDecimal = new Decimal(0);
+    }
+
+    let discountDecimal = new Decimal(0);
+    if (dto.couponCode) {
+      const validation = await this.store.validateCoupon(dto.couponCode, itemSubtotalBeforeTx.toNumber());
+      if (!validation.valid) throw new BadRequestException(validation.message);
+      discountDecimal = new Decimal(validation.discountAmount);
+    }
+
+    const totalAmount = Decimal.max(new Decimal(0), itemSubtotalBeforeTx.sub(discountDecimal).add(shippingDecimal));
 
     const orderItems = dto.items.map((item) => {
       const product = productMap.get(item.productId)!;

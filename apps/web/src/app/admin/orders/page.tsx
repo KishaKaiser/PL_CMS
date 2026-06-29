@@ -44,7 +44,7 @@ const STATUS_OPTIONS = [
   { value: 'PROCESSING', label: 'Processing' },
   { value: 'SHIPPED', label: 'Shipped' },
   { value: 'COMPLETED', label: 'Completed' },
-  { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'CANCELLED', label: 'Canceled' },
   { value: 'REFUNDED', label: 'Refunded' },
 ];
 

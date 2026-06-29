@@ -37,6 +37,12 @@ export class ShippingController {
     return this.shippingService.upsertWarehouseAddress(dto);
   }
 
+  @Get('shipstation-services')
+  @Roles(Role.ADMIN)
+  getShipStationServices() {
+    return this.shippingService.getShipStationServices();
+  }
+
   // ── Client-facing: quote & validate ─────────
 
   @Post('quote')

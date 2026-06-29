@@ -196,11 +196,13 @@ export class DefaultContentService implements OnModuleInit {
   }
 
   private async ensureModules() {
-    await this.prisma.module.upsert({
-      where: { name: 'newsletter' },
-      update: {},
-      create: { name: 'newsletter', version: '1.0.0', enabled: true },
-    });
+    for (const name of ['newsletter', 'store', 'shipstation']) {
+      await this.prisma.module.upsert({
+        where: { name },
+        update: {},
+        create: { name, version: '1.0.0', enabled: true },
+      });
+    }
   }
 
   private async ensureDefaultTheme() {
