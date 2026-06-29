@@ -78,6 +78,23 @@ interface Order {
   payments: Payment[];
 }
 
+interface ShipStationService {
+  carrierCode: string;
+  carrierName: string;
+  serviceCode: string;
+  serviceName: string;
+}
+
+const ORDER_STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'CONFIRMED', label: 'Confirmed' },
+  { value: 'PROCESSING', label: 'Processing' },
+  { value: 'SHIPPED', label: 'Shipped' },
+  { value: 'COMPLETED', label: 'Complete' },
+  { value: 'CANCELLED', label: 'Canceled' },
+  { value: 'REFUNDED', label: 'Refunded' },
+];
+
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-yellow-100 text-yellow-700',
   CONFIRMED: 'bg-blue-100 text-blue-700',
@@ -105,6 +122,9 @@ export default function AdminOrderDetailPage() {
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
+  const [shipStationServices, setShipStationServices] = useState<ShipStationService[]>([]);
+  const [orderStatus, setOrderStatus] = useState('');
+  const [updatingOrder, setUpdatingOrder] = useState(false);
 
   // Buy label form
   const [carrierCode, setCarrierCode] = useState('');
@@ -128,6 +148,7 @@ export default function AdminOrderDetailPage() {
       }
       const json = (await res.json()) as Order;
       setOrder(json);
+      setOrderStatus(json.status);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load order');
     } finally {
@@ -138,6 +159,13 @@ export default function AdminOrderDetailPage() {
   useEffect(() => {
     void fetchOrder();
   }, [fetchOrder]);
+
+  useEffect(() => {
+    fetch('/api/proxy/shipping/shipstation-services')
+      .then((res) => res.ok ? res.json() : [])
+      .then((data: ShipStationService[]) => setShipStationServices(data))
+      .catch(() => undefined);
+  }, []);
 
   async function handleBuyLabel(e: React.FormEvent) {
     e.preventDefault();
@@ -194,6 +222,30 @@ export default function AdminOrderDetailPage() {
     }
   }
 
+  async function handleUpdateOrderStatus() {
+    if (!orderStatus || orderStatus === order?.status) return;
+    setUpdatingOrder(true);
+    setActionError('');
+    setActionSuccess('');
+    try {
+      const res = await fetch(`/api/proxy/fulfillment/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: orderStatus }),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(err.message ?? 'Failed to update order status');
+      }
+      setActionSuccess(`Order status updated to ${orderStatus}.`);
+      await fetchOrder();
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : 'Error updating order status');
+    } finally {
+      setUpdatingOrder(false);
+    }
+  }
+
   if (loading) return <main className="p-8"><p className="text-gray-500">Loading order…</p></main>;
   if (error) return <main className="p-8"><p className="text-red-600">{error}</p></main>;
   if (!order) return null;
@@ -235,6 +287,19 @@ export default function AdminOrderDetailPage() {
               >
                 {order.status}
               </span>
+            </div>
+            <div className="mt-4 flex flex-wrap items-end gap-2 rounded-lg bg-gray-50 p-3">
+              <label className="block text-xs font-medium text-gray-600">
+                Order Status
+                <select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)} className="mt-1 rounded border px-3 py-2 text-sm">
+                  {ORDER_STATUS_OPTIONS.map((statusOption) => (
+                    <option key={statusOption.value} value={statusOption.value}>{statusOption.label}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" onClick={() => void handleUpdateOrderStatus()} disabled={updatingOrder || orderStatus === order.status} className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50">
+                {updatingOrder ? 'Updating...' : 'Update Status'}
+              </button>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
               <div>
@@ -477,27 +542,25 @@ export default function AdminOrderDetailPage() {
               <form onSubmit={handleBuyLabel} className="space-y-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600">
-                    Carrier Code *
+                    ShipStation Service *
                   </label>
-                  <input
+                  <select
                     required
-                    value={carrierCode}
-                    onChange={(e) => setCarrierCode(e.target.value)}
-                    placeholder="e.g. stamps_com, fedex"
+                    value={`${carrierCode}|${serviceCode}`}
+                    onChange={(e) => {
+                      const [carrier, service] = e.target.value.split('|');
+                      setCarrierCode(carrier ?? '');
+                      setServiceCode(service ?? '');
+                    }}
                     className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600">
-                    Service Code *
-                  </label>
-                  <input
-                    required
-                    value={serviceCode}
-                    onChange={(e) => setServiceCode(e.target.value)}
-                    placeholder="e.g. usps_priority_mail"
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                  />
+                  >
+                    <option value="|">Choose a service</option>
+                    {shipStationServices.map((service) => (
+                      <option key={`${service.carrierCode}-${service.serviceCode}`} value={`${service.carrierCode}|${service.serviceCode}`}>
+                        {service.carrierName} - {service.serviceName}
+                      </option>
+                    ))}
+                  </select>
                   {order.shippingCarrier && (
                     <p className="mt-1 text-xs text-gray-400">
                       Customer selected: {order.shippingCarrier} / {order.shippingService}

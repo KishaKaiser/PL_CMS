@@ -127,6 +127,38 @@ export class FulfillmentService {
     return order;
   }
 
+  async updateOrderStatus(orderId: string, status: 'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'SHIPPED' | 'CANCELLED' | 'COMPLETED' | 'REFUNDED') {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (status === 'CANCELLED' && order.status !== 'CANCELLED') {
+        for (const item of order.items.filter((entry) => entry.variantId)) {
+          await tx.inventory.updateMany({
+            where: { variantId: item.variantId! },
+            data: { reserved: { decrement: item.quantity } },
+          });
+        }
+      }
+      return tx.order.update({
+        where: { id: orderId },
+        data: { status },
+        include: {
+          user: { select: { id: true, email: true, name: true } },
+          items: { include: { product: true, variant: true } },
+          shippingAddress: true,
+          shipments: true,
+          payments: true,
+        },
+      });
+    });
+
+    return updated;
+  }
+
   /**
    * Admin: buy a ShipStation shipping label for an order.
    * Creates a Shipment record and emails the customer.

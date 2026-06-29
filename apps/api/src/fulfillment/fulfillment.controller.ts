@@ -14,7 +14,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { Roles, RolesGuard } from '../auth/roles.guard';
 import { Role } from '@pl-cms/shared';
 import { FulfillmentService } from './fulfillment.service';
-import { BuyLabelDto, UpdateShipmentStatusDto } from './fulfillment.dto';
+import { BuyLabelDto, UpdateOrderStatusDto, UpdateShipmentStatusDto } from './fulfillment.dto';
 
 @Controller('fulfillment')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -42,6 +42,14 @@ export class FulfillmentController {
   @Get('orders/:orderId')
   getOrder(@Param('orderId') orderId: string) {
     return this.fulfillmentService.getOrderById(orderId);
+  }
+
+  @Patch('orders/:orderId/status')
+  updateOrderStatus(
+    @Param('orderId') orderId: string,
+    @Body() dto: UpdateOrderStatusDto,
+  ) {
+    return this.fulfillmentService.updateOrderStatus(orderId, dto.status);
   }
 
   /** Buy a ShipStation shipping label for an order (admin). */

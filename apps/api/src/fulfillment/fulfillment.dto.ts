@@ -19,3 +19,8 @@ export class UpdateShipmentStatusDto {
   @IsString()
   trackingNumber?: string;
 }
+
+export class UpdateOrderStatusDto {
+  @IsIn(['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'CANCELLED', 'COMPLETED', 'REFUNDED'])
+  status!: 'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'SHIPPED' | 'CANCELLED' | 'COMPLETED' | 'REFUNDED';
+}

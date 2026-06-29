@@ -17,6 +17,18 @@ export default function CartPage() {
     setCart(getCart());
   }, []);
 
+  useEffect(() => {
+    if (cart.length === 0) return;
+    void fetch('/api/proxy/store/cart-recovery/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subtotal: cartTotal(cart),
+        items: cart,
+      }),
+    }).catch(() => undefined);
+  }, [cart]);
+
   const handleQuantityChange = (
     productId: string,
     variantId: string | undefined,

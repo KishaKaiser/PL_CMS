@@ -21,6 +21,7 @@ import { DefaultContentModule } from './bootstrap/default-content.module';
 import { FormsModule } from './forms/forms.module';
 import { SlidersModule } from './sliders/sliders.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
+import { StoreModule } from './store/store.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { NewsletterModule } from './newsletter/newsletter.module';
     FormsModule,
     SlidersModule,
     NewsletterModule,
+    StoreModule,
   ],
 })
 export class AppModule {}

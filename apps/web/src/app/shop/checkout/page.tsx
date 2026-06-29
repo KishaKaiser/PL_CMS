@@ -44,6 +44,19 @@ interface ShippingRate {
   otherCost: number;
 }
 
+interface CouponValidation {
+  valid: boolean;
+  code: string;
+  discountAmount: number;
+  message: string;
+}
+
+interface FreeShippingSettings {
+  enabled: boolean;
+  minimumSubtotal: number;
+  label: string;
+}
+
 const emptyAddress: ShippingAddress = {
   fullName: '',
   phone: '',
@@ -72,6 +85,11 @@ function storedToCartItem(s: StoredCartItem): CartItem {
   };
 }
 
+function getEffectiveShippingCost(rate: ShippingRate, subtotal: number, freeShipping: FreeShippingSettings) {
+  if (freeShipping.enabled && subtotal >= Number(freeShipping.minimumSubtotal ?? 0)) return 0;
+  return rate.shipmentCost + rate.otherCost;
+}
+
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const productId = searchParams.get('productId');
@@ -93,6 +111,10 @@ function CheckoutContent() {
   const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
   const [ratesLoading, setRatesLoading] = useState(false);
   const [ratesError, setRatesError] = useState('');
+  const [couponCode, setCouponCode] = useState('');
+  const [coupon, setCoupon] = useState<CouponValidation | null>(null);
+  const [couponMessage, setCouponMessage] = useState('');
+  const [freeShipping, setFreeShipping] = useState<FreeShippingSettings>({ enabled: false, minimumSubtotal: 0, label: 'Free shipping' });
 
   // Load cart: from localStorage first, then fall back to URL params
   useEffect(() => {
@@ -132,14 +154,58 @@ function CheckoutContent() {
       });
   }, []);
 
+  useEffect(() => {
+    fetch('/api/proxy/store/free-shipping')
+      .then((res) => res.ok ? res.json() : null)
+      .then((data: FreeShippingSettings | null) => {
+        if (data) setFreeShipping(data);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (cart.length === 0) return;
+    const subtotal = cart.reduce((sum, item) => sum + Number(item.product.price) * item.quantity, 0);
+    void fetch('/api/proxy/store/cart-recovery/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: shippingAddress.email || undefined,
+        subtotal,
+        items: cart,
+      }),
+    }).catch(() => undefined);
+  }, [cart, shippingAddress.email]);
+
   const itemsTotal = cart.reduce(
     (sum, item) => sum + Number(item.product.price) * item.quantity,
     0,
   );
   const shippingCost = selectedRate
-    ? selectedRate.shipmentCost + selectedRate.otherCost
+    ? getEffectiveShippingCost(selectedRate, itemsTotal, freeShipping)
     : 0;
-  const grandTotal = itemsTotal + shippingCost;
+  const discountAmount = coupon?.valid ? coupon.discountAmount : 0;
+  const grandTotal = Math.max(0, itemsTotal - discountAmount + shippingCost);
+
+  const applyCoupon = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setCouponMessage('');
+    setCoupon(null);
+    if (!couponCode.trim()) return;
+    try {
+      const res = await fetch('/api/proxy/store/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: couponCode, subtotal: itemsTotal }),
+      });
+      const data = (await res.json()) as CouponValidation;
+      setCouponMessage(data.message);
+      if (data.valid) setCoupon(data);
+      setPaypalRendered(false);
+    } catch {
+      setCouponMessage('Could not apply coupon.');
+    }
+  };
 
   const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,7 +263,8 @@ function CheckoutContent() {
               shippingAddress,
               shippingCarrier: selectedRate.carrierCode,
               shippingService: selectedRate.serviceCode,
-              shippingAmount: selectedRate.shipmentCost + selectedRate.otherCost,
+              shippingAmount: shippingCost,
+              couponCode: coupon?.valid ? coupon.code : undefined,
             }),
           });
           if (!res.ok) {
@@ -232,7 +299,7 @@ function CheckoutContent() {
       })
       .render('#paypal-button-container');
     setPaypalRendered(true);
-  }, [cart, paypalRendered, selectedRate, shippingAddress]);
+  }, [cart, coupon, paypalRendered, selectedRate, shippingAddress, shippingCost]);
 
   useEffect(() => {
     if (paypalLoaded && cart.length > 0 && selectedRate) {
@@ -324,10 +391,26 @@ function CheckoutContent() {
                 <span>${shippingCost.toFixed(2)}</span>
               </div>
             )}
+            {coupon?.valid && (
+              <div className="flex justify-between py-2 text-sm text-emerald-700">
+                <span>Coupon ({coupon.code})</span>
+                <span>-${discountAmount.toFixed(2)}</span>
+              </div>
+            )}
             <div className="mt-4 flex justify-between border-t pt-4 text-lg font-bold">
               <span>Total</span>
               <span>${grandTotal.toFixed(2)} USD</span>
             </div>
+            <form onSubmit={applyCoupon} className="mt-5 flex gap-2">
+              <input value={couponCode} onChange={(event) => setCouponCode(event.target.value)} placeholder="Coupon code" className="flex-1 rounded-lg border px-3 py-2 text-sm" />
+              <button type="submit" className="rounded-lg border border-purple-200 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50">Apply</button>
+            </form>
+            {couponMessage && <p className={`mt-2 text-sm ${coupon?.valid ? 'text-emerald-700' : 'text-red-600'}`}>{couponMessage}</p>}
+            {freeShipping.enabled && (
+              <p className="mt-2 text-xs text-gray-500">
+                {itemsTotal >= freeShipping.minimumSubtotal ? freeShipping.label : `Free shipping at $${freeShipping.minimumSubtotal.toFixed(2)} subtotal.`}
+              </p>
+            )}
           </div>
 
           {/* Step 1: Shipping address form */}
@@ -424,7 +507,7 @@ function CheckoutContent() {
               </p>
               <div className="space-y-2">
                 {shippingRates.map((rate) => {
-                  const total = rate.shipmentCost + rate.otherCost;
+                  const total = getEffectiveShippingCost(rate, itemsTotal, freeShipping);
                   return (
                     <button
                       key={`${rate.carrierCode}-${rate.serviceCode}`}
@@ -458,7 +541,7 @@ function CheckoutContent() {
                 </p>
                 <p className="mt-1 text-gray-600">
                   <span className="font-medium">Shipping method:</span>{' '}
-                  {selectedRate.serviceName} — ${(selectedRate.shipmentCost + selectedRate.otherCost).toFixed(2)}
+                  {selectedRate.serviceName} — ${shippingCost.toFixed(2)}
                   {' '}
                   <button onClick={() => { setSelectedRate(null); setPaypalRendered(false); }}
                     className="text-purple-600 hover:underline">
