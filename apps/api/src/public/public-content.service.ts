@@ -710,7 +710,7 @@ export class PublicContentService {
   }
 
   private normalizeSidebarWidgetType(value: unknown): SiteSidebarWidgetType | null {
-    const allowed: SiteSidebarWidgetType[] = ['search', 'categories', 'tags', 'authors', 'archives', 'image', 'form', 'menu', 'shop_categories', 'price_filter', 'color_filter'];
+    const allowed: SiteSidebarWidgetType[] = ['search', 'categories', 'tags', 'authors', 'archives', 'image', 'form', 'newsletter', 'menu', 'shop_categories', 'price_filter', 'color_filter'];
     return typeof value === 'string' && allowed.includes(value as SiteSidebarWidgetType) ? value as SiteSidebarWidgetType : null;
   }
 
