@@ -17,6 +17,7 @@ const NAV_GROUPS = [
       { href: '/admin/pages', label: 'Pages' },
       { href: '/admin/posts', label: 'Posts' },
       { href: '/admin/forms', label: 'Forms' },
+      { href: '/admin/newsletter', label: 'Newsletter' },
       { href: '/admin/menus', label: 'Menus' },
       { href: '/admin/sidebars', label: 'Sidebars' },
       { href: '/admin/sliders', label: 'Sliders' },

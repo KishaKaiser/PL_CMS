@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { RichContent } from '../../components/cms/rich-content';
 import { PublicFormEmbed } from '../../components/cms/public-form-embed';
+import { NewsletterSidebarWidget } from '../../components/cms/newsletter-sidebar-widget';
 import { getPublishedPage, getPublicSiteConfig, getSafeImageSrc, type PublicSiteConfig } from '../../lib/public-cms';
 import { fetchApi } from '../../lib/server-api';
 import { buildSeoMetadata, getSeoDescription, getSeoTitle } from '../../lib/seo';
@@ -229,6 +230,10 @@ function ShopSidebar({
               <PublicFormEmbed slug={formSlug} fallbackTitle={widget.title} showTitle={Boolean(widget.title)} />
             </section>
           );
+        }
+
+        if (widget.type === 'newsletter') {
+          return <NewsletterSidebarWidget key={widget.id} widget={widget} />;
         }
 
         if (widget.type === 'menu') {

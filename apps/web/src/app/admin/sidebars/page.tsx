@@ -13,6 +13,7 @@ const WIDGET_TYPES: Array<{ type: SiteSidebarWidgetType; label: string }> = [
   { type: 'archives', label: 'Archives' },
   { type: 'image', label: 'Image' },
   { type: 'form', label: 'Saved Form' },
+  { type: 'newsletter', label: 'Newsletter Form' },
   { type: 'menu', label: 'Saved Menu' },
   { type: 'shop_categories', label: 'Shop Categories' },
   { type: 'price_filter', label: 'Price Filter' },
@@ -210,6 +211,36 @@ function WidgetSettingsFields({
         <label className="block text-sm font-medium text-gray-700">
           Saved Form Slug
           <input value={read('formSlug')} onChange={(event) => onChange({ formSlug: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="contact-us" />
+        </label>
+      </div>
+    );
+  }
+
+  if (widget.type === 'newsletter') {
+    return (
+      <div className="mt-4 grid gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 md:grid-cols-2">
+        <label className="block text-sm font-medium text-gray-700 md:col-span-2">
+          Description
+          <textarea value={read('description', 'Get updates in your inbox.')} rows={3} onChange={(event) => onChange({ description: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+        </label>
+        <label className="block text-sm font-medium text-gray-700">
+          Layout
+          <select value={read('layout', 'vertical')} onChange={(event) => onChange({ layout: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+            <option value="vertical">Vertical</option>
+            <option value="horizontal">Horizontal</option>
+          </select>
+        </label>
+        <label className="block text-sm font-medium text-gray-700">
+          Email Placeholder
+          <input value={read('placeholder', 'Email address')} onChange={(event) => onChange({ placeholder: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+        </label>
+        <label className="block text-sm font-medium text-gray-700">
+          Button Label
+          <input value={read('buttonLabel', 'Subscribe')} onChange={(event) => onChange({ buttonLabel: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+        </label>
+        <label className="mt-6 flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={settings.collectName === true} onChange={(event) => onChange({ collectName: event.target.checked })} />
+          Ask for name
         </label>
       </div>
     );

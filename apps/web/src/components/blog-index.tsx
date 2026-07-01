@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { RichContent } from './cms/rich-content';
+import { NewsletterSidebarWidget } from './cms/newsletter-sidebar-widget';
 import { PublicSiteShell } from './public-site-shell';
 import {
   getArchives,
@@ -161,6 +162,8 @@ export async function BlogIndex({
                 </Link>
               </section>
             );
+
+            if (widget.type === 'newsletter') return <NewsletterSidebarWidget key={widget.id} widget={widget} />;
 
             return (
               <section key={widget.id} className="rounded-lg border border-dashed bg-white p-4 text-sm text-gray-500 shadow-sm">

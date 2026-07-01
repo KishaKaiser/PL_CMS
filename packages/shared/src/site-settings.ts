@@ -89,6 +89,7 @@ export type SiteSidebarWidgetType =
   | 'archives'
   | 'image'
   | 'form'
+  | 'newsletter'
   | 'menu'
   | 'shop_categories'
   | 'price_filter'
@@ -201,6 +202,7 @@ export const DEFAULT_SITE_SIDEBARS: SiteSidebarsSettings = {
     { id: 'blog-tags', type: 'tags', enabled: true, title: 'Tags' },
     { id: 'blog-authors', type: 'authors', enabled: true, title: 'Authors' },
     { id: 'blog-archives', type: 'archives', enabled: true, title: 'Archives' },
+    { id: 'blog-newsletter', type: 'newsletter', enabled: true, title: 'Newsletter', settings: { description: 'Get updates in your inbox.', layout: 'vertical' } },
   ],
   shop: [
     { id: 'shop-categories', type: 'shop_categories', enabled: true, title: 'Shop Categories' },

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { PublicSiteShell } from '../../../components/public-site-shell';
 import { RichContent } from '../../../components/cms/rich-content';
+import { NewsletterSidebarWidget } from '../../../components/cms/newsletter-sidebar-widget';
 import { ReviewSection } from '../../../components/reviews/review-section';
 import {
   getArchives,
@@ -207,6 +208,8 @@ async function BlogPostSidebar({ siteConfig }: { siteConfig: PublicSiteConfig })
             </Link>
           </section>
         );
+
+        if (widget.type === 'newsletter') return <NewsletterSidebarWidget key={widget.id} widget={widget} />;
 
         return (
           <section key={widget.id} className="rounded-lg border border-dashed bg-white p-4 text-sm text-gray-500 shadow-sm">
