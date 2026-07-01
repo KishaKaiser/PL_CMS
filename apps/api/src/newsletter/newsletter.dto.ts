@@ -11,6 +11,12 @@ export class SubscribeDto {
   @IsOptional()
   @IsString()
   source?: string;
+
+  @IsBoolean()
+  privacyConsent!: boolean;
+
+  @IsBoolean()
+  termsConsent!: boolean;
 }
 
 export class NewsletterSettingsDto {
@@ -31,6 +37,21 @@ export class NewsletterSettingsDto {
 
   @IsBoolean()
   collectName!: boolean;
+
+  @IsString()
+  privacyPolicyUrl!: string;
+
+  @IsString()
+  termsUrl!: string;
+
+  @IsString()
+  consentText!: string;
+
+  @IsString()
+  gdprNotice!: string;
+
+  @IsString()
+  retentionPolicy!: string;
 
   @IsString()
   successMessage!: string;

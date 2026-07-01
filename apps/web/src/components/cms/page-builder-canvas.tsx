@@ -560,7 +560,7 @@ export function PreviewBlock({
     return <h1 className="mb-3 font-bold" style={textStyle(block, theme, 42)}>{String(block.props.text ?? 'Heading')}</h1>;
   }
   if (block.type === 'text') {
-    return <p className="mb-4 leading-7" style={textStyle(block, theme, 16)}>{String(block.props.text ?? 'Text block')}</p>;
+    return <div className="cms-rich-content mb-4 leading-7" style={textStyle(block, theme, 16)} dangerouslySetInnerHTML={{ __html: String(block.props.text ?? 'Text block') }} />;
   }
   if (block.type === 'image') {
     const src = String(block.props.src ?? '');
@@ -1005,7 +1005,7 @@ export function BlockEditor({
       </button>
       {['heading', 'text', 'button'].includes(block.type) && (
         <label className="block text-sm font-medium text-gray-700">
-          Text
+          {block.type === 'text' ? 'Text / HTML' : 'Text'}
           <textarea value={text} rows={4} onChange={(event) => onChange(block.type === 'button' ? { label: event.target.value } : { text: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
         </label>
       )}

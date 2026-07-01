@@ -10,6 +10,10 @@ export interface NewsletterSubscriber {
   name: string;
   source: string;
   status: 'SUBSCRIBED' | 'UNSUBSCRIBED';
+  privacyConsent: boolean;
+  termsConsent: boolean;
+  consentText: string;
+  consentedAt: string;
   subscribedAt: string;
   unsubscribedAt?: string;
 }
@@ -21,6 +25,11 @@ const DEFAULT_NEWSLETTER_SETTINGS: NewsletterSettingsDto = {
   defaultButtonLabel: 'Subscribe',
   defaultPlaceholder: 'Email address',
   collectName: false,
+  privacyPolicyUrl: '/privacy-policy',
+  termsUrl: '/terms',
+  consentText: 'I agree to the privacy policy and terms and conditions.',
+  gdprNotice: 'You can unsubscribe at any time. We store your email only for newsletter communication.',
+  retentionPolicy: 'Newsletter subscriber records are kept until unsubscribe or deletion is requested.',
   successMessage: 'Thank you for subscribing.',
   welcomeSubject: 'Welcome to our newsletter',
   welcomeBody: 'Thank you for subscribing. We are glad you are here.',
@@ -38,10 +47,14 @@ export class NewsletterService {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new BadRequestException('Enter a valid email address.');
     }
+    if (!dto.privacyConsent || !dto.termsConsent) {
+      throw new BadRequestException('Please agree to the privacy policy and terms and conditions.');
+    }
 
     if (!(await this.isEnabled())) {
       throw new BadRequestException('Newsletter signup is not enabled.');
     }
+    const settings = await this.getSettings();
 
     const setting = await this.prisma.setting.findUnique({
       where: { key: NEWSLETTER_SUBSCRIBERS_KEY },
@@ -53,9 +66,24 @@ export class NewsletterService {
       existing.name = name || existing.name;
       existing.source = source || existing.source;
       existing.status = 'SUBSCRIBED';
+      existing.privacyConsent = true;
+      existing.termsConsent = true;
+      existing.consentText = settings.consentText;
+      existing.consentedAt = new Date().toISOString();
       existing.unsubscribedAt = undefined;
     } else {
-      subscribers.push({ email, name, source, status: 'SUBSCRIBED', subscribedAt: new Date().toISOString() });
+      const now = new Date().toISOString();
+      subscribers.push({
+        email,
+        name,
+        source,
+        status: 'SUBSCRIBED',
+        privacyConsent: true,
+        termsConsent: true,
+        consentText: settings.consentText,
+        consentedAt: now,
+        subscribedAt: now,
+      });
     }
 
     if (!existing || existing.status === 'SUBSCRIBED') {
@@ -68,7 +96,7 @@ export class NewsletterService {
 
     return {
       success: true,
-      message: existing ? 'You are already subscribed.' : (await this.getSettings()).successMessage,
+      message: existing ? 'You are already subscribed.' : settings.successMessage,
     };
   }
 
@@ -84,6 +112,11 @@ export class NewsletterService {
       defaultButtonLabel: dto.defaultButtonLabel || DEFAULT_NEWSLETTER_SETTINGS.defaultButtonLabel,
       defaultPlaceholder: dto.defaultPlaceholder || DEFAULT_NEWSLETTER_SETTINGS.defaultPlaceholder,
       collectName: Boolean(dto.collectName),
+      privacyPolicyUrl: dto.privacyPolicyUrl || DEFAULT_NEWSLETTER_SETTINGS.privacyPolicyUrl,
+      termsUrl: dto.termsUrl || DEFAULT_NEWSLETTER_SETTINGS.termsUrl,
+      consentText: dto.consentText || DEFAULT_NEWSLETTER_SETTINGS.consentText,
+      gdprNotice: dto.gdprNotice || DEFAULT_NEWSLETTER_SETTINGS.gdprNotice,
+      retentionPolicy: dto.retentionPolicy || DEFAULT_NEWSLETTER_SETTINGS.retentionPolicy,
       successMessage: dto.successMessage || DEFAULT_NEWSLETTER_SETTINGS.successMessage,
       welcomeSubject: dto.welcomeSubject || DEFAULT_NEWSLETTER_SETTINGS.welcomeSubject,
       welcomeBody: dto.welcomeBody || DEFAULT_NEWSLETTER_SETTINGS.welcomeBody,
@@ -178,6 +211,10 @@ function parseSubscribers(value: string | undefined): NewsletterSubscriber[] {
           name: typeof candidate.name === 'string' ? candidate.name : '',
           source: typeof candidate.source === 'string' ? candidate.source : 'website',
           status: candidate.status === 'UNSUBSCRIBED' ? 'UNSUBSCRIBED' : 'SUBSCRIBED',
+          privacyConsent: candidate.privacyConsent === true,
+          termsConsent: candidate.termsConsent === true,
+          consentText: typeof candidate.consentText === 'string' ? candidate.consentText : DEFAULT_NEWSLETTER_SETTINGS.consentText,
+          consentedAt: typeof candidate.consentedAt === 'string' ? candidate.consentedAt : (typeof candidate.subscribedAt === 'string' ? candidate.subscribedAt : new Date().toISOString()),
           subscribedAt: typeof candidate.subscribedAt === 'string' ? candidate.subscribedAt : new Date().toISOString(),
           unsubscribedAt: typeof candidate.unsubscribedAt === 'string' ? candidate.unsubscribedAt : undefined,
         };

@@ -12,6 +12,11 @@ interface NewsletterSettings {
   successMessage: string;
   welcomeSubject: string;
   welcomeBody: string;
+  privacyPolicyUrl: string;
+  termsUrl: string;
+  consentText: string;
+  gdprNotice: string;
+  retentionPolicy: string;
 }
 
 interface Subscriber {
@@ -21,6 +26,9 @@ interface Subscriber {
   status: 'SUBSCRIBED' | 'UNSUBSCRIBED';
   subscribedAt: string;
   unsubscribedAt?: string;
+  privacyConsent?: boolean;
+  termsConsent?: boolean;
+  consentedAt?: string;
 }
 
 const defaultSettings: NewsletterSettings = {
@@ -33,6 +41,11 @@ const defaultSettings: NewsletterSettings = {
   successMessage: 'Thank you for subscribing.',
   welcomeSubject: 'Welcome to our newsletter',
   welcomeBody: 'Thank you for subscribing. We are glad you are here.',
+  privacyPolicyUrl: '/privacy-policy',
+  termsUrl: '/terms',
+  consentText: 'I agree to the privacy policy and terms and conditions.',
+  gdprNotice: 'You can unsubscribe at any time. We store your email only for newsletter communication.',
+  retentionPolicy: 'Newsletter subscriber records are kept until unsubscribe or deletion is requested.',
 };
 
 export default function AdminNewsletterPage() {
@@ -62,7 +75,7 @@ export default function AdminNewsletterPage() {
         fetch('/api/proxy/newsletter/admin/subscribers'),
       ]);
       if (!settingsRes.ok || !subscribersRes.ok) throw new Error('Could not load newsletter module.');
-      setSettings((await settingsRes.json()) as NewsletterSettings);
+      setSettings({ ...defaultSettings, ...((await settingsRes.json()) as NewsletterSettings) });
       setSubscribers((await subscribersRes.json()) as Subscriber[]);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not load newsletter module.');
@@ -172,6 +185,11 @@ export default function AdminNewsletterPage() {
               </label>
               <label className="block text-sm font-medium text-gray-700">Welcome Email Subject<input value={settings.welcomeSubject} onChange={(event) => setSettings((current) => ({ ...current, welcomeSubject: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
               <label className="block text-sm font-medium text-gray-700 md:col-span-2">Welcome Email Body<textarea value={settings.welcomeBody} rows={4} onChange={(event) => setSettings((current) => ({ ...current, welcomeBody: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700">Privacy Policy URL<input value={settings.privacyPolicyUrl} onChange={(event) => setSettings((current) => ({ ...current, privacyPolicyUrl: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700">Terms URL<input value={settings.termsUrl} onChange={(event) => setSettings((current) => ({ ...current, termsUrl: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700 md:col-span-2">Consent Checkbox Text<textarea value={settings.consentText} rows={2} onChange={(event) => setSettings((current) => ({ ...current, consentText: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700 md:col-span-2">GDPR Notice<textarea value={settings.gdprNotice} rows={3} onChange={(event) => setSettings((current) => ({ ...current, gdprNotice: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700 md:col-span-2">Retention Policy<textarea value={settings.retentionPolicy} rows={3} onChange={(event) => setSettings((current) => ({ ...current, retentionPolicy: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
             </div>
             <div className="mt-5 flex justify-end">
               <button type="button" onClick={() => void saveSettings()} className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700">Save Newsletter Settings</button>
@@ -194,6 +212,7 @@ export default function AdminNewsletterPage() {
                     <th className="px-3 py-2">Name</th>
                     <th className="px-3 py-2">Source</th>
                     <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Consent</th>
                     <th className="px-3 py-2">Subscribed</th>
                     <th className="px-3 py-2 text-right">Actions</th>
                   </tr>
@@ -205,6 +224,7 @@ export default function AdminNewsletterPage() {
                       <td className="px-3 py-2">{subscriber.name || '-'}</td>
                       <td className="px-3 py-2">{subscriber.source}</td>
                       <td className="px-3 py-2">{subscriber.status}</td>
+                      <td className="px-3 py-2">{subscriber.privacyConsent && subscriber.termsConsent ? 'Yes' : 'No'}</td>
                       <td className="px-3 py-2">{new Date(subscriber.subscribedAt).toLocaleDateString()}</td>
                       <td className="px-3 py-2 text-right">
                         {subscriber.status !== 'UNSUBSCRIBED' && (
@@ -214,7 +234,7 @@ export default function AdminNewsletterPage() {
                       </td>
                     </tr>
                   ))}
-                  {filteredSubscribers.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-500">No subscribers found.</td></tr>}
+                  {filteredSubscribers.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-500">No subscribers found.</td></tr>}
                 </tbody>
               </table>
             </div>
