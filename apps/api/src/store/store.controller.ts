@@ -4,6 +4,7 @@ import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../auth/roles.guard';
 import {
   CartRecoverySettingsDto,
+  EcommerceSettingsDto,
   FreeShippingSettingsDto,
   StoreCouponDto,
   StoreEmailTemplateDto,
@@ -31,11 +32,30 @@ export class StoreController {
     return this.store.getFreeShippingSettings();
   }
 
+  @Get('ecommerce')
+  getPublicEcommerceSettings() {
+    return this.store.getEcommerceSettings();
+  }
+
   @Get('admin/coupons')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
   listCoupons() {
     return this.store.listCoupons();
+  }
+
+  @Get('admin/ecommerce')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  getEcommerceSettings() {
+    return this.store.getEcommerceSettings();
+  }
+
+  @Put('admin/ecommerce')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  saveEcommerceSettings(@Body() dto: EcommerceSettingsDto) {
+    return this.store.saveEcommerceSettings(dto);
   }
 
   @Post('admin/coupons')

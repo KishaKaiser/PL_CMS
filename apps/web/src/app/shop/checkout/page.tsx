@@ -57,6 +57,14 @@ interface FreeShippingSettings {
   label: string;
 }
 
+interface EcommerceSettings {
+  currency: string;
+  taxEnabled: boolean;
+  taxRatePercent: number;
+  pricesIncludeTax: boolean;
+  termsPageUrl: string;
+}
+
 const emptyAddress: ShippingAddress = {
   fullName: '',
   phone: '',
@@ -115,6 +123,7 @@ function CheckoutContent() {
   const [coupon, setCoupon] = useState<CouponValidation | null>(null);
   const [couponMessage, setCouponMessage] = useState('');
   const [freeShipping, setFreeShipping] = useState<FreeShippingSettings>({ enabled: false, minimumSubtotal: 0, label: 'Free shipping' });
+  const [ecommerce, setEcommerce] = useState<EcommerceSettings>({ currency: 'USD', taxEnabled: false, taxRatePercent: 0, pricesIncludeTax: false, termsPageUrl: '/terms' });
 
   // Load cart: from localStorage first, then fall back to URL params
   useEffect(() => {
@@ -155,10 +164,13 @@ function CheckoutContent() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/proxy/store/free-shipping')
-      .then((res) => res.ok ? res.json() : null)
-      .then((data: FreeShippingSettings | null) => {
-        if (data) setFreeShipping(data);
+    Promise.all([
+      fetch('/api/proxy/store/free-shipping'),
+      fetch('/api/proxy/store/ecommerce'),
+    ])
+      .then(async ([freeRes, ecommerceRes]) => {
+        if (freeRes.ok) setFreeShipping((await freeRes.json()) as FreeShippingSettings);
+        if (ecommerceRes.ok) setEcommerce((await ecommerceRes.json()) as EcommerceSettings);
       })
       .catch(() => undefined);
   }, []);
@@ -185,7 +197,9 @@ function CheckoutContent() {
     ? getEffectiveShippingCost(selectedRate, itemsTotal, freeShipping)
     : 0;
   const discountAmount = coupon?.valid ? coupon.discountAmount : 0;
-  const grandTotal = Math.max(0, itemsTotal - discountAmount + shippingCost);
+  const taxableSubtotal = Math.max(0, itemsTotal - discountAmount);
+  const taxAmount = ecommerce.taxEnabled && !ecommerce.pricesIncludeTax ? taxableSubtotal * (Number(ecommerce.taxRatePercent) / 100) : 0;
+  const grandTotal = Math.max(0, taxableSubtotal + taxAmount + shippingCost);
 
   const applyCoupon = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -397,9 +411,15 @@ function CheckoutContent() {
                 <span>-${discountAmount.toFixed(2)}</span>
               </div>
             )}
+            {ecommerce.taxEnabled && (
+              <div className="flex justify-between py-2 text-sm text-gray-600">
+                <span>Tax{ecommerce.pricesIncludeTax ? ' included' : ` (${Number(ecommerce.taxRatePercent).toFixed(2)}%)`}</span>
+                <span>{ecommerce.pricesIncludeTax ? 'Included' : `$${taxAmount.toFixed(2)}`}</span>
+              </div>
+            )}
             <div className="mt-4 flex justify-between border-t pt-4 text-lg font-bold">
               <span>Total</span>
-              <span>${grandTotal.toFixed(2)} USD</span>
+              <span>${grandTotal.toFixed(2)} {ecommerce.currency || 'USD'}</span>
             </div>
             <form onSubmit={applyCoupon} className="mt-5 flex gap-2">
               <input value={couponCode} onChange={(event) => setCouponCode(event.target.value)} placeholder="Coupon code" className="flex-1 rounded-lg border px-3 py-2 text-sm" />

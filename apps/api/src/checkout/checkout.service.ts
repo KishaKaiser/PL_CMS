@@ -93,7 +93,14 @@ export class CheckoutService {
       discountDecimal = new Decimal(validation.discountAmount);
     }
 
-    const totalAmount = Decimal.max(new Decimal(0), itemSubtotalBeforeTx.sub(discountDecimal).add(shippingDecimal));
+    const ecommerceSettings = await this.store.getEcommerceSettings();
+    const taxableSubtotal = Decimal.max(new Decimal(0), itemSubtotalBeforeTx.sub(discountDecimal));
+    const taxDecimal =
+      ecommerceSettings.taxEnabled && !ecommerceSettings.pricesIncludeTax
+        ? taxableSubtotal.mul(new Decimal(ecommerceSettings.taxRatePercent).div(100))
+        : new Decimal(0);
+
+    const totalAmount = Decimal.max(new Decimal(0), taxableSubtotal.add(taxDecimal).add(shippingDecimal));
 
     const orderItems = dto.items.map((item) => {
       const product = productMap.get(item.productId)!;

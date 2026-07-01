@@ -142,6 +142,9 @@ function BuilderBlockView({ block, storeData, accountLink, menus }: { block: Bui
       </a>
     );
   }
+  if (block.type === 'spacer') {
+    return <div aria-hidden="true" style={{ height: `${Math.min(400, Math.max(4, Number(block.props.height ?? 48)))}px` }} />;
+  }
   if (block.type === 'icon') {
     return (
       <div className="mb-4 flex items-center gap-3">

@@ -94,3 +94,44 @@ export class StoreEmailTemplateDto {
   @IsBoolean()
   enabled!: boolean;
 }
+
+export class EcommerceSettingsDto {
+  @IsString()
+  storeName!: string;
+
+  @IsString()
+  currency!: string;
+
+  @IsString()
+  orderPrefix!: string;
+
+  @IsBoolean()
+  taxEnabled!: boolean;
+
+  @IsNumber()
+  @Min(0)
+  taxRatePercent!: number;
+
+  @IsBoolean()
+  pricesIncludeTax!: boolean;
+
+  @IsBoolean()
+  guestCheckoutEnabled!: boolean;
+
+  @IsBoolean()
+  requirePhone!: boolean;
+
+  @IsBoolean()
+  inventoryTrackingEnabled!: boolean;
+
+  @IsNumber()
+  @Min(0)
+  lowStockThreshold!: number;
+
+  @IsNumber()
+  @Min(0)
+  holdStockMinutes!: number;
+
+  @IsString()
+  termsPageUrl!: string;
+}
