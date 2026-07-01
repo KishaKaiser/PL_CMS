@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CartRecoverySettingsDto,
+  EcommerceSettingsDto,
   FreeShippingSettingsDto,
   StoreCouponDto,
   StoreEmailTemplateDto,
@@ -14,6 +15,7 @@ const FREE_SHIPPING_KEY = 'store_free_shipping';
 const CART_RECOVERY_KEY = 'store_cart_recovery_settings';
 const CART_RECOVERY_RECORDS_KEY = 'store_cart_recovery_records';
 const STORE_EMAILS_KEY = 'store_email_templates';
+const ECOMMERCE_SETTINGS_KEY = 'store_ecommerce_settings';
 
 export interface StoreCoupon {
   id: string;
@@ -67,6 +69,21 @@ const DEFAULT_EMAILS: StoreEmailTemplateDto[] = [
     enabled: false,
   },
 ];
+
+const DEFAULT_ECOMMERCE_SETTINGS: EcommerceSettingsDto = {
+  storeName: 'Psychic Link Store',
+  currency: 'USD',
+  orderPrefix: 'PL',
+  taxEnabled: false,
+  taxRatePercent: 0,
+  pricesIncludeTax: false,
+  guestCheckoutEnabled: false,
+  requirePhone: true,
+  inventoryTrackingEnabled: true,
+  lowStockThreshold: 5,
+  holdStockMinutes: 30,
+  termsPageUrl: '/terms',
+};
 
 @Injectable()
 export class StoreService {
@@ -190,6 +207,29 @@ export class StoreService {
   async saveEmailTemplates(templates: StoreEmailTemplateDto[]) {
     await this.writeJson(STORE_EMAILS_KEY, templates);
     return templates;
+  }
+
+  async getEcommerceSettings() {
+    return this.readJson<EcommerceSettingsDto>(ECOMMERCE_SETTINGS_KEY, DEFAULT_ECOMMERCE_SETTINGS);
+  }
+
+  async saveEcommerceSettings(dto: EcommerceSettingsDto) {
+    const next: EcommerceSettingsDto = {
+      storeName: dto.storeName || DEFAULT_ECOMMERCE_SETTINGS.storeName,
+      currency: dto.currency || DEFAULT_ECOMMERCE_SETTINGS.currency,
+      orderPrefix: dto.orderPrefix || DEFAULT_ECOMMERCE_SETTINGS.orderPrefix,
+      taxEnabled: Boolean(dto.taxEnabled),
+      taxRatePercent: Number(dto.taxRatePercent ?? 0),
+      pricesIncludeTax: Boolean(dto.pricesIncludeTax),
+      guestCheckoutEnabled: Boolean(dto.guestCheckoutEnabled),
+      requirePhone: Boolean(dto.requirePhone),
+      inventoryTrackingEnabled: Boolean(dto.inventoryTrackingEnabled),
+      lowStockThreshold: Number(dto.lowStockThreshold ?? DEFAULT_ECOMMERCE_SETTINGS.lowStockThreshold),
+      holdStockMinutes: Number(dto.holdStockMinutes ?? DEFAULT_ECOMMERCE_SETTINGS.holdStockMinutes),
+      termsPageUrl: dto.termsPageUrl || DEFAULT_ECOMMERCE_SETTINGS.termsPageUrl,
+    };
+    await this.writeJson(ECOMMERCE_SETTINGS_KEY, next);
+    return next;
   }
 
   private async readJson<T>(key: string, fallback: T): Promise<T> {

@@ -10,6 +10,7 @@ type BuilderBlockType =
   | 'text'
   | 'image'
   | 'button'
+  | 'spacer'
   | 'columns'
   | 'grid'
   | 'icon'
@@ -170,6 +171,7 @@ const defaultWidgets: BuilderWidget[] = [
   { type: 'image-slider', label: 'Image Slider', category: 'media', enabled: true },
   { type: 'video', label: 'Video Embed', category: 'media', enabled: true },
   { type: 'button', label: 'Button', category: 'content', enabled: true },
+  { type: 'spacer', label: 'Space', category: 'layout', enabled: true },
   { type: 'icon', label: 'Font Awesome Icon', category: 'content', enabled: true },
   { type: 'announcement-bar', label: 'Announcement Bar', category: 'storefront', enabled: true },
   { type: 'store-header', label: 'Store Header', category: 'storefront', enabled: true },
@@ -1007,6 +1009,12 @@ function BlockEditor({
           <label className="block text-sm font-medium text-gray-700">Aspect Ratio<select value={String(block.props.aspectRatio ?? '16 / 9')} onChange={(event) => onChange({ aspectRatio: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="16 / 9">16:9</option><option value="4 / 3">4:3</option><option value="1 / 1">Square</option></select></label>
         </>
       )}
+      {block.type === 'spacer' && (
+        <>
+          <label className="block text-sm font-medium text-gray-700">Space Height<input type="number" min="4" max="400" value={Number(block.props.height ?? 48)} onChange={(event) => onChange({ height: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={block.props.showGuide === true} onChange={(event) => onChange({ showGuide: event.target.checked })} /> Show guide in preview</label>
+        </>
+      )}
       {block.type === 'sidebar-widgets' && (
         <label className="block text-sm font-medium text-gray-700">Widgets (one per line)<textarea value={String(block.props.itemsText ?? 'Search\\nCategories\\nRecent posts')} rows={4} onChange={(event) => onChange({ itemsText: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
       )}
@@ -1335,6 +1343,10 @@ function PreviewBlock({
   if (block.type === 'button') {
     return <a href={String(block.props.href ?? '#')} className="mb-4 inline-block rounded px-4 py-2 text-white" style={{ backgroundColor: theme.primaryColor }}>{String(block.props.label ?? 'Button')}</a>;
   }
+  if (block.type === 'spacer') {
+    const height = Math.min(400, Math.max(4, Number(block.props.height ?? 48)));
+    return block.props.showGuide ? <div className="mb-4 rounded border border-dashed border-gray-300 bg-gray-50 text-center text-xs text-gray-400" style={{ height, lineHeight: `${height}px` }}>Space</div> : <div style={{ height }} />;
+  }
   if (block.type === 'icon') {
     return <div className="mb-4 flex items-center gap-3"><i className={String(block.props.iconClass ?? 'fa-solid fa-star')} style={{ color: String(block.props.color ?? theme.primaryColor), fontSize: `${Number(block.props.size ?? 36)}px` }} /><span>{String(block.props.label ?? '')}</span></div>;
   }
@@ -1630,6 +1642,7 @@ function createBlock(type: BuilderBlockType, widget?: BuilderWidget): BuilderBlo
   if (type === 'image-slider') return { id, type, props: { mediaIds: [], slides: [], height: 360, displayWidth: 'content' } };
   if (type === 'video') return { id, type, props: { url: '', aspectRatio: '16 / 9' } };
   if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#' } };
+  if (type === 'spacer') return { id, type, props: { height: 48, showGuide: false } };
   if (type === 'icon') return { id, type, props: { iconClass: 'fa-solid fa-star', label: 'Icon label', size: 36, color: '#6f21b6' } };
   if (type === 'announcement-bar') return { id, type, props: { text: 'Free shipping on all domestic orders over $35', background: '#6f21b6', color: '#ffffff' } };
   if (type === 'store-header') return { id, type, props: { logoMode: 'text', logoText: 'The Psychic Link', logoMediaId: '', logoSrc: '', logoAlt: 'The Psychic Link', logoMaxWidth: 220, logoMaxHeight: 64, socialLinksText: 'fa-brands fa-instagram|https://instagram.com|Instagram\nfa-brands fa-facebook-f|https://facebook.com|Facebook\nfa-brands fa-pinterest-p|https://pinterest.com|Pinterest', topLinksText: 'About Us|/about-us\nContact|/contact\nWishlist|/wishlist', navLinksText: 'Home|/\nBlog|/blog\nShop|/shop\nHoroscopes|/horoscopes\nPhone Readings|/phone-readings', actionLinksText: 'text|/login|Login\nfa-solid fa-magnifying-glass|/search|Search\nfa-regular fa-heart|/wishlist|Wishlist\nfa-solid fa-bag-shopping|/shop/cart|Cart', showActions: true, stickyMain: true } };

@@ -101,8 +101,8 @@ const DEFAULT_THEME = {
       archive: { ...DEFAULT_PAGE_LAYOUT, type: 'archive', settings: { layout: 'full', breadcrumbs: true } },
     },
   },
-  components: { widgets: ['heading', 'text', 'image', 'button', 'columns', 'product-grid', 'product-categories', 'product-tags'] },
-  widgetRegistry: ['heading', 'text', 'image', 'button', 'columns', 'product-grid', 'product-categories', 'product-tags'],
+  components: { widgets: ['heading', 'text', 'image', 'button', 'spacer', 'columns', 'product-grid', 'product-categories', 'product-tags'] },
+  widgetRegistry: ['heading', 'text', 'image', 'button', 'spacer', 'columns', 'product-grid', 'product-categories', 'product-tags'],
   schemaJson: { builderVersion: 1, supports: ['global-theme', 'pages', 'headers', 'footers', 'store-widgets'] },
 };
 

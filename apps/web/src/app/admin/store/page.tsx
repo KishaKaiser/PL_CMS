@@ -32,6 +32,21 @@ interface StoreEmailTemplate {
   enabled: boolean;
 }
 
+interface EcommerceSettings {
+  storeName: string;
+  currency: string;
+  orderPrefix: string;
+  taxEnabled: boolean;
+  taxRatePercent: number;
+  pricesIncludeTax: boolean;
+  guestCheckoutEnabled: boolean;
+  requirePhone: boolean;
+  inventoryTrackingEnabled: boolean;
+  lowStockThreshold: number;
+  holdStockMinutes: number;
+  termsPageUrl: string;
+}
+
 const emptyCoupon: Coupon = {
   id: '',
   code: '',
@@ -48,6 +63,20 @@ export default function AdminStorePage() {
   const [couponForm, setCouponForm] = useState<Coupon>(emptyCoupon);
   const [freeShipping, setFreeShipping] = useState<FreeShippingSettings>({ enabled: false, minimumSubtotal: 75, label: 'Free shipping' });
   const [cartRecovery, setCartRecovery] = useState<CartRecoverySettings>({ enabled: false, delayMinutes: 60, expiresDays: 7 });
+  const [ecommerce, setEcommerce] = useState<EcommerceSettings>({
+    storeName: 'Psychic Link Store',
+    currency: 'USD',
+    orderPrefix: 'PL',
+    taxEnabled: false,
+    taxRatePercent: 0,
+    pricesIncludeTax: false,
+    guestCheckoutEnabled: false,
+    requirePhone: true,
+    inventoryTrackingEnabled: true,
+    lowStockThreshold: 5,
+    holdStockMinutes: 30,
+    termsPageUrl: '/terms',
+  });
   const [carts, setCarts] = useState<Array<{ id: string; email?: string; subtotal: number; status: string; createdAt: string; recoverAfter: string }>>([]);
   const [emails, setEmails] = useState<StoreEmailTemplate[]>([]);
   const [message, setMessage] = useState('');
@@ -58,14 +87,16 @@ export default function AdminStorePage() {
     setLoading(true);
     setError('');
     try {
-      const [couponsRes, freeRes, recoveryRes, cartsRes, emailsRes] = await Promise.all([
+      const [ecommerceRes, couponsRes, freeRes, recoveryRes, cartsRes, emailsRes] = await Promise.all([
+        fetch('/api/proxy/store/admin/ecommerce'),
         fetch('/api/proxy/store/admin/coupons'),
         fetch('/api/proxy/store/admin/free-shipping'),
         fetch('/api/proxy/store/admin/cart-recovery'),
         fetch('/api/proxy/store/admin/cart-recovery/carts'),
         fetch('/api/proxy/store/admin/emails'),
       ]);
-      if (!couponsRes.ok || !freeRes.ok || !recoveryRes.ok || !cartsRes.ok || !emailsRes.ok) throw new Error('Could not load store settings.');
+      if (!ecommerceRes.ok || !couponsRes.ok || !freeRes.ok || !recoveryRes.ok || !cartsRes.ok || !emailsRes.ok) throw new Error('Could not load store settings.');
+      setEcommerce((await ecommerceRes.json()) as EcommerceSettings);
       setCoupons((await couponsRes.json()) as Coupon[]);
       setFreeShipping((await freeRes.json()) as FreeShippingSettings);
       setCartRecovery((await recoveryRes.json()) as CartRecoverySettings);
@@ -132,6 +163,32 @@ export default function AdminStorePage() {
       {message && <p className="mb-4 rounded bg-green-50 px-4 py-3 text-sm text-green-700">{message}</p>}
       {loading ? <p className="text-gray-500">Loading store settings...</p> : (
         <div className="space-y-8">
+          <section className="rounded-xl border bg-white p-6 shadow-sm">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">Ecommerce</h2>
+              <p className="text-sm text-gray-500">Set store-wide checkout, tax, inventory, and order defaults.</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <label className="block text-sm font-medium text-gray-700">Store Name<input value={ecommerce.storeName} onChange={(event) => setEcommerce((current) => ({ ...current, storeName: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700">Currency<select value={ecommerce.currency} onChange={(event) => setEcommerce((current) => ({ ...current, currency: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm"><option value="USD">USD</option><option value="CAD">CAD</option><option value="GBP">GBP</option><option value="EUR">EUR</option></select></label>
+              <label className="block text-sm font-medium text-gray-700">Order Prefix<input value={ecommerce.orderPrefix} onChange={(event) => setEcommerce((current) => ({ ...current, orderPrefix: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700">Tax Rate %<input type="number" min="0" step="0.01" value={ecommerce.taxRatePercent} onChange={(event) => setEcommerce((current) => ({ ...current, taxRatePercent: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700">Low Stock Threshold<input type="number" min="0" value={ecommerce.lowStockThreshold} onChange={(event) => setEcommerce((current) => ({ ...current, lowStockThreshold: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700">Hold Stock Minutes<input type="number" min="0" value={ecommerce.holdStockMinutes} onChange={(event) => setEcommerce((current) => ({ ...current, holdStockMinutes: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              <label className="block text-sm font-medium text-gray-700 md:col-span-3">Terms Page URL<input value={ecommerce.termsPageUrl} onChange={(event) => setEcommerce((current) => ({ ...current, termsPageUrl: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={ecommerce.taxEnabled} onChange={(event) => setEcommerce((current) => ({ ...current, taxEnabled: event.target.checked }))} /> Enable tax calculation</label>
+              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={ecommerce.pricesIncludeTax} onChange={(event) => setEcommerce((current) => ({ ...current, pricesIncludeTax: event.target.checked }))} /> Product prices include tax</label>
+              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={ecommerce.guestCheckoutEnabled} onChange={(event) => setEcommerce((current) => ({ ...current, guestCheckoutEnabled: event.target.checked }))} /> Allow guest checkout</label>
+              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={ecommerce.requirePhone} onChange={(event) => setEcommerce((current) => ({ ...current, requirePhone: event.target.checked }))} /> Require phone at checkout</label>
+              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={ecommerce.inventoryTrackingEnabled} onChange={(event) => setEcommerce((current) => ({ ...current, inventoryTrackingEnabled: event.target.checked }))} /> Track product inventory</label>
+            </div>
+            <div className="mt-5 flex justify-end">
+              <button type="button" onClick={() => void save('/api/proxy/store/admin/ecommerce', ecommerce, 'Ecommerce settings saved.', 'PUT')} className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700">Save Ecommerce Settings</button>
+            </div>
+          </section>
+
           <section className="rounded-xl border bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold">Coupons</h2>
             <form onSubmit={saveCoupon} className="mt-4 grid gap-4 md:grid-cols-6">
