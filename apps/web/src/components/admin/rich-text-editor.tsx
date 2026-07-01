@@ -16,16 +16,23 @@ type ToolbarButton = {
 
 export function RichTextEditor({ value, onChange }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const focusedRef = useRef(false);
+  const lastSyncedValueRef = useRef(value);
   const [mode, setMode] = useState<'visual' | 'html'>('visual');
 
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
+    if (!editorRef.current || mode !== 'visual') return;
+    if (focusedRef.current && value === lastSyncedValueRef.current) return;
+    if (editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value;
     }
-  }, [value]);
+    lastSyncedValueRef.current = value;
+  }, [mode, value]);
 
   function syncValue() {
-    onChange(editorRef.current?.innerHTML ?? '');
+    const nextValue = editorRef.current?.innerHTML ?? '';
+    lastSyncedValueRef.current = nextValue;
+    onChange(nextValue);
   }
 
   function applyCommand(command: string, commandValue?: string) {
@@ -99,6 +106,13 @@ export function RichTextEditor({ value, onChange }: Props) {
           ref={editorRef}
           contentEditable
           suppressContentEditableWarning
+          onFocus={() => {
+            focusedRef.current = true;
+          }}
+          onBlur={() => {
+            focusedRef.current = false;
+            syncValue();
+          }}
           onInput={syncValue}
           className="min-h-[320px] px-4 py-3 text-sm text-gray-800 outline-none [&_blockquote]:border-l-4 [&_blockquote]:border-gray-300 [&_blockquote]:pl-4 [&_blockquote]:italic [&_h2]:mb-3 [&_h2]:mt-4 [&_h2]:text-2xl [&_h2]:font-semibold [&_li]:ml-5 [&_ol]:list-decimal [&_p]:mb-3 [&_ul]:list-disc"
         />

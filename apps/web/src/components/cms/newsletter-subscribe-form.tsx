@@ -8,6 +8,10 @@ interface NewsletterSettings {
   defaultButtonLabel: string;
   defaultPlaceholder: string;
   collectName: boolean;
+  privacyPolicyUrl: string;
+  termsUrl: string;
+  consentText: string;
+  gdprNotice: string;
 }
 
 export function NewsletterSubscribeForm({
@@ -27,6 +31,8 @@ export function NewsletterSubscribeForm({
 }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [privacyConsent, setPrivacyConsent] = useState(false);
+  const [termsConsent, setTermsConsent] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -56,13 +62,15 @@ export function NewsletterSubscribeForm({
       const res = await fetch('/api/proxy/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name, source: 'website' }),
+        body: JSON.stringify({ email, name, source: 'website', privacyConsent, termsConsent }),
       });
       const body = (await res.json().catch(() => ({}))) as { message?: string };
       if (!res.ok) throw new Error(body.message ?? 'Could not subscribe.');
       setMessage(body.message ?? 'Thank you for subscribing.');
       setName('');
       setEmail('');
+      setPrivacyConsent(false);
+      setTermsConsent(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not subscribe.');
     } finally {
@@ -92,6 +100,27 @@ export function NewsletterSubscribeForm({
           placeholder={resolvedPlaceholder}
           className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm"
         />
+        <div className={horizontal ? 'sm:col-span-2' : ''}>
+          <label className="flex items-start gap-2 text-xs leading-5 text-gray-600">
+            <input
+              required
+              type="checkbox"
+              checked={privacyConsent && termsConsent}
+              onChange={(event) => {
+                setPrivacyConsent(event.target.checked);
+                setTermsConsent(event.target.checked);
+              }}
+              className="mt-1"
+            />
+            <span>
+              {settings?.consentText ?? 'I agree to the privacy policy and terms and conditions.'}{' '}
+              <a href={settings?.privacyPolicyUrl ?? '/privacy-policy'} className="text-purple-700 hover:underline">Privacy Policy</a>
+              {' '}and{' '}
+              <a href={settings?.termsUrl ?? '/terms'} className="text-purple-700 hover:underline">Terms and Conditions</a>.
+            </span>
+          </label>
+          {settings?.gdprNotice && <p className="mt-2 text-xs leading-5 text-gray-500">{settings.gdprNotice}</p>}
+        </div>
         <button
           type="submit"
           disabled={submitting}

@@ -115,7 +115,7 @@ function BuilderBlockView({ block, storeData, accountLink, menus }: { block: Bui
     return <h1 className="mb-4 font-bold" style={textStyle(block, 40)}>{String(block.props.text ?? '')}</h1>;
   }
   if (block.type === 'text') {
-    return <p className="mb-4 leading-7" style={textStyle(block, 16)}>{String(block.props.text ?? '')}</p>;
+    return <div className="cms-rich-content mb-4 leading-7" style={textStyle(block, 16)} dangerouslySetInnerHTML={{ __html: String(block.props.text ?? '') }} />;
   }
   if (block.type === 'image') {
     const src = String(block.props.src ?? '');
