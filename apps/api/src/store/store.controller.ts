@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../auth/roles.guard';
@@ -6,6 +6,7 @@ import {
   CartRecoverySettingsDto,
   EcommerceSettingsDto,
   FreeShippingSettingsDto,
+  GoogleMerchantSettingsDto,
   StoreCouponDto,
   StoreEmailTemplateDto,
   TrackCartDto,
@@ -37,6 +38,12 @@ export class StoreController {
     return this.store.getEcommerceSettings();
   }
 
+  @Get('google-merchant/feed.xml')
+  @Header('Content-Type', 'application/xml; charset=utf-8')
+  getGoogleMerchantFeed() {
+    return this.store.getGoogleMerchantFeed();
+  }
+
   @Get('admin/coupons')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
@@ -56,6 +63,20 @@ export class StoreController {
   @Roles(Role.ADMIN)
   saveEcommerceSettings(@Body() dto: EcommerceSettingsDto) {
     return this.store.saveEcommerceSettings(dto);
+  }
+
+  @Get('admin/google-merchant')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  getGoogleMerchantSettings() {
+    return this.store.getGoogleMerchantSettings();
+  }
+
+  @Put('admin/google-merchant')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  saveGoogleMerchantSettings(@Body() dto: GoogleMerchantSettingsDto) {
+    return this.store.saveGoogleMerchantSettings(dto);
   }
 
   @Post('admin/coupons')

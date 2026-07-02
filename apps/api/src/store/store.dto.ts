@@ -135,3 +135,26 @@ export class EcommerceSettingsDto {
   @IsString()
   termsPageUrl!: string;
 }
+
+export class GoogleMerchantSettingsDto {
+  @IsBoolean()
+  enabled!: boolean;
+
+  @IsString()
+  siteUrl!: string;
+
+  @IsString()
+  storeName!: string;
+
+  @IsString()
+  defaultBrand!: string;
+
+  @IsString()
+  defaultGoogleCategory!: string;
+
+  @IsString()
+  defaultCondition!: string;
+
+  @IsString()
+  productUrlPattern!: string;
+}

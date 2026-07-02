@@ -98,6 +98,16 @@ function getEffectiveShippingCost(rate: ShippingRate, subtotal: number, freeShip
   return rate.shipmentCost + rate.otherCost;
 }
 
+function createFreeShippingRate(label: string): ShippingRate {
+  return {
+    carrierCode: 'free_shipping',
+    serviceCode: 'free_shipping',
+    serviceName: label || 'Free shipping',
+    shipmentCost: 0,
+    otherCost: 0,
+  };
+}
+
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const productId = searchParams.get('productId');
@@ -242,11 +252,25 @@ function CheckoutContent() {
       });
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { message?: string };
+        if (freeShipping.enabled && itemsTotal >= Number(freeShipping.minimumSubtotal ?? 0)) {
+          const freeRate = createFreeShippingRate(freeShipping.label);
+          setShippingRates([freeRate]);
+          setSelectedRate(freeRate);
+          setAddressSubmitted(true);
+          return;
+        }
         throw new Error(err.message ?? 'Failed to get shipping rates');
       }
       const rates = (await res.json()) as ShippingRate[];
       if (rates.length === 0) {
-        setRatesError('No shipping rates available for this address. Please check your address and try again.');
+        if (freeShipping.enabled && itemsTotal >= Number(freeShipping.minimumSubtotal ?? 0)) {
+          const freeRate = createFreeShippingRate(freeShipping.label);
+          setShippingRates([freeRate]);
+          setSelectedRate(freeRate);
+          setAddressSubmitted(true);
+        } else {
+          setRatesError('No shipping rates available for this address. Please check your address and try again.');
+        }
       } else {
         setShippingRates(rates);
         setAddressSubmitted(true);

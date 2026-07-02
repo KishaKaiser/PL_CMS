@@ -196,7 +196,7 @@ export class DefaultContentService implements OnModuleInit {
   }
 
   private async ensureModules() {
-    for (const name of ['newsletter', 'store', 'shipstation']) {
+    for (const name of ['newsletter', 'store', 'shipstation', 'google-merchant-center']) {
       await this.prisma.module.upsert({
         where: { name },
         update: {},
