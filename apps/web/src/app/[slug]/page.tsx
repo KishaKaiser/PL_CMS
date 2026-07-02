@@ -82,7 +82,7 @@ export default async function CmsPage({ params, searchParams }: Props) {
           <BuilderContent layout={builderLayout} breadcrumbLabel={page.title} />
         </main>
       ) : (
-        <main className="mx-auto max-w-3xl p-8">
+        <main className="mx-auto max-w-7xl p-8">
           <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
             {featuredImageSrc && (
               <img src={featuredImageSrc} alt={page.title} className="h-72 w-full object-cover" />

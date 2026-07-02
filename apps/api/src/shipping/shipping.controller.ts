@@ -19,25 +19,27 @@ import {
 } from './shipping.dto';
 
 @Controller('shipping')
-@UseGuards(AuthGuard('jwt'), RolesGuard)
 export class ShippingController {
   constructor(private readonly shippingService: ShippingService) {}
 
   // ── Admin: warehouse origin ──────────────────
 
   @Get('warehouse-address')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
   getWarehouseAddress() {
     return this.shippingService.getWarehouseAddress();
   }
 
   @Put('warehouse-address')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
   upsertWarehouseAddress(@Body() dto: WarehouseAddressDto) {
     return this.shippingService.upsertWarehouseAddress(dto);
   }
 
   @Get('shipstation-services')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
   getShipStationServices() {
     return this.shippingService.getShipStationServices();
@@ -46,14 +48,12 @@ export class ShippingController {
   // ── Client-facing: quote & validate ─────────
 
   @Post('quote')
-  @Roles(Role.CLIENT)
   @HttpCode(HttpStatus.OK)
   getShippingQuote(@Body() dto: GetShippingQuoteDto) {
     return this.shippingService.getShippingQuote(dto);
   }
 
   @Post('validate-address')
-  @Roles(Role.CLIENT)
   @HttpCode(HttpStatus.OK)
   validateAddress(@Body() dto: ShippingAddressDto) {
     return this.shippingService.validateAddress(dto);

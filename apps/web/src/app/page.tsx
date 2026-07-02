@@ -95,7 +95,7 @@ export default async function HomePage({ searchParams }: Props) {
   if (managedHomepageSlug && homePage) {
     return (
       <PublicSiteShell siteConfig={siteConfig}>
-        <main className="mx-auto max-w-3xl p-8">
+        <main className="mx-auto max-w-7xl p-8">
           <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
             {homePageImageSrc && (
               <img src={homePageImageSrc} alt={homePage.title} className="h-72 w-full object-cover" />
@@ -116,7 +116,7 @@ export default async function HomePage({ searchParams }: Props) {
 
   return (
     <PublicSiteShell siteConfig={siteConfig}>
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 p-8">
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 p-8">
         <header className="overflow-hidden rounded-lg border bg-white shadow-sm">
           {homePageImageSrc && (
             <img src={homePageImageSrc} alt={homePage?.title ?? siteConfig.identity.title} className="h-64 w-full object-cover" />

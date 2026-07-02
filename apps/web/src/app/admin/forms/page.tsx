@@ -66,6 +66,7 @@ export default function AdminFormsPage() {
   const [forms, setForms] = useState<CmsForm[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [creatingNew, setCreatingNew] = useState(false);
   const [submissions, setSubmissions] = useState<FormSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -87,13 +88,13 @@ export default function AdminFormsPage() {
       if (!res.ok) throw new Error('Could not load forms');
       const data = (await res.json()) as CmsForm[];
       setForms(data);
-      if (!selectedFormId && data[0]) setSelectedFormId(data[0].id);
+      if (!selectedFormId && !creatingNew && data[0]) setSelectedFormId(data[0].id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not load forms');
     } finally {
       setLoading(false);
     }
-  }, [selectedFormId]);
+  }, [creatingNew, selectedFormId]);
 
   useEffect(() => {
     void fetchForms();
@@ -125,6 +126,7 @@ export default function AdminFormsPage() {
   }
 
   function startNew(type: FormType) {
+    setCreatingNew(true);
     setSelectedFormId(null);
     setSubmissions([]);
     setMessage('');
@@ -170,6 +172,7 @@ export default function AdminFormsPage() {
         throw new Error(body.message ?? 'Could not save form');
       }
       const saved = (await res.json()) as CmsForm;
+      setCreatingNew(false);
       setSelectedFormId(saved.id);
       setMessage('Form saved.');
       await fetchForms();
@@ -187,6 +190,7 @@ export default function AdminFormsPage() {
       const res = await fetch(`/api/proxy/admin/forms/${selectedFormId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Could not delete form');
       setSelectedFormId(null);
+      setCreatingNew(false);
       setForm(emptyForm);
       setSubmissions([]);
       await fetchForms();
@@ -256,7 +260,10 @@ export default function AdminFormsPage() {
                 <button
                   key={entry.id}
                   type="button"
-                  onClick={() => setSelectedFormId(entry.id)}
+                  onClick={() => {
+                    setCreatingNew(false);
+                    setSelectedFormId(entry.id);
+                  }}
                   className={`w-full rounded-lg border px-3 py-3 text-left text-sm ${
                     selectedFormId === entry.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'
                   }`}
