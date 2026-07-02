@@ -204,6 +204,7 @@ export class InstallService {
       { name: 'newsletter', version: '1.0.0', enabled: true },
       { name: 'store', version: '1.0.0', enabled: true },
       { name: 'shipstation', version: '1.0.0', enabled: true },
+      { name: 'google-merchant-center', version: '1.0.0', enabled: true },
     ];
 
     for (const m of modules) {

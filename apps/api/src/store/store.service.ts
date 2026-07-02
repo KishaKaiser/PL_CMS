@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { buildMediaAssetUrl } from '../admin/admin-media/media.util';
 import {
   CartRecoverySettingsDto,
   EcommerceSettingsDto,
   FreeShippingSettingsDto,
+  GoogleMerchantSettingsDto,
   StoreCouponDto,
   StoreEmailTemplateDto,
   TrackCartDto,
@@ -16,6 +18,7 @@ const CART_RECOVERY_KEY = 'store_cart_recovery_settings';
 const CART_RECOVERY_RECORDS_KEY = 'store_cart_recovery_records';
 const STORE_EMAILS_KEY = 'store_email_templates';
 const ECOMMERCE_SETTINGS_KEY = 'store_ecommerce_settings';
+const GOOGLE_MERCHANT_SETTINGS_KEY = 'store_google_merchant_settings';
 
 export interface StoreCoupon {
   id: string;
@@ -83,6 +86,16 @@ const DEFAULT_ECOMMERCE_SETTINGS: EcommerceSettingsDto = {
   lowStockThreshold: 5,
   holdStockMinutes: 30,
   termsPageUrl: '/terms',
+};
+
+const DEFAULT_GOOGLE_MERCHANT_SETTINGS: GoogleMerchantSettingsDto = {
+  enabled: true,
+  siteUrl: '',
+  storeName: 'Psychic Link Store',
+  defaultBrand: 'The Psychic Link',
+  defaultGoogleCategory: 'Religious & Ceremonial > Spiritual & Esoteric Items',
+  defaultCondition: 'new',
+  productUrlPattern: '/shop/{{id}}',
 };
 
 @Injectable()
@@ -232,6 +245,82 @@ export class StoreService {
     return next;
   }
 
+  async getGoogleMerchantSettings() {
+    const settings = await this.readJson<GoogleMerchantSettingsDto>(GOOGLE_MERCHANT_SETTINGS_KEY, DEFAULT_GOOGLE_MERCHANT_SETTINGS);
+    await this.prisma.module.upsert({
+      where: { name: 'google-merchant-center' },
+      update: {},
+      create: { name: 'google-merchant-center', version: '1.0.0', enabled: settings.enabled },
+    });
+    return settings;
+  }
+
+  async saveGoogleMerchantSettings(dto: GoogleMerchantSettingsDto) {
+    const next: GoogleMerchantSettingsDto = {
+      enabled: Boolean(dto.enabled),
+      siteUrl: normalizeSiteUrl(dto.siteUrl),
+      storeName: dto.storeName || DEFAULT_GOOGLE_MERCHANT_SETTINGS.storeName,
+      defaultBrand: dto.defaultBrand || DEFAULT_GOOGLE_MERCHANT_SETTINGS.defaultBrand,
+      defaultGoogleCategory: dto.defaultGoogleCategory || DEFAULT_GOOGLE_MERCHANT_SETTINGS.defaultGoogleCategory,
+      defaultCondition: dto.defaultCondition || DEFAULT_GOOGLE_MERCHANT_SETTINGS.defaultCondition,
+      productUrlPattern: dto.productUrlPattern || DEFAULT_GOOGLE_MERCHANT_SETTINGS.productUrlPattern,
+    };
+    await this.writeJson(GOOGLE_MERCHANT_SETTINGS_KEY, next);
+    await this.prisma.module.upsert({
+      where: { name: 'google-merchant-center' },
+      update: { enabled: next.enabled },
+      create: { name: 'google-merchant-center', version: '1.0.0', enabled: next.enabled },
+    });
+    return next;
+  }
+
+  async getGoogleMerchantFeed() {
+    const settings = await this.getGoogleMerchantSettings();
+    if (!settings.enabled) {
+      return '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:g="http://base.google.com/ns/1.0"><channel><title>Google Merchant feed disabled</title></channel></rss>';
+    }
+
+    const products = await this.prisma.product.findMany({
+      where: { isActive: true },
+      orderBy: { updatedAt: 'desc' },
+      include: { featuredMedia: true, categories: true, tags: true },
+    });
+    const siteUrl = settings.siteUrl || 'http://localhost:3000';
+    const items = products.map((product) => {
+      const price = effectivePrice(product);
+      const imageUrl = product.featuredMedia ? buildMediaAssetUrl(product.featuredMedia.id) : product.imageUrl || '';
+      const productUrl = absoluteUrl(siteUrl, settings.productUrlPattern.replaceAll('{{id}}', product.id));
+      const category = product.categories[0]?.name || settings.defaultGoogleCategory;
+      return [
+        '<item>',
+        xmlTag('g:id', product.id),
+        xmlTag('g:title', product.name),
+        xmlTag('g:description', stripHtml(product.shortDescription || product.description || product.name)),
+        xmlTag('g:link', productUrl),
+        imageUrl ? xmlTag('g:image_link', absoluteUrl(siteUrl, imageUrl)) : '',
+        xmlTag('g:availability', product.stockStatus === 'OUT_OF_STOCK' ? 'out of stock' : 'in stock'),
+        xmlTag('g:price', `${Number(price).toFixed(2)} ${product.currency || 'USD'}`),
+        xmlTag('g:condition', settings.defaultCondition),
+        xmlTag('g:brand', settings.defaultBrand),
+        xmlTag('g:google_product_category', category),
+        product.weightOz ? xmlTag('g:shipping_weight', `${Number(product.weightOz).toFixed(2)} oz`) : '',
+        '</item>',
+      ].filter(Boolean).join('');
+    }).join('');
+
+    return [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">',
+      '<channel>',
+      xmlTag('title', settings.storeName),
+      xmlTag('link', siteUrl),
+      xmlTag('description', `${settings.storeName} product feed`),
+      items,
+      '</channel>',
+      '</rss>',
+    ].join('');
+  }
+
   private async readJson<T>(key: string, fallback: T): Promise<T> {
     const setting = await this.prisma.setting.findUnique({ where: { key } });
     if (!setting) return fallback;
@@ -257,4 +346,38 @@ function normalizeCode(value: string) {
 
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function normalizeSiteUrl(value: string) {
+  return value.trim().replace(/\/+$/, '');
+}
+
+function absoluteUrl(siteUrl: string, value: string) {
+  if (/^https?:\/\//i.test(value)) return value;
+  const path = value.startsWith('/') ? value : `/${value}`;
+  return `${siteUrl.replace(/\/+$/, '')}${path}`;
+}
+
+function effectivePrice(product: { price: unknown; salePrice: unknown | null; saleStartsAt: Date | null; saleEndsAt: Date | null }) {
+  const now = new Date();
+  const startsOk = !product.saleStartsAt || product.saleStartsAt <= now;
+  const endsOk = !product.saleEndsAt || product.saleEndsAt >= now;
+  return product.salePrice != null && startsOk && endsOk ? product.salePrice : product.price;
+}
+
+function xmlTag(tag: string, value: unknown) {
+  return `<${tag}>${escapeXml(String(value ?? ''))}</${tag}>`;
+}
+
+function escapeXml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
+function stripHtml(value: string) {
+  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
