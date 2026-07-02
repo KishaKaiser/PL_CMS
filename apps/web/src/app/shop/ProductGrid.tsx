@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { addToCart } from '../../lib/cart';
 
@@ -21,6 +22,14 @@ interface Props {
 
 export function ProductGrid({ products }: Props) {
   const router = useRouter();
+  const [addedProductId, setAddedProductId] = useState<string | null>(null);
+
+  function showAddedMessage(productId: string) {
+    setAddedProductId(productId);
+    window.setTimeout(() => {
+      setAddedProductId((current) => (current === productId ? null : current));
+    }, 2500);
+  }
 
   return (
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -75,11 +84,17 @@ export function ProductGrid({ products }: Props) {
                     currency: product.currency,
                     quantity: 1,
                   });
+                  showAddedMessage(product.id);
                 }}
                 className="mt-auto rounded bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
               >
                 Add to Cart
               </button>
+              {addedProductId === product.id && (
+                <p className="mt-3 rounded bg-green-50 px-3 py-2 text-sm font-medium text-green-700" role="status">
+                  Product was added to cart.
+                </p>
+              )}
             </div>
           </article>
         );

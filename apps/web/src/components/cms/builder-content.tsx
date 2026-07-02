@@ -96,7 +96,7 @@ export async function BuilderContent({
                 padding: String(section.settings.padding ?? '40px 24px'),
               }}
             >
-              <div className={section.settings.layout === 'full' ? '' : 'mx-auto max-w-5xl'}>
+              <div className={section.settings.layout === 'full' ? '' : 'mx-auto max-w-7xl'}>
                 {section.blocks.map((block) => (
                   <BuilderBlockView key={block.id} block={block} storeData={storeData} accountLink={resolvedAccountLink} menus={resolvedMenus} />
                 ))}
@@ -562,8 +562,8 @@ function getVideoEmbedUrl(url: string) {
 
 function pageShellClass(layout?: string) {
   if (layout === 'full') return '';
-  if (layout === 'sidebar-left') return 'mx-auto grid max-w-6xl gap-6 p-6 lg:grid-cols-[260px_minmax(0,1fr)]';
-  if (layout === 'sidebar-right') return 'mx-auto grid max-w-6xl gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_260px]';
+  if (layout === 'sidebar-left') return 'mx-auto grid max-w-7xl gap-6 p-6 lg:grid-cols-[260px_minmax(0,1fr)]';
+  if (layout === 'sidebar-right') return 'mx-auto grid max-w-7xl gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_260px]';
   return '';
 }
 
