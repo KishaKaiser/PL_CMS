@@ -75,6 +75,7 @@ interface ShipStationValidateResponse {
 }
 
 interface ShippingApiSettings {
+  provider?: 'manual' | 'shipstation' | 'shippo' | 'easypost';
   apiKey?: string;
   apiSecret?: string;
   enabledCarrierCodes?: string[];
@@ -128,6 +129,7 @@ export class ShippingService {
       if (!parsed || typeof parsed !== 'object') return {};
       const candidate = parsed as Record<string, unknown>;
       return {
+        provider: isShippingProvider(candidate.provider) ? candidate.provider : 'manual',
         apiKey: typeof candidate.apiKey === 'string' ? candidate.apiKey.trim() : '',
         apiSecret: typeof candidate.apiSecret === 'string' ? candidate.apiSecret.trim() : '',
         enabledCarrierCodes: Array.isArray(candidate.enabledCarrierCodes)
@@ -177,8 +179,19 @@ export class ShippingService {
     const saved = await this.getSavedShippingApiSettings();
     const envKey = this.config.get<string>('SHIPSTATION_API_KEY') || '';
     const envSecret = this.config.get<string>('SHIPSTATION_API_SECRET') || '';
+    const carriersRequested = this.getEnabledCarrierCodes(saved);
+    const credentialsConfigured = Boolean((saved.apiKey && saved.apiSecret) || (envKey && envSecret));
+    const setupIssues = [
+      saved.provider !== 'shipstation' ? 'Shipping provider is not set to ShipStation.' : '',
+      !warehouse ? 'Warehouse origin address is not configured.' : '',
+      !credentialsConfigured ? 'ShipStation API key and secret are not configured.' : '',
+      carriersRequested.length === 0 ? 'No ShipStation carriers are enabled.' : '',
+    ].filter(Boolean);
 
     return {
+      provider: saved.provider ?? 'manual',
+      shipStationReady: setupIssues.length === 0,
+      setupIssues,
       warehouseConfigured: Boolean(warehouse),
       warehouseIdConfigured: Boolean(warehouse?.warehouseId),
       warehousePostalCode: warehouse?.postalCode ?? null,
@@ -188,7 +201,7 @@ export class ShippingService {
       envApiKeyConfigured: Boolean(envKey),
       envApiSecretConfigured: Boolean(envSecret),
       credentialsSource: saved.apiKey && saved.apiSecret ? 'admin-settings' : envKey && envSecret ? 'environment' : 'missing',
-      carriersRequested: this.getEnabledCarrierCodes(saved),
+      carriersRequested,
       allowedServiceCodes: saved.allowedServiceCodes ?? [],
       markupType: saved.markupType ?? 'fixed',
       markupAmount: saved.markupAmount ?? 0,
@@ -500,6 +513,10 @@ function isSupportedCarrier(carrierCode?: string | null) {
   if (!carrierCode) return false;
   const normalized = normalizeCarrierCode(carrierCode);
   return ['usps', 'ups', 'fedex', 'global_post'].some((carrier) => normalized.includes(carrier));
+}
+
+function isShippingProvider(value: unknown): value is ShippingApiSettings['provider'] {
+  return value === 'manual' || value === 'shipstation' || value === 'shippo' || value === 'easypost';
 }
 
 function normalizeCarrierCode(carrierCode: string) {
