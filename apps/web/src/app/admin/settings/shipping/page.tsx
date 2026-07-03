@@ -297,6 +297,12 @@ export default function ShippingSettingsPage() {
           <label className="block text-sm font-medium text-gray-700">Country
             <input value={testAddress.country} onChange={(event) => setTestAddress((current) => ({ ...current, country: event.target.value.toUpperCase() }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
           </label>
+          <label className="block text-sm font-medium text-gray-700">Address Type
+            <select value={testAddress.addressType} onChange={(event) => setTestAddress((current) => ({ ...current, addressType: event.target.value as typeof defaultTestAddress.addressType }))} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+              <option value="residential">Residential</option>
+              <option value="commercial">Commercial</option>
+            </select>
+          </label>
           <label className="block text-sm font-medium text-gray-700">Weight (oz)
             <input type="number" min="1" value={testPackage.weightOz} onChange={(event) => setTestPackage((current) => ({ ...current, weightOz: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
           </label>
@@ -404,6 +410,7 @@ function buildDiagnosticReport({
     '',
     'Destination:',
     `${testAddress.city}, ${testAddress.state} ${testAddress.postalCode}, ${testAddress.country}`,
+    `Address type: ${testAddress.addressType}`,
     '',
     'Package:',
     `${testPackage.weightOz} oz, ${testPackage.lengthIn}x${testPackage.widthIn}x${testPackage.heightIn} in`,
