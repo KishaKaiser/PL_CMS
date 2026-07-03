@@ -1,5 +1,6 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
 
 interface PaypalAccessTokenResponse {
   access_token: string;
@@ -39,30 +40,58 @@ interface PaypalWebhookVerifyResponse {
 @Injectable()
 export class PaypalService {
   private readonly logger = new Logger(PaypalService.name);
-  private readonly baseUrl: string;
 
-  constructor(private readonly config: ConfigService) {
-    const env = this.config.get<string>('PAYPAL_ENVIRONMENT') ?? 'sandbox';
-    this.baseUrl =
-      env === 'live'
-        ? 'https://api-m.paypal.com'
-        : 'https://api-m.sandbox.paypal.com';
+  constructor(
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  async getPublicClientId(): Promise<string> {
+    const settings = await this.getSavedBillingSettings();
+    return settings.paypalClientId || this.config.get<string>('PAYPAL_CLIENT_ID') || '';
   }
 
-  private get clientId(): string {
-    return this.config.get<string>('PAYPAL_CLIENT_ID') ?? '';
+  private async getCredentials() {
+    const settings = await this.getSavedBillingSettings();
+    return {
+      clientId: settings.paypalClientId || this.config.get<string>('PAYPAL_CLIENT_ID') || '',
+      clientSecret: settings.paypalClientSecret || this.config.get<string>('PAYPAL_CLIENT_SECRET') || '',
+      environment: settings.environment || this.config.get<string>('PAYPAL_ENVIRONMENT') || 'sandbox',
+      webhookSecret: settings.webhookSecret || this.config.get<string>('PAYPAL_WEBHOOK_ID') || '',
+    };
   }
 
-  private get clientSecret(): string {
-    return this.config.get<string>('PAYPAL_CLIENT_SECRET') ?? '';
+  private getBaseUrl(environment: string) {
+    return environment === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+  }
+
+  private async getSavedBillingSettings() {
+    const setting = await this.prisma.setting.findUnique({ where: { key: 'billing_api_settings' } });
+    if (!setting) return {};
+    try {
+      const parsed = JSON.parse(setting.value) as Record<string, unknown>;
+      return {
+        paypalClientId: typeof parsed.paypalClientId === 'string' ? parsed.paypalClientId.trim() : '',
+        paypalClientSecret: typeof parsed.paypalClientSecret === 'string' ? parsed.paypalClientSecret.trim() : '',
+        environment: parsed.environment === 'live' || parsed.environment === 'sandbox' ? parsed.environment : '',
+        webhookSecret: typeof parsed.webhookSecret === 'string' ? parsed.webhookSecret.trim() : '',
+      };
+    } catch {
+      return {};
+    }
   }
 
   async getAccessToken(): Promise<string> {
+    const credentialsConfig = await this.getCredentials();
+    if (!credentialsConfig.clientId || !credentialsConfig.clientSecret) {
+      throw new InternalServerErrorException('PayPal API credentials are not configured in Admin Settings.');
+    }
+
     const credentials = Buffer.from(
-      `${this.clientId}:${this.clientSecret}`,
+      `${credentialsConfig.clientId}:${credentialsConfig.clientSecret}`,
     ).toString('base64');
 
-    const res = await fetch(`${this.baseUrl}/v1/oauth2/token`, {
+    const res = await fetch(`${this.getBaseUrl(credentialsConfig.environment)}/v1/oauth2/token`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${credentials}`,
@@ -88,6 +117,7 @@ export class PaypalService {
     returnUrl: string,
     cancelUrl: string,
   ): Promise<{ paypalOrderId: string; approvalUrl: string }> {
+    const credentialsConfig = await this.getCredentials();
     const token = await this.getAccessToken();
 
     const units: PaypalOrderUnit[] = [
@@ -106,7 +136,7 @@ export class PaypalService {
       },
     };
 
-    const res = await fetch(`${this.baseUrl}/v2/checkout/orders`, {
+    const res = await fetch(`${this.getBaseUrl(credentialsConfig.environment)}/v2/checkout/orders`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -132,10 +162,11 @@ export class PaypalService {
   async captureOrder(
     paypalOrderId: string,
   ): Promise<{ status: string; payerEmail?: string; captureId?: string }> {
+    const credentialsConfig = await this.getCredentials();
     const token = await this.getAccessToken();
 
     const res = await fetch(
-      `${this.baseUrl}/v2/checkout/orders/${paypalOrderId}/capture`,
+      `${this.getBaseUrl(credentialsConfig.environment)}/v2/checkout/orders/${paypalOrderId}/capture`,
       {
         method: 'POST',
         headers: {
@@ -165,9 +196,10 @@ export class PaypalService {
     headers: Record<string, string>,
     rawBody: string,
   ): Promise<boolean> {
-    const webhookId = this.config.get<string>('PAYPAL_WEBHOOK_ID');
+    const credentialsConfig = await this.getCredentials();
+    const webhookId = credentialsConfig.webhookSecret;
     if (!webhookId) {
-      this.logger.error('PAYPAL_WEBHOOK_ID must be configured for webhook signature verification');
+      this.logger.error('PayPal webhook ID must be configured for webhook signature verification');
       return false;
     }
 
@@ -206,7 +238,7 @@ export class PaypalService {
     };
 
     const res = await fetch(
-      `${this.baseUrl}/v1/notifications/verify-webhook-signature`,
+      `${this.getBaseUrl(credentialsConfig.environment)}/v1/notifications/verify-webhook-signature`,
       {
         method: 'POST',
         headers: {

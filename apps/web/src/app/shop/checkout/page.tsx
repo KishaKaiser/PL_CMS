@@ -636,9 +636,7 @@ function CheckoutContent() {
 
               {!paypalClientId ? (
                 <div className="rounded border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
-                  PayPal checkout is not configured. Please set{' '}
-                  <code>NEXT_PUBLIC_PAYPAL_CLIENT_ID</code> or{' '}
-                  <code>PAYPAL_CLIENT_ID</code> in your environment.
+                  PayPal checkout is not configured. Add the PayPal client ID and secret in Admin Settings → API settings → Billing.
                 </div>
               ) : (
                 <div id="paypal-button-container" className="min-h-12" />
