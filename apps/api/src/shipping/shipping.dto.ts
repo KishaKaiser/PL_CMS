@@ -58,6 +58,21 @@ export class QuoteItemDto {
   @IsInt()
   @Min(1)
   weightOz?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  lengthIn?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  widthIn?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  heightIn?: number;
 }
 
 export class GetShippingQuoteDto {

@@ -27,9 +27,10 @@ const SHIPSTATION_SERVICES = [
   { carrierCode: 'global_post', carrierName: 'GlobalPost', serviceCode: 'globalpost_standard_intl', serviceName: 'GlobalPost Standard International' },
 ];
 const SHIPSTATION_CARRIER_ALIASES: Record<string, string[]> = {
-  usps: ['usps', 'stamps_com'],
-  stamps_com: ['usps', 'stamps_com'],
-  ups: ['ups'],
+  usps: ['stamps_com', 'usps'],
+  stamps_com: ['stamps_com', 'usps'],
+  ups: ['ups_walleted', 'ups'],
+  ups_walleted: ['ups_walleted', 'ups'],
   fedex: ['fedex'],
   global_post: ['global_post', 'globalpost'],
   globalpost: ['global_post', 'globalpost'],
@@ -52,6 +53,8 @@ interface ShipStationRate {
   carrierName?: string;
   shipmentCost?: number;
   otherCost?: number;
+  deliveryDays?: number;
+  deliveryDate?: string;
 }
 
 interface ShipStationValidateResponse {
@@ -184,21 +187,23 @@ export class ShippingService {
       );
     }
 
-    const totalWeightOz = dto.items.reduce(
-      (sum, item) => sum + (item.weightOz ?? DEFAULT_ITEM_WEIGHT_OZ) * item.quantity,
-      0,
-    );
+    const packageDetails = await this.getPackageDetails(dto.items);
 
     const baseRequestBody = {
       serviceCode: null,
       packageCode: 'package',
       fromPostalCode: warehouse.postalCode,
+      fromCity: warehouse.city,
+      fromState: warehouse.state,
+      fromCountry: warehouse.country,
       toState: dto.address.state,
       toCountry: dto.address.country,
       toPostalCode: dto.address.postalCode,
       toCity: dto.address.city,
-      weight: { value: totalWeightOz, units: 'ounces' },
-      residential: true,
+      weight: { value: packageDetails.weightOz, units: 'ounces' },
+      dimensions: { ...packageDetails.dimensions, units: 'inches' },
+      confirmation: 'none',
+      residential: false,
     };
 
     const authHeader = await this.getAuthHeader();
@@ -254,9 +259,9 @@ export class ShippingService {
 
     const supportedRates = rates
       .map((r) => ({
-        serviceName: r.serviceName ?? r.serviceCode ?? 'Shipping',
+        serviceName: formatRateLabel(r),
         serviceCode: r.serviceCode ?? '',
-        carrierCode: r.carrierCode ?? r.carrierName ?? '',
+        carrierCode: r.carrierCode ?? inferCarrierCode(r.serviceCode, r.serviceName),
         shipmentCost: Number(r.shipmentCost ?? 0),
         otherCost: Number(r.otherCost ?? 0),
       }))
@@ -269,6 +274,48 @@ export class ShippingService {
     }
 
     return supportedRates;
+  }
+
+  private async getPackageDetails(items: GetShippingQuoteDto['items']) {
+    const productIds = Array.from(new Set(items.map((item) => item.productId).filter(Boolean)));
+    const products = productIds.length > 0
+      ? await this.prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, weightOz: true, lengthIn: true, widthIn: true, heightIn: true },
+        })
+      : [];
+    const productMap = new Map(products.map((product) => [product.id, product]));
+
+    let weightOz = 0;
+    let maxLength = 0;
+    let maxWidth = 0;
+    let totalHeight = 0;
+    let hasDimensions = false;
+
+    for (const item of items) {
+      const product = productMap.get(item.productId);
+      const itemWeight = Number(product?.weightOz ?? item.weightOz ?? DEFAULT_ITEM_WEIGHT_OZ);
+      weightOz += Math.max(1, itemWeight) * item.quantity;
+
+      const length = Number(product?.lengthIn ?? item.lengthIn ?? 0);
+      const width = Number(product?.widthIn ?? item.widthIn ?? 0);
+      const height = Number(product?.heightIn ?? item.heightIn ?? 0);
+      if (length > 0 && width > 0 && height > 0) {
+        hasDimensions = true;
+        maxLength = Math.max(maxLength, length);
+        maxWidth = Math.max(maxWidth, width);
+        totalHeight += height * item.quantity;
+      }
+    }
+
+    return {
+      weightOz: Math.max(1, Math.ceil(weightOz)),
+      dimensions: {
+        length: Math.max(1, Math.ceil(hasDimensions ? maxLength : 10)),
+        width: Math.max(1, Math.ceil(hasDimensions ? maxWidth : 10)),
+        height: Math.max(1, Math.ceil(hasDimensions ? totalHeight : 10)),
+      },
+    };
   }
 
   private getEnabledCarrierCodes(settings: ShippingApiSettings) {
@@ -345,8 +392,32 @@ function isSupportedCarrier(carrierCode?: string | null) {
 function normalizeCarrierCode(carrierCode: string) {
   const normalized = carrierCode.toLowerCase();
   if (normalized === 'stamps_com') return 'usps';
+  if (normalized === 'ups_walleted') return 'ups';
   if (normalized === 'globalpost') return 'global_post';
   return normalized;
+}
+
+function inferCarrierCode(serviceCode?: string, serviceName?: string) {
+  const haystack = `${serviceCode ?? ''} ${serviceName ?? ''}`.toLowerCase();
+  if (haystack.includes('usps') || haystack.includes('first class') || haystack.includes('priority mail')) return 'usps';
+  if (haystack.includes('ups')) return 'ups';
+  if (haystack.includes('fedex')) return 'fedex';
+  if (haystack.includes('globalpost') || haystack.includes('global post')) return 'global_post';
+  return '';
+}
+
+function formatRateLabel(rate: ShipStationRate) {
+  const label = rate.serviceName ?? rate.serviceCode ?? 'Shipping';
+  if (rate.deliveryDate) {
+    const timestamp = Date.parse(rate.deliveryDate);
+    if (!Number.isNaN(timestamp)) {
+      return `${label} (Est. Delivery: ${new Date(timestamp).toLocaleDateString('en-US')})`;
+    }
+  }
+  if (rate.deliveryDays && rate.deliveryDays > 0) {
+    return `${label} (${rate.deliveryDays} ${rate.deliveryDays === 1 ? 'day' : 'days'})`;
+  }
+  return label;
 }
 
 function formatShipStationError(text: string) {
