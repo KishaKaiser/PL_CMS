@@ -17,15 +17,23 @@ const SHIPSTATION_BASE = 'https://ssapi.shipstation.com';
 const WAREHOUSE_ADDRESS_KEY = 'warehouse_address';
 const SHIPPING_API_SETTINGS_KEY = 'shipping_api_settings';
 const SHIPSTATION_SERVICES = [
-  { carrierCode: 'stamps_com', carrierName: 'United States Post Office', serviceCode: 'usps_ground_advantage', serviceName: 'USPS Ground Advantage' },
-  { carrierCode: 'stamps_com', carrierName: 'United States Post Office', serviceCode: 'usps_priority_mail', serviceName: 'USPS Priority Mail' },
+  { carrierCode: 'usps', carrierName: 'United States Post Office', serviceCode: 'usps_ground_advantage', serviceName: 'USPS Ground Advantage' },
+  { carrierCode: 'usps', carrierName: 'United States Post Office', serviceCode: 'usps_priority_mail', serviceName: 'USPS Priority Mail' },
   { carrierCode: 'ups', carrierName: 'UPS', serviceCode: 'ups_ground', serviceName: 'UPS Ground' },
   { carrierCode: 'ups', carrierName: 'UPS', serviceCode: 'ups_2nd_day_air', serviceName: 'UPS 2nd Day Air' },
   { carrierCode: 'fedex', carrierName: 'FedEx', serviceCode: 'fedex_ground', serviceName: 'FedEx Ground' },
   { carrierCode: 'fedex', carrierName: 'FedEx', serviceCode: 'fedex_2day', serviceName: 'FedEx 2Day' },
-  { carrierCode: 'globalpost', carrierName: 'GlobalPost', serviceCode: 'globalpost_economy_intl', serviceName: 'GlobalPost Economy International' },
-  { carrierCode: 'globalpost', carrierName: 'GlobalPost', serviceCode: 'globalpost_standard_intl', serviceName: 'GlobalPost Standard International' },
+  { carrierCode: 'global_post', carrierName: 'GlobalPost', serviceCode: 'globalpost_economy_intl', serviceName: 'GlobalPost Economy International' },
+  { carrierCode: 'global_post', carrierName: 'GlobalPost', serviceCode: 'globalpost_standard_intl', serviceName: 'GlobalPost Standard International' },
 ];
+const SHIPSTATION_CARRIER_ALIASES: Record<string, string[]> = {
+  usps: ['usps', 'stamps_com'],
+  stamps_com: ['usps', 'stamps_com'],
+  ups: ['ups'],
+  fedex: ['fedex'],
+  global_post: ['global_post', 'globalpost'],
+  globalpost: ['global_post', 'globalpost'],
+};
 /** Default weight per item when no weight is provided by the product (16 oz = 1 lb). */
 const DEFAULT_ITEM_WEIGHT_OZ = 16;
 
@@ -101,7 +109,7 @@ export class ShippingService {
         apiSecret: typeof candidate.apiSecret === 'string' ? candidate.apiSecret.trim() : '',
         enabledCarrierCodes: Array.isArray(candidate.enabledCarrierCodes)
           ? candidate.enabledCarrierCodes.filter((value): value is string => typeof value === 'string')
-          : ['stamps_com'],
+          : ['usps'],
       };
     } catch {
       return {};
@@ -200,41 +208,47 @@ export class ShippingService {
     const failures: string[] = [];
 
     for (const carrierCode of carrierCodes) {
-      let response: Response;
-      try {
-        response = await fetch(`${SHIPSTATION_BASE}/shipments/getrates`, {
-          method: 'POST',
-          headers: {
-            Authorization: authHeader,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ...baseRequestBody, carrierCode }),
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unable to reach ShipStation';
-        this.logger.warn(`ShipStation getrates request failed for ${carrierCode}: ${message}`);
-        failures.push(`${carrierCode}: Unable to reach ShipStation (${message})`);
-        continue;
-      }
-
-      if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        const detail = formatShipStationError(text);
-        this.logger.warn(`ShipStation getrates failed for ${carrierCode}: ${response.status} ${text}`);
-        if (response.status === 401 || response.status === 403) {
-          throw new BadRequestException(
-            `ShipStation rejected the API credentials (${response.status}). ${detail}`,
-          );
+      for (const candidateCode of this.getCarrierCodeCandidates(carrierCode)) {
+        let response: Response;
+        try {
+          response = await fetch(`${SHIPSTATION_BASE}/shipments/getrates`, {
+            method: 'POST',
+            headers: {
+              Authorization: authHeader,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ...baseRequestBody, carrierCode: candidateCode }),
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to reach ShipStation';
+          this.logger.warn(`ShipStation getrates request failed for ${candidateCode}: ${message}`);
+          failures.push(`${candidateCode}: Unable to reach ShipStation (${message})`);
+          continue;
         }
-        failures.push(`${carrierCode}: ${detail || `HTTP ${response.status}`}`);
-        continue;
-      }
 
-      const carrierRates = (await response.json().catch(() => [])) as unknown;
-      if (Array.isArray(carrierRates)) {
-        rates.push(...(carrierRates as ShipStationRate[]));
-      } else {
-        failures.push(`${carrierCode}: ShipStation returned an unexpected response.`);
+        if (!response.ok) {
+          const text = await response.text().catch(() => '');
+          const detail = formatShipStationError(text);
+          this.logger.warn(`ShipStation getrates failed for ${candidateCode}: ${response.status} ${text}`);
+          if (response.status === 401 || response.status === 403) {
+            throw new BadRequestException(
+              `ShipStation rejected the API credentials (${response.status}). ${detail}`,
+            );
+          }
+          failures.push(`${candidateCode}: ${detail || `HTTP ${response.status}`}`);
+          continue;
+        }
+
+        const carrierRates = (await response.json().catch(() => [])) as unknown;
+        if (Array.isArray(carrierRates) && carrierRates.length > 0) {
+          rates.push(...(carrierRates as ShipStationRate[]));
+          break;
+        }
+        if (Array.isArray(carrierRates)) {
+          failures.push(`${candidateCode}: ShipStation returned no rates.`);
+        } else {
+          failures.push(`${candidateCode}: ShipStation returned an unexpected response.`);
+        }
       }
     }
 
@@ -259,8 +273,12 @@ export class ShippingService {
 
   private getEnabledCarrierCodes(settings: ShippingApiSettings) {
     const supported = Array.from(new Set(SHIPSTATION_SERVICES.map((service) => service.carrierCode)));
-    const selected = settings.enabledCarrierCodes?.filter((code) => supported.includes(code)) ?? [];
-    return selected.length > 0 ? selected : ['stamps_com'];
+    const selected = settings.enabledCarrierCodes?.map((code) => normalizeCarrierCode(code)).filter((code) => supported.includes(code)) ?? [];
+    return selected.length > 0 ? Array.from(new Set(selected)) : ['usps'];
+  }
+
+  private getCarrierCodeCandidates(carrierCode: string) {
+    return SHIPSTATION_CARRIER_ALIASES[carrierCode] ?? [carrierCode];
   }
 
   /** Calls ShipStation /addresses/validate and returns the result. */
@@ -320,8 +338,15 @@ export class ShippingService {
 
 function isSupportedCarrier(carrierCode?: string | null) {
   if (!carrierCode) return false;
+  const normalized = normalizeCarrierCode(carrierCode);
+  return ['usps', 'ups', 'fedex', 'global_post'].some((carrier) => normalized.includes(carrier));
+}
+
+function normalizeCarrierCode(carrierCode: string) {
   const normalized = carrierCode.toLowerCase();
-  return ['stamps', 'usps', 'ups', 'fedex', 'globalpost'].some((carrier) => normalized.includes(carrier));
+  if (normalized === 'stamps_com') return 'usps';
+  if (normalized === 'globalpost') return 'global_post';
+  return normalized;
 }
 
 function formatShipStationError(text: string) {

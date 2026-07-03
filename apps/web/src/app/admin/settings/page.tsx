@@ -97,7 +97,7 @@ const defaultShippingApiForm: ShippingApiForm = {
   accountId: '',
   originPostalCode: '',
   originCountry: 'US',
-  enabledCarrierCodes: ['stamps_com'],
+  enabledCarrierCodes: ['usps'],
 };
 
 const defaultHomepageForm: SiteHomepageForm = {
@@ -128,7 +128,9 @@ function readOption<T extends string>(value: unknown, options: readonly T[], fal
 
 function readStringArray(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) return fallback;
-  const strings = value.filter((item): item is string => typeof item === 'string');
+  const strings = value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item === 'stamps_com' ? 'usps' : item === 'globalpost' ? 'global_post' : item);
   return strings.length > 0 ? strings : fallback;
 }
 
@@ -629,10 +631,10 @@ export default function AdminSettingsPage() {
                 <p className="mt-1 text-xs text-gray-500">Enable only carriers active in your ShipStation account. USPS is the safest default.</p>
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
                   {[
-                    ['stamps_com', 'USPS'],
+                    ['usps', 'USPS'],
                     ['ups', 'UPS'],
                     ['fedex', 'FedEx'],
-                    ['globalpost', 'GlobalPost'],
+                    ['global_post', 'GlobalPost'],
                   ].map(([code, label]) => (
                     <label key={code} className="flex items-center gap-2 text-sm text-gray-700">
                       <input
