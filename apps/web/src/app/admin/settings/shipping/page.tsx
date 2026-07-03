@@ -70,6 +70,7 @@ export default function ShippingSettingsPage() {
   const [testAddress, setTestAddress] = useState(defaultTestAddress);
   const [testPackage, setTestPackage] = useState({ weightOz: 16, lengthIn: 10, widthIn: 10, heightIn: 10 });
   const [testResult, setTestResult] = useState<TestQuoteResult | null>(null);
+  const [copyStatus, setCopyStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -115,10 +116,28 @@ export default function ShippingSettingsPage() {
     }
   }
 
+  async function copyDiagnosticReport() {
+    if (!testResult) return;
+    setCopyStatus('');
+    const report = buildDiagnosticReport({
+      diagnostics,
+      testAddress,
+      testPackage,
+      testResult,
+    });
+    try {
+      await navigator.clipboard.writeText(report);
+      setCopyStatus('Diagnostic report copied.');
+    } catch {
+      setCopyStatus('Could not copy report. Open the raw JSON and copy it manually.');
+    }
+  }
+
   async function runTestQuote() {
     setTesting(true);
     setError('');
     setTestResult(null);
+    setCopyStatus('');
     try {
       const res = await fetch('/api/proxy/shipping/diagnostics/test-quote', {
         method: 'POST',
@@ -300,6 +319,16 @@ export default function ShippingSettingsPage() {
             <p className={testResult.success ? 'font-medium text-green-700' : 'font-medium text-red-700'}>
               {testResult.success ? `Returned ${testResult.rates?.length ?? 0} rate(s).` : testResult.message}
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void copyDiagnosticReport()}
+                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Copy diagnostic report
+              </button>
+              {copyStatus && <span className="text-xs text-gray-600">{copyStatus}</span>}
+            </div>
             {testResult.rates && testResult.rates.length > 0 && (
               <ul className="mt-3 space-y-1">
                 {testResult.rates.map((rate) => (
@@ -354,4 +383,58 @@ export default function ShippingSettingsPage() {
       </div>
     </main>
   );
+}
+
+function buildDiagnosticReport({
+  diagnostics,
+  testAddress,
+  testPackage,
+  testResult,
+}: {
+  diagnostics: Record<string, unknown> | null;
+  testAddress: typeof defaultTestAddress;
+  testPackage: { weightOz: number; lengthIn: number; widthIn: number; heightIn: number };
+  testResult: TestQuoteResult;
+}) {
+  const lines = [
+    'ShipStation Test Quote Diagnostic Report',
+    `Result: ${testResult.success ? 'success' : 'failed'}`,
+    testResult.message ? `Message: ${testResult.message}` : '',
+    '',
+    'Destination:',
+    `${testAddress.city}, ${testAddress.state} ${testAddress.postalCode}, ${testAddress.country}`,
+    '',
+    'Package:',
+    `${testPackage.weightOz} oz, ${testPackage.lengthIn}x${testPackage.widthIn}x${testPackage.heightIn} in`,
+    '',
+    'Diagnostics:',
+    diagnostics ? JSON.stringify(diagnostics, null, 2) : 'No diagnostics loaded.',
+    '',
+    'Returned checkout rates:',
+    ...(testResult.rates && testResult.rates.length > 0
+      ? testResult.rates.map(
+          (rate) =>
+            `${rate.carrierCode} ${rate.serviceCode} - ${rate.serviceName}: $${(Number(rate.shipmentCost) + Number(rate.otherCost)).toFixed(2)}`,
+        )
+      : ['None']),
+    '',
+    'Carrier attempts:',
+    ...(testResult.attempts && testResult.attempts.length > 0
+      ? testResult.attempts.flatMap((attempt) => [
+          `${attempt.carrierCode}: status ${attempt.status ?? 'not reached'}, ${attempt.rateCount ?? 0} raw rate(s)`,
+          attempt.error ? `  Error: ${attempt.error}` : '',
+          ...(attempt.services && attempt.services.length > 0
+            ? attempt.services.map(
+                (service) =>
+                  `  ${service.serviceCode} - ${service.serviceName}: $${(Number(service.shipmentCost) + Number(service.otherCost)).toFixed(2)}`,
+              )
+            : ['  No services returned.']),
+        ])
+      : ['None']),
+    '',
+    'Raw attempts JSON:',
+    JSON.stringify(testResult.attempts ?? [], null, 2),
+  ];
+
+  return lines.filter((line) => line !== '').join('\n');
 }
