@@ -754,6 +754,15 @@ export default function AdminProductsPage() {
                       </button>
                       <button
                         type="button"
+                        onClick={() =>
+                          setExpandedProductId((id) => (id === product.id ? null : product.id))
+                        }
+                        className="rounded border border-indigo-200 bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+                      >
+                        {expandedProductId === product.id ? 'Hide Variants' : 'Add Variants'}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleDelete(product.id)}
                         className="rounded bg-red-100 px-3 py-1 text-sm text-red-700 hover:bg-red-200"
                       >
@@ -1098,7 +1107,7 @@ function VariantPanel({
 }) {
   return (
     <div className="border-t bg-gray-50 px-4 py-4">
-      <h3 className="mb-3 text-sm font-semibold text-gray-700">Variants</h3>
+      <h3 className="mb-3 text-sm font-semibold text-gray-700">Product Variants</h3>
       {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
 
       {product.variants.length > 0 && (
