@@ -3,6 +3,7 @@ import {
   BadRequestException,
   Logger,
   NotFoundException,
+  HttpException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -130,8 +131,38 @@ export class ShippingService {
     return SHIPSTATION_SERVICES;
   }
 
+  async getDiagnostics() {
+    const warehouse = await this.getWarehouseAddress();
+    const saved = await this.getSavedShippingApiSettings();
+    const envKey = this.config.get<string>('SHIPSTATION_API_KEY') || '';
+    const envSecret = this.config.get<string>('SHIPSTATION_API_SECRET') || '';
+
+    return {
+      warehouseConfigured: Boolean(warehouse),
+      warehousePostalCode: warehouse?.postalCode ?? null,
+      warehouseState: warehouse?.state ?? null,
+      savedApiKeyConfigured: Boolean(saved.apiKey),
+      savedApiSecretConfigured: Boolean(saved.apiSecret),
+      envApiKeyConfigured: Boolean(envKey),
+      envApiSecretConfigured: Boolean(envSecret),
+      credentialsSource: saved.apiKey && saved.apiSecret ? 'admin-settings' : envKey && envSecret ? 'environment' : 'missing',
+      carriersRequested: Array.from(new Set(SHIPSTATION_SERVICES.map((service) => service.carrierCode))),
+    };
+  }
+
   /** Calls ShipStation /shipments/getrates and returns available rates. */
   async getShippingQuote(dto: GetShippingQuoteDto): Promise<ShippingRate[]> {
+    try {
+      return await this.getShippingQuoteFromShipStation(dto);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      const message = error instanceof Error ? error.message : 'Unknown shipping error';
+      this.logger.error(`Shipping quote failed: ${message}`);
+      throw new BadRequestException(`Shipping quote failed before ShipStation returned rates: ${message}`);
+    }
+  }
+
+  private async getShippingQuoteFromShipStation(dto: GetShippingQuoteDto): Promise<ShippingRate[]> {
     const warehouse = await this.getWarehouseAddress();
     if (!warehouse) {
       throw new NotFoundException(

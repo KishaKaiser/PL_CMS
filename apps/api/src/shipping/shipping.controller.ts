@@ -45,6 +45,13 @@ export class ShippingController {
     return this.shippingService.getShipStationServices();
   }
 
+  @Get('diagnostics')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  getDiagnostics() {
+    return this.shippingService.getDiagnostics();
+  }
+
   // ── Client-facing: quote & validate ─────────
 
   @Post('quote')

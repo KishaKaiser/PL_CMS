@@ -26,18 +26,25 @@ const emptyForm: WarehouseAddress = {
 
 export default function ShippingSettingsPage() {
   const [form, setForm] = useState<WarehouseAddress>(emptyForm);
+  const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    fetch('/api/proxy/shipping/warehouse-address')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: WarehouseAddress | null) => {
-        if (data) setForm({ ...emptyForm, ...data });
+    Promise.all([
+      fetch('/api/proxy/shipping/warehouse-address'),
+      fetch('/api/proxy/shipping/diagnostics'),
+    ])
+      .then(async ([addressRes, diagnosticsRes]) => {
+        if (addressRes.ok) {
+          const data = (await addressRes.json()) as WarehouseAddress | null;
+          if (data) setForm({ ...emptyForm, ...data });
+        }
+        if (diagnosticsRes.ok) setDiagnostics((await diagnosticsRes.json()) as Record<string, unknown>);
       })
-      .catch(() => {})
+      .catch(() => undefined)
       .finally(() => setLoading(false));
   }, []);
 
@@ -160,6 +167,20 @@ export default function ShippingSettingsPage() {
           Environment variables are only used as a fallback.
         </p>
       </div>
+
+      {diagnostics && (
+        <section className="mt-6 rounded-lg border bg-white p-5 text-sm shadow-sm">
+          <h2 className="mb-3 text-lg font-semibold text-gray-900">ShipStation Diagnostics</h2>
+          <dl className="grid gap-3 sm:grid-cols-2">
+            {Object.entries(diagnostics).map(([key, value]) => (
+              <div key={key}>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{key}</dt>
+                <dd className="mt-1 break-words text-gray-800">{Array.isArray(value) ? value.join(', ') : String(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
 
       <div className="mt-6">
         <a href="/admin" className="text-sm text-indigo-600 hover:underline">
