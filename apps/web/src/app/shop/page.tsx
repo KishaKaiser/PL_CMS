@@ -20,7 +20,7 @@ interface Product {
   minutesPack: number;
   isActive: boolean;
   categories?: Array<{ id: string; slug: string; name: string }>;
-  variants?: Array<{ color?: string | null }>;
+  variants?: Array<{ color?: string | null; isActive?: boolean }>;
 }
 
 async function getProducts(): Promise<Product[]> {
@@ -307,7 +307,7 @@ function collectColors(products: Product[]) {
   const colors = new Set<string>();
   for (const product of products) {
     for (const variant of product.variants ?? []) {
-      if (variant.color) colors.add(variant.color);
+      if (variant.color) colors.add(parseVariantColor(variant.color).label);
     }
   }
   return Array.from(colors).sort((a, b) => a.localeCompare(b));
@@ -323,7 +323,12 @@ function filterProducts(products: Product[], category: string, price: string, co
       (price === '25-50' && productPrice >= 25 && productPrice <= 50) ||
       (price === '50-100' && productPrice > 50 && productPrice <= 100) ||
       (price === 'over-100' && productPrice > 100);
-    const matchesColor = !color || product.variants?.some((variant) => variant.color === color);
+    const matchesColor = !color || product.variants?.some((variant) => variant.color && parseVariantColor(variant.color).label === color);
     return matchesCategory && matchesPrice && matchesColor;
   });
+}
+
+function parseVariantColor(value: string) {
+  const [label = value] = value.split('|').map((part) => part.trim());
+  return { label: label || value };
 }

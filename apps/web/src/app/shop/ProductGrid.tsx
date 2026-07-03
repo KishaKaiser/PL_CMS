@@ -14,6 +14,7 @@ interface Product {
   price: string | number;
   currency: string;
   minutesPack: number;
+  variants?: Array<{ color?: string | null; isActive?: boolean }>;
 }
 
 interface Props {
@@ -73,6 +74,18 @@ export function ProductGrid({ products }: Props) {
                 </span>
                 <span className="text-sm text-gray-400">{product.currency}</span>
               </div>
+              {product.variants && product.variants.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2" aria-label={`${product.name} color options`}>
+                  {product.variants.filter((variant) => variant.isActive !== false && variant.color).slice(0, 8).map((variant) => (
+                    <span
+                      key={variant.color}
+                      title={parseVariantColor(variant.color || '').label}
+                      className="h-5 w-5 rounded-full border border-gray-300"
+                      style={{ background: variantSwatchBackground(variant.color || '') }}
+                    />
+                  ))}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={(event) => {
@@ -101,4 +114,20 @@ export function ProductGrid({ products }: Props) {
       })}
     </div>
   );
+}
+
+function parseVariantColor(value: string) {
+  const [label = value, topColor = value, bottomColor = ''] = value.split('|').map((part) => part.trim());
+  return {
+    label: label || value,
+    topColor: /^#[0-9a-f]{6}$/i.test(topColor) ? topColor : value,
+    bottomColor: /^#[0-9a-f]{6}$/i.test(bottomColor) ? bottomColor : '',
+  };
+}
+
+function variantSwatchBackground(value: string) {
+  const swatch = parseVariantColor(value);
+  return swatch.bottomColor
+    ? `linear-gradient(to bottom, ${swatch.topColor} 0 50%, ${swatch.bottomColor} 50% 100%)`
+    : swatch.topColor;
 }

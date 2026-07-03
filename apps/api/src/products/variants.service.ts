@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVariantDto, UpdateVariantDto, UpdateInventoryDto } from './variants.dto';
 
@@ -31,8 +32,8 @@ export class VariantsService {
     return this.prisma.productVariant.create({
       data: {
         productId,
-        color: dto.color,
-        sku: dto.sku,
+        color: dto.color.trim(),
+        sku: await this.resolveSku(productId, dto.sku, dto.color),
         priceOverride: dto.priceOverride ?? null,
         imageUrl: dto.imageUrl ?? null,
         isActive: dto.isActive ?? true,
@@ -52,8 +53,8 @@ export class VariantsService {
     return this.prisma.productVariant.update({
       where: { id },
       data: {
-        color: dto.color,
-        sku: dto.sku,
+        color: dto.color?.trim(),
+        sku: dto.sku === undefined ? undefined : await this.resolveSku(productId, dto.sku, dto.color ?? variant.color, id),
         priceOverride: dto.priceOverride,
         imageUrl: dto.imageUrl,
         isActive: dto.isActive,
@@ -84,5 +85,21 @@ export class VariantsService {
         reserved: dto.reserved ?? 0,
       },
     });
+  }
+
+  private async resolveSku(productId: string, sku: string | undefined, color: string, currentVariantId?: string) {
+    const normalized = sku?.trim();
+    if (normalized) {
+      const existing = await this.prisma.productVariant.findUnique({ where: { sku: normalized }, select: { id: true } });
+      if (existing && existing.id !== currentVariantId) throw new BadRequestException(`Variant SKU "${normalized}" already exists.`);
+      return normalized;
+    }
+    const colorSlug = color.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'variant';
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = `${productId.slice(-6).toUpperCase()}-${colorSlug.toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
+      const existing = await this.prisma.productVariant.findUnique({ where: { sku: candidate }, select: { id: true } });
+      if (!existing || existing.id === currentVariantId) return candidate;
+    }
+    return `${productId.slice(-6).toUpperCase()}-${randomUUID().slice(0, 10).toUpperCase()}`;
   }
 }
