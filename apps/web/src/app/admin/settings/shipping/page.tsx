@@ -57,6 +57,7 @@ const defaultTestAddress = {
   phone: '5555555555',
   line1: '1600 Pennsylvania Ave NW',
   line2: '',
+  addressType: 'residential',
   city: 'Washington',
   state: 'DC',
   postalCode: '20500',

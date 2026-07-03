@@ -29,6 +29,7 @@ interface ShippingAddress {
   phone: string;
   line1: string;
   line2?: string;
+  addressType?: 'commercial' | 'residential';
   city: string;
   state: string;
   postalCode: string;
@@ -73,6 +74,7 @@ const emptyAddress: ShippingAddress = {
   phone: '',
   line1: '',
   line2: '',
+  addressType: 'residential',
   city: '',
   state: '',
   postalCode: '',
@@ -543,6 +545,15 @@ function CheckoutContent() {
                     onChange={(e) => setShippingAddress({ ...shippingAddress, line2: e.target.value })}
                     placeholder="Apartment, suite, unit, etc."
                     className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">Address Type</label>
+                  <select value={shippingAddress.addressType ?? 'residential'}
+                    onChange={(e) => setShippingAddress({ ...shippingAddress, addressType: e.target.value as ShippingAddress['addressType'] })}
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
+                    <option value="commercial">Commercial</option>
+                    <option value="residential">Residential</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">City *</label>

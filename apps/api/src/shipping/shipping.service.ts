@@ -261,7 +261,7 @@ export class ShippingService {
       weight: { value: packageDetails.weightOz, units: 'ounces' },
       dimensions: { ...packageDetails.dimensions, units: 'inches' },
       confirmation: 'none',
-      residential: false,
+      residential: dto.address.addressType !== 'commercial',
       ...(warehouse.warehouseId?.trim() ? { fromWarehouseId: warehouse.warehouseId.trim() } : {}),
     };
 
@@ -479,6 +479,7 @@ export class ShippingService {
           phone: address.phone,
           line1: data.address.street1 ?? address.line1,
           line2: data.address.street2 ?? address.line2,
+          addressType: address.addressType,
           city: data.address.city ?? address.city,
           state: data.address.state ?? address.state,
           postalCode: data.address.postalCode ?? address.postalCode,

@@ -26,6 +26,10 @@ export class ShippingAddressDto {
   @IsString()
   line2?: string;
 
+  @IsOptional()
+  @IsIn(['commercial', 'residential'])
+  addressType?: 'commercial' | 'residential';
+
   @IsString()
   city!: string;
 
