@@ -65,17 +65,25 @@ async function proxy(req: NextRequest, { params }: Context) {
 
   const body = req.method !== 'GET' && req.method !== 'HEAD' ? await req.arrayBuffer() : undefined;
 
-  const upstream = await fetchApi(`/${targetPath}${search}`, {
-    method: req.method,
-    headers,
-    body: body ? Buffer.from(body) : undefined,
-  });
+  try {
+    const upstream = await fetchApi(`/${targetPath}${search}`, {
+      method: req.method,
+      headers,
+      body: body ? Buffer.from(body) : undefined,
+    });
 
-  const upstreamBody = await upstream.arrayBuffer();
-  return new NextResponse(upstreamBody, {
-    status: upstream.status,
-    headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json' },
-  });
+    const upstreamBody = await upstream.arrayBuffer();
+    return new NextResponse(upstreamBody, {
+      status: upstream.status,
+      headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json' },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'The API service did not respond.';
+    return NextResponse.json(
+      { message: `Internal API request failed: ${message}` },
+      { status: 503 },
+    );
+  }
 }
 
 export const GET = proxy;

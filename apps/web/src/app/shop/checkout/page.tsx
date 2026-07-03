@@ -188,6 +188,7 @@ function CheckoutContent() {
   useEffect(() => {
     if (cart.length === 0) return;
     const subtotal = cart.reduce((sum, item) => sum + Number(item.product.price) * item.quantity, 0);
+    if (!Number.isFinite(subtotal)) return;
     void fetch('/api/proxy/store/cart-recovery/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -251,7 +252,7 @@ function CheckoutContent() {
         }),
       });
       if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { message?: string };
+        const err = await readErrorResponse(res);
         if (freeShipping.enabled && itemsTotal >= Number(freeShipping.minimumSubtotal ?? 0)) {
           const freeRate = createFreeShippingRate(freeShipping.label);
           setShippingRates([freeRate]);
@@ -625,5 +626,14 @@ export default function CheckoutPage() {
       </Suspense>
     </main>
   );
+}
+
+async function readErrorResponse(res: Response) {
+  const contentType = res.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    return (await res.json().catch(() => ({}))) as { message?: string };
+  }
+  const text = await res.text().catch(() => '');
+  return { message: text || `Request failed with status ${res.status}` };
 }
 
