@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 interface WarehouseAddress {
+  warehouseId?: string;
   fullName: string;
   phone: string;
   line1: string;
@@ -33,6 +34,7 @@ interface TestQuoteResult {
 }
 
 const emptyForm: WarehouseAddress = {
+  warehouseId: '',
   fullName: '',
   phone: '',
   line1: '',
@@ -158,6 +160,16 @@ export default function ShippingSettingsPage() {
       <form onSubmit={handleSubmit} className="rounded-lg border bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold">Warehouse Origin Address</h2>
         <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700">ShipStation Warehouse ID</label>
+            <input value={form.warehouseId ?? ''}
+              onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
+              placeholder="Optional facility / warehouse ID from ShipStation"
+              className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+            <p className="mt-1 text-xs text-gray-500">
+              Optional. Use this if your ShipStation carriers are tied to a specific warehouse or facility.
+            </p>
+          </div>
           <div className="col-span-2">
             <label className="block text-sm font-medium text-gray-700">Contact / Company Name *</label>
             <input required value={form.fullName}

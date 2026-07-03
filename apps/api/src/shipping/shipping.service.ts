@@ -173,6 +173,7 @@ export class ShippingService {
 
     return {
       warehouseConfigured: Boolean(warehouse),
+      warehouseIdConfigured: Boolean(warehouse?.warehouseId),
       warehousePostalCode: warehouse?.postalCode ?? null,
       warehouseState: warehouse?.state ?? null,
       savedApiKeyConfigured: Boolean(saved.apiKey),
@@ -254,6 +255,7 @@ export class ShippingService {
       dimensions: { ...packageDetails.dimensions, units: 'inches' },
       confirmation: 'none',
       residential: false,
+      ...(warehouse.warehouseId?.trim() ? { fromWarehouseId: warehouse.warehouseId.trim() } : {}),
     };
 
     const authHeader = await this.getAuthHeader();

@@ -113,6 +113,10 @@ export class TestShippingQuoteDto {
 }
 
 export class WarehouseAddressDto {
+  @IsOptional()
+  @IsString()
+  warehouseId?: string;
+
   @IsString()
   fullName!: string;
 
