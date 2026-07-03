@@ -288,7 +288,7 @@ export class FulfillmentService {
       const text = await response.text().catch(() => '');
       this.logger.warn(`ShipStation createlabel failed: ${response.status} ${text}`);
       throw new BadRequestException(
-        `ShipStation returned an error (${response.status}). Check your API credentials and order details.`,
+        `ShipStation returned an error (${response.status}). ${formatShipStationError(text)}`,
       );
     }
 
@@ -412,4 +412,38 @@ export class FulfillmentService {
 
     return updated;
   }
+}
+
+function formatShipStationError(text: string) {
+  if (!text) return 'Check your API credentials, warehouse address, shipping service, and order details.';
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => formatShipStationErrorObject(item)).filter(Boolean).join(' ');
+    }
+    return formatShipStationErrorObject(parsed) || text;
+  } catch {
+    return text;
+  }
+}
+
+function formatShipStationErrorObject(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+  const object = value as Record<string, unknown>;
+  const parts = [
+    object.message,
+    object.Message,
+    object.error,
+    object.Error,
+    object.ExceptionMessage,
+  ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  const errors = object.errors ?? object.Errors;
+  if (Array.isArray(errors)) {
+    parts.push(
+      ...errors
+        .map((item) => (typeof item === 'string' ? item : formatShipStationErrorObject(item)))
+        .filter(Boolean),
+    );
+  }
+  return parts.join(' ').trim();
 }

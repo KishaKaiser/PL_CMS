@@ -155,9 +155,9 @@ export default function ShippingSettingsPage() {
 
       <div className="mt-6 text-sm text-gray-500">
         <p>
-          <strong>ShipStation API credentials</strong> are configured via environment variables:{' '}
-          <code className="rounded bg-gray-100 px-1">SHIPSTATION_API_KEY</code> and{' '}
-          <code className="rounded bg-gray-100 px-1">SHIPSTATION_API_SECRET</code>.
+          <strong>ShipStation API credentials</strong> are saved under{' '}
+          <a href="/admin/settings" className="text-indigo-600 hover:underline">Admin Settings → API settings → Shipping</a>.
+          Environment variables are only used as a fallback.
         </p>
       </div>
 
