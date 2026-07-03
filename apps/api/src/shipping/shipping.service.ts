@@ -38,11 +38,12 @@ export interface ShippingRate {
 }
 
 interface ShipStationRate {
-  serviceName: string;
-  serviceCode: string;
-  carrierCode: string;
-  shipmentCost: number;
-  otherCost: number;
+  serviceName?: string;
+  serviceCode?: string;
+  carrierCode?: string;
+  carrierName?: string;
+  shipmentCost?: number;
+  otherCost?: number;
 }
 
 interface ShipStationValidateResponse {
@@ -232,13 +233,15 @@ export class ShippingService {
       }
     }
 
-    const supportedRates = rates.map((r) => ({
-      serviceName: r.serviceName,
-      serviceCode: r.serviceCode,
-      carrierCode: r.carrierCode,
-      shipmentCost: r.shipmentCost,
-      otherCost: r.otherCost,
-    })).filter((rate) => isSupportedCarrier(rate.carrierCode));
+    const supportedRates = rates
+      .map((r) => ({
+        serviceName: r.serviceName ?? r.serviceCode ?? 'Shipping',
+        serviceCode: r.serviceCode ?? '',
+        carrierCode: r.carrierCode ?? r.carrierName ?? '',
+        shipmentCost: Number(r.shipmentCost ?? 0),
+        otherCost: Number(r.otherCost ?? 0),
+      }))
+      .filter((rate) => rate.serviceCode && isSupportedCarrier(rate.carrierCode));
 
     if (supportedRates.length === 0 && failures.length > 0) {
       throw new BadRequestException(
@@ -304,7 +307,8 @@ export class ShippingService {
   }
 }
 
-function isSupportedCarrier(carrierCode: string) {
+function isSupportedCarrier(carrierCode?: string | null) {
+  if (!carrierCode) return false;
   const normalized = carrierCode.toLowerCase();
   return ['stamps', 'usps', 'ups', 'fedex', 'globalpost'].some((carrier) => normalized.includes(carrier));
 }
