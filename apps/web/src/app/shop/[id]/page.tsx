@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { RichContent } from '../../../components/cms/rich-content';
 import { ReviewSection } from '../../../components/reviews/review-section';
-import { getPublicSiteConfig, getSafeImageSrc } from '../../../lib/public-cms';
+import { getPublicSiteConfig } from '../../../lib/public-cms';
 import { fetchApi } from '../../../lib/server-api';
 import { buildSeoMetadata, getSeoDescription, getSeoTitle } from '../../../lib/seo';
 import ProductDetailClient from './ProductDetailClient';
@@ -86,7 +85,8 @@ export default async function ProductDetailPage({ params }: Props) {
   if (!product || !product.isActive) notFound();
 
   const activeVariants = product.variants?.filter((v) => v.isActive) ?? [];
-  const productImage = getSafeImageSrc(product.featuredMedia?.url ?? product.imageUrl);
+  const productImage = product.featuredMedia?.url ?? product.imageUrl ?? '';
+  const productImageAlt = product.featuredMedia?.altText || product.featuredMedia?.title || product.name;
 
   return (
     <main className="mx-auto w-full max-w-7xl p-8">
@@ -98,37 +98,7 @@ export default async function ProductDetailPage({ params }: Props) {
         <span>{product.name}</span>
       </nav>
 
-      <section className="grid gap-8 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
-        <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
-          {productImage ? (
-            <img
-              src={productImage}
-              alt={product.featuredMedia?.altText || product.featuredMedia?.title || product.name}
-              className="aspect-square w-full object-cover"
-            />
-          ) : (
-            <div className="flex aspect-square w-full items-center justify-center bg-gray-100 text-sm text-gray-500">
-              Product image
-            </div>
-          )}
-        </div>
-
-        <section className="rounded-lg border bg-white shadow-sm">
-          <div className="border-b border-gray-100 p-6">
-            <h1 className="text-4xl font-bold text-gray-950">{product.name}</h1>
-          </div>
-
-          {product.shortDescription && (
-            <div className="border-b border-gray-100 p-6">
-              <RichContent html={product.shortDescription} className="prose max-w-none text-lg leading-8 text-gray-600" />
-            </div>
-          )}
-
-          <div className="p-6">
-            <ProductDetailClient product={product} variants={activeVariants} />
-          </div>
-        </section>
-      </section>
+      <ProductDetailClient product={product} variants={activeVariants} productImage={productImage} productImageAlt={productImageAlt} />
 
       <section className="mt-8 rounded-lg border bg-white shadow-sm">
         <div className="border-b border-gray-100 p-5">
@@ -147,7 +117,7 @@ export default async function ProductDetailPage({ params }: Props) {
           <div className="border-b border-gray-100 p-5">
             <h2 className="text-xl font-semibold text-gray-950">Long Description</h2>
           </div>
-          <RichContent html={product.description} className="prose max-w-none p-5 text-gray-700" />
+          <div className="cms-rich-content prose max-w-none p-5 text-gray-700" dangerouslySetInnerHTML={{ __html: product.description }} />
         </section>
       )}
 

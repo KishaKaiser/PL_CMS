@@ -7,8 +7,6 @@ import {
   Body,
   Param,
   UseGuards,
-  HttpCode,
-  HttpStatus,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { VariantsService } from './variants.service';
@@ -55,7 +53,6 @@ export class VariantsController {
   @Delete(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
-  @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('productId') productId: string, @Param('id') id: string) {
     return this.variantsService.remove(productId, id);
   }
