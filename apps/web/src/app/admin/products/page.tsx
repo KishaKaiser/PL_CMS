@@ -83,6 +83,8 @@ const emptyProductForm = {
 
 const emptyVariantForm = {
   color: '',
+  swatchTop: '#000000',
+  swatchBottom: '',
   sku: '',
   priceOverride: '',
   imageUrl: '',
@@ -318,7 +320,7 @@ export default function AdminProductsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          color: variantForm.color,
+          color: serializeVariantColor(variantForm.color, variantForm.swatchTop, variantForm.swatchBottom),
           sku: variantForm.sku,
           priceOverride: optionalNumber(variantForm.priceOverride),
           imageUrl: variantForm.imageUrl || undefined,
@@ -1128,7 +1130,12 @@ function VariantPanel({
             <tbody>
               {product.variants.map((variant) => (
                 <tr key={variant.id} className="border-t">
-                  <td className="px-3 py-2">{variant.color}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <VariantSwatch color={variant.color} />
+                      <span>{parseVariantColor(variant.color).label}</span>
+                    </div>
+                  </td>
                   <td className="px-3 py-2 font-mono">{variant.sku}</td>
                   <td className="px-3 py-2">
                     {variant.priceOverride != null
@@ -1165,10 +1172,35 @@ function VariantPanel({
 
       <div className="grid gap-3 rounded border bg-white p-3 md:grid-cols-3">
         <VariantInput
-          label="Color"
+          label="Color Name"
           value={variantForm.color}
           onChange={(color) => onFormChange({ ...variantForm, color })}
         />
+        <label className="block text-xs font-medium text-gray-600">
+          Top Color
+          <input
+            type="color"
+            value={variantForm.swatchTop}
+            onChange={(event) => onFormChange({ ...variantForm, swatchTop: event.target.value })}
+            className="mt-1 h-8 w-full rounded border px-1 py-1"
+          />
+        </label>
+        <label className="block text-xs font-medium text-gray-600">
+          Bottom Color
+          <input
+            type="color"
+            value={variantForm.swatchBottom || variantForm.swatchTop}
+            onChange={(event) => onFormChange({ ...variantForm, swatchBottom: event.target.value })}
+            className="mt-1 h-8 w-full rounded border px-1 py-1"
+          />
+          <button
+            type="button"
+            onClick={() => onFormChange({ ...variantForm, swatchBottom: '' })}
+            className="mt-1 text-xs text-indigo-600 hover:underline"
+          >
+            Use one color
+          </button>
+        </label>
         <VariantInput
           label="SKU"
           value={variantForm.sku}
@@ -1224,6 +1256,30 @@ function VariantPanel({
       </div>
     </div>
   );
+}
+
+function serializeVariantColor(label: string, topColor: string, bottomColor: string) {
+  const safeLabel = label.trim() || 'Variant';
+  const top = topColor || '#000000';
+  const bottom = bottomColor && bottomColor !== top ? bottomColor : '';
+  return [safeLabel, top, bottom].filter(Boolean).join('|');
+}
+
+function parseVariantColor(value: string) {
+  const [label = value, topColor = value, bottomColor = ''] = value.split('|').map((part) => part.trim());
+  return {
+    label: label || value,
+    topColor: /^#[0-9a-f]{6}$/i.test(topColor) ? topColor : value,
+    bottomColor: /^#[0-9a-f]{6}$/i.test(bottomColor) ? bottomColor : '',
+  };
+}
+
+function VariantSwatch({ color }: { color: string }) {
+  const swatch = parseVariantColor(color);
+  const background = swatch.bottomColor
+    ? `linear-gradient(to bottom, ${swatch.topColor} 0 50%, ${swatch.bottomColor} 50% 100%)`
+    : swatch.topColor;
+  return <span className="inline-block h-5 w-5 rounded-full border border-gray-300" style={{ background }} />;
 }
 
 function VariantInput({

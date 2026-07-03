@@ -40,6 +40,7 @@ export default function ProductDetailClient({ product, variants }: Props) {
 
   const hasVariants = variants.length > 0;
   const selected = variants.find((v) => v.id === selectedVariantId) ?? variants[0];
+  const selectedSwatch = selected ? parseVariantColor(selected.color) : null;
   const displayPrice = Number(selected?.priceOverride ?? product.price);
   const variantStock = hasVariants ? (selected?.inventory?.onHand ?? 0) - (selected?.inventory?.reserved ?? 0) : null;
   const productStock = product.stockQuantity ?? null;
@@ -56,7 +57,7 @@ export default function ProductDetailClient({ product, variants }: Props) {
       productPrice: Number(product.price),
       currency: product.currency,
       variantId: selected?.id,
-      variantColor: selected?.color,
+      variantColor: selectedSwatch?.label,
       variantPrice: selected?.priceOverride != null ? Number(selected.priceOverride) : undefined,
       quantity: 1,
     });
@@ -84,7 +85,7 @@ export default function ProductDetailClient({ product, variants }: Props) {
       {hasVariants && (
         <div>
           <p className="mb-2 text-sm font-medium text-gray-700">
-            Color: <span className="font-semibold">{selected?.color}</span>
+            Color: <span className="font-semibold">{selectedSwatch?.label}</span>
           </p>
           <div className="flex flex-wrap gap-2">
             {variants.map((v) => {
@@ -93,7 +94,7 @@ export default function ProductDetailClient({ product, variants }: Props) {
               return (
                 <button
                   key={v.id}
-                  title={`${v.color}${unavailable ? ' (out of stock)' : ''}`}
+                  title={`${parseVariantColor(v.color).label}${unavailable ? ' (out of stock)' : ''}`}
                   onClick={() => {
                     setSelectedVariantId(v.id);
                     setAddedToCart(false);
@@ -103,7 +104,7 @@ export default function ProductDetailClient({ product, variants }: Props) {
                       ? 'border-purple-600 ring-2 ring-purple-300'
                       : 'border-gray-300 hover:border-gray-400'
                   } ${unavailable ? 'opacity-40' : ''}`}
-                  style={{ backgroundColor: v.color }}
+                  style={{ background: variantSwatchBackground(v.color) }}
                 >
                   {unavailable && (
                     <span className="text-[8px] font-bold text-white drop-shadow">x</span>
@@ -149,5 +150,21 @@ export default function ProductDetailClient({ product, variants }: Props) {
       )}
     </div>
   );
+}
+
+function parseVariantColor(value: string) {
+  const [label = value, topColor = value, bottomColor = ''] = value.split('|').map((part) => part.trim());
+  return {
+    label: label || value,
+    topColor: /^#[0-9a-f]{6}$/i.test(topColor) ? topColor : value,
+    bottomColor: /^#[0-9a-f]{6}$/i.test(bottomColor) ? bottomColor : '',
+  };
+}
+
+function variantSwatchBackground(value: string) {
+  const swatch = parseVariantColor(value);
+  return swatch.bottomColor
+    ? `linear-gradient(to bottom, ${swatch.topColor} 0 50%, ${swatch.bottomColor} 50% 100%)`
+    : swatch.topColor;
 }
 

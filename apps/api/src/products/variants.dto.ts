@@ -3,7 +3,6 @@ import {
   IsOptional,
   IsNumber,
   IsBoolean,
-  IsUrl,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -22,7 +21,7 @@ export class CreateVariantDto {
   priceOverride?: number;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   imageUrl?: string;
 
   @IsOptional()
@@ -46,7 +45,7 @@ export class UpdateVariantDto {
   priceOverride?: number;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   imageUrl?: string;
 
   @IsOptional()
