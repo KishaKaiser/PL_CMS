@@ -14,6 +14,7 @@ import {
 
 const SHIPSTATION_BASE = 'https://ssapi.shipstation.com';
 const WAREHOUSE_ADDRESS_KEY = 'warehouse_address';
+const SHIPPING_API_SETTINGS_KEY = 'shipping_api_settings';
 const SHIPSTATION_SERVICES = [
   { carrierCode: 'stamps_com', carrierName: 'United States Post Office', serviceCode: 'usps_ground_advantage', serviceName: 'USPS Ground Advantage' },
   { carrierCode: 'stamps_com', carrierName: 'United States Post Office', serviceCode: 'usps_priority_mail', serviceName: 'USPS Priority Mail' },
@@ -58,6 +59,11 @@ interface ShipStationValidateResponse {
   message?: string;
 }
 
+interface ShippingApiSettings {
+  apiKey?: string;
+  apiSecret?: string;
+}
+
 @Injectable()
 export class ShippingService {
   private readonly logger = new Logger(ShippingService.name);
@@ -67,16 +73,33 @@ export class ShippingService {
     private readonly config: ConfigService,
   ) {}
 
-  private getAuthHeader(): string {
-    const key = this.config.get<string>('SHIPSTATION_API_KEY') ?? '';
-    const secret = this.config.get<string>('SHIPSTATION_API_SECRET') ?? '';
+  private async getAuthHeader(): Promise<string> {
+    const saved = await this.getSavedShippingApiSettings();
+    const key = saved.apiKey || this.config.get<string>('SHIPSTATION_API_KEY') || '';
+    const secret = saved.apiSecret || this.config.get<string>('SHIPSTATION_API_SECRET') || '';
     if (!key || !secret) {
       throw new BadRequestException(
         'ShipStation API credentials are not configured. ' +
-          'Set SHIPSTATION_API_KEY and SHIPSTATION_API_SECRET.',
+          'Add them in Admin → Settings → API settings → Shipping.',
       );
     }
     return 'Basic ' + Buffer.from(`${key}:${secret}`).toString('base64');
+  }
+
+  private async getSavedShippingApiSettings(): Promise<ShippingApiSettings> {
+    const setting = await this.prisma.setting.findUnique({ where: { key: SHIPPING_API_SETTINGS_KEY } });
+    if (!setting) return {};
+    try {
+      const parsed = JSON.parse(setting.value) as unknown;
+      if (!parsed || typeof parsed !== 'object') return {};
+      const candidate = parsed as Record<string, unknown>;
+      return {
+        apiKey: typeof candidate.apiKey === 'string' ? candidate.apiKey.trim() : '',
+        apiSecret: typeof candidate.apiSecret === 'string' ? candidate.apiSecret.trim() : '',
+      };
+    } catch {
+      return {};
+    }
   }
 
   /** Returns the stored warehouse origin address or null if not set. */
@@ -135,7 +158,7 @@ export class ShippingService {
       residential: true,
     };
 
-    const authHeader = this.getAuthHeader();
+    const authHeader = await this.getAuthHeader();
     const response = await fetch(`${SHIPSTATION_BASE}/shipments/getrates`, {
       method: 'POST',
       headers: {
@@ -169,7 +192,7 @@ export class ShippingService {
     normalized?: ShippingAddressDto;
     message?: string;
   }> {
-    const authHeader = this.getAuthHeader();
+    const authHeader = await this.getAuthHeader();
     const response = await fetch(`${SHIPSTATION_BASE}/addresses/validate`, {
       method: 'POST',
       headers: {

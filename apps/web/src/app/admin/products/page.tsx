@@ -777,6 +777,7 @@ export default function AdminProductsPage() {
                     <VariantPanel
                       product={product}
                       variantForm={variantForms[product.id] ?? emptyVariantForm}
+                      mediaAssets={imageMedia}
                       error={variantErrors[product.id]}
                       onFormChange={(nextForm) =>
                         setVariantForms((current) => ({ ...current, [product.id]: nextForm }))
@@ -1093,6 +1094,7 @@ function TaxonomyChooser({
 function VariantPanel({
   product,
   variantForm,
+  mediaAssets,
   error,
   onFormChange,
   onAdd,
@@ -1100,6 +1102,7 @@ function VariantPanel({
 }: {
   product: Product;
   variantForm: typeof emptyVariantForm;
+  mediaAssets: MediaAsset[];
   error?: string;
   onFormChange: (form: typeof emptyVariantForm) => void;
   onAdd: () => void;
@@ -1178,11 +1181,31 @@ function VariantPanel({
           value={variantForm.priceOverride}
           onChange={(priceOverride) => onFormChange({ ...variantForm, priceOverride })}
         />
+        <label className="block text-xs font-medium text-gray-600">
+          Image from Media Library
+          <select
+            value={variantForm.imageUrl}
+            onChange={(event) => onFormChange({ ...variantForm, imageUrl: event.target.value })}
+            className="mt-1 w-full rounded border px-2 py-1 text-xs"
+          >
+            <option value="">Choose an image</option>
+            {mediaAssets.map((asset) => (
+              <option key={asset.id} value={asset.url}>
+                {asset.title || asset.originalName}
+              </option>
+            ))}
+          </select>
+        </label>
         <VariantInput
           label="Image URL"
           value={variantForm.imageUrl}
           onChange={(imageUrl) => onFormChange({ ...variantForm, imageUrl })}
         />
+        {variantForm.imageUrl && (
+          <div className="flex items-end">
+            <img src={variantForm.imageUrl} alt="Selected variant" className="h-16 w-16 rounded border bg-gray-50 object-cover" />
+          </div>
+        )}
         <VariantInput
           label="Initial Stock"
           type="number"
