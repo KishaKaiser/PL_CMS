@@ -38,6 +38,7 @@ const SHIPSTATION_CARRIER_ALIASES: Record<string, string[]> = {
 };
 /** Default weight per item when no weight is provided by the product (16 oz = 1 lb). */
 const DEFAULT_ITEM_WEIGHT_OZ = 16;
+const USPS_FIRST_CLASS_MAX_WEIGHT_OZ = 16;
 
 export interface ShippingRate {
   serviceName: string;
@@ -230,8 +231,6 @@ export class ShippingService {
     const packageDetails = await this.getPackageDetails(dto.items);
 
     const baseRequestBody = {
-      serviceCode: null,
-      packageCode: 'package',
       fromPostalCode: warehouse.postalCode,
       fromCity: warehouse.city,
       fromState: warehouse.state,
@@ -252,7 +251,13 @@ export class ShippingService {
     const rates: ShipStationRate[] = [];
     const failures: string[] = [];
 
+    const shouldSkipUps = ['US', 'CA'].includes(dto.address.country) && !dto.address.state.trim();
+
     for (const carrierCode of carrierCodes) {
+      if (carrierCode === 'ups' && shouldSkipUps) {
+        failures.push('ups: Destination state is required for US/CA UPS rates.');
+        continue;
+      }
       for (const candidateCode of this.getCarrierCodeCandidates(carrierCode)) {
         const requestBody = { ...baseRequestBody, carrierCode: candidateCode };
         const attempt: ShipStationQuoteAttempt = { carrierCode: candidateCode, requestBody };
@@ -315,7 +320,8 @@ export class ShippingService {
         shipmentCost: Number(r.shipmentCost ?? 0),
         otherCost: Number(r.otherCost ?? 0),
       }))
-      .filter((rate) => rate.serviceCode && isSupportedCarrier(rate.carrierCode));
+      .filter((rate) => rate.serviceCode && isSupportedCarrier(rate.carrierCode))
+      .filter((rate) => !isOverweightUspsFirstClass(rate, packageDetails.weightOz));
 
     if (supportedRates.length === 0 && failures.length > 0) {
       throw new BadRequestException(
@@ -454,6 +460,13 @@ function inferCarrierCode(serviceCode?: string, serviceName?: string) {
   if (haystack.includes('fedex')) return 'fedex';
   if (haystack.includes('globalpost') || haystack.includes('global post')) return 'global_post';
   return '';
+}
+
+function isOverweightUspsFirstClass(rate: ShippingRate, weightOz: number) {
+  if (normalizeCarrierCode(rate.carrierCode) !== 'usps') return false;
+  if (weightOz <= USPS_FIRST_CLASS_MAX_WEIGHT_OZ) return false;
+  const haystack = `${rate.serviceCode} ${rate.serviceName}`.toLowerCase();
+  return haystack.includes('first_class') || haystack.includes('first class');
 }
 
 function formatRateLabel(rate: ShipStationRate) {
