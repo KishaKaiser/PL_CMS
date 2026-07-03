@@ -145,8 +145,7 @@ export class ShippingService {
       0,
     );
 
-    const requestBody = {
-      carrierCode: null,
+    const baseRequestBody = {
       serviceCode: null,
       packageCode: 'package',
       fromPostalCode: warehouse.postalCode,
@@ -159,31 +158,51 @@ export class ShippingService {
     };
 
     const authHeader = await this.getAuthHeader();
-    const response = await fetch(`${SHIPSTATION_BASE}/shipments/getrates`, {
-      method: 'POST',
-      headers: {
-        Authorization: authHeader,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
+    const carrierCodes = Array.from(new Set(SHIPSTATION_SERVICES.map((service) => service.carrierCode)));
+    const rates: ShipStationRate[] = [];
+    const failures: string[] = [];
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      this.logger.warn(`ShipStation getrates failed: ${response.status} ${text}`);
-      throw new BadRequestException(
-        `ShipStation returned an error (${response.status}). Check your API credentials and warehouse address.`,
-      );
+    for (const carrierCode of carrierCodes) {
+      const response = await fetch(`${SHIPSTATION_BASE}/shipments/getrates`, {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...baseRequestBody, carrierCode }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        const detail = formatShipStationError(text);
+        this.logger.warn(`ShipStation getrates failed for ${carrierCode}: ${response.status} ${text}`);
+        if (response.status === 401 || response.status === 403) {
+          throw new BadRequestException(
+            `ShipStation rejected the API credentials (${response.status}). ${detail}`,
+          );
+        }
+        failures.push(`${carrierCode}: ${detail || `HTTP ${response.status}`}`);
+        continue;
+      }
+
+      rates.push(...((await response.json()) as ShipStationRate[]));
     }
 
-    const rates = (await response.json()) as ShipStationRate[];
-    return rates.map((r) => ({
+    const supportedRates = rates.map((r) => ({
       serviceName: r.serviceName,
       serviceCode: r.serviceCode,
       carrierCode: r.carrierCode,
       shipmentCost: r.shipmentCost,
       otherCost: r.otherCost,
     })).filter((rate) => isSupportedCarrier(rate.carrierCode));
+
+    if (supportedRates.length === 0 && failures.length > 0) {
+      throw new BadRequestException(
+        `ShipStation could not return rates. ${failures.slice(0, 3).join(' ')}`,
+      );
+    }
+
+    return supportedRates;
   }
 
   /** Calls ShipStation /addresses/validate and returns the result. */
@@ -214,7 +233,7 @@ export class ShippingService {
       const text = await response.text().catch(() => '');
       this.logger.warn(`ShipStation validate-address failed: ${response.status} ${text}`);
       throw new BadRequestException(
-        `ShipStation address validation returned an error (${response.status}).`,
+        `ShipStation address validation returned an error (${response.status}). ${formatShipStationError(text)}`,
       );
     }
 
@@ -244,4 +263,38 @@ export class ShippingService {
 function isSupportedCarrier(carrierCode: string) {
   const normalized = carrierCode.toLowerCase();
   return ['stamps', 'usps', 'ups', 'fedex', 'globalpost'].some((carrier) => normalized.includes(carrier));
+}
+
+function formatShipStationError(text: string) {
+  if (!text) return 'No error details were returned.';
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => formatShipStationErrorObject(item)).filter(Boolean).join(' ');
+    }
+    return formatShipStationErrorObject(parsed) || text;
+  } catch {
+    return text;
+  }
+}
+
+function formatShipStationErrorObject(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+  const object = value as Record<string, unknown>;
+  const parts = [
+    object.message,
+    object.Message,
+    object.error,
+    object.Error,
+    object.ExceptionMessage,
+  ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  const errors = object.errors ?? object.Errors;
+  if (Array.isArray(errors)) {
+    parts.push(
+      ...errors
+        .map((item) => (typeof item === 'string' ? item : formatShipStationErrorObject(item)))
+        .filter(Boolean),
+    );
+  }
+  return parts.join(' ').trim();
 }
