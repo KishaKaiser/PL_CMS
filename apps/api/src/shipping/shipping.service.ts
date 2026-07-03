@@ -78,6 +78,9 @@ interface ShippingApiSettings {
   apiKey?: string;
   apiSecret?: string;
   enabledCarrierCodes?: string[];
+  allowedServiceCodes?: string[];
+  markupType?: 'fixed' | 'percentage';
+  markupAmount?: number;
 }
 
 export interface ShipStationQuoteAttempt {
@@ -123,6 +126,11 @@ export class ShippingService {
         enabledCarrierCodes: Array.isArray(candidate.enabledCarrierCodes)
           ? candidate.enabledCarrierCodes.filter((value): value is string => typeof value === 'string')
           : ['usps'],
+        allowedServiceCodes: Array.isArray(candidate.allowedServiceCodes)
+          ? candidate.allowedServiceCodes.filter((value): value is string => typeof value === 'string')
+          : [],
+        markupType: candidate.markupType === 'percentage' ? 'percentage' : 'fixed',
+        markupAmount: readNumberSetting(candidate.markupAmount, 0),
       };
     } catch {
       return {};
@@ -173,6 +181,9 @@ export class ShippingService {
       envApiSecretConfigured: Boolean(envSecret),
       credentialsSource: saved.apiKey && saved.apiSecret ? 'admin-settings' : envKey && envSecret ? 'environment' : 'missing',
       carriersRequested: this.getEnabledCarrierCodes(saved),
+      allowedServiceCodes: saved.allowedServiceCodes ?? [],
+      markupType: saved.markupType ?? 'fixed',
+      markupAmount: saved.markupAmount ?? 0,
     };
   }
 
@@ -248,6 +259,7 @@ export class ShippingService {
     const authHeader = await this.getAuthHeader();
     const shippingSettings = await this.getSavedShippingApiSettings();
     const carrierCodes = this.getEnabledCarrierCodes(shippingSettings);
+    const allowedServiceCodes = this.getAllowedServiceCodes(shippingSettings);
     const rates: ShipStationRate[] = [];
     const failures: string[] = [];
 
@@ -321,7 +333,9 @@ export class ShippingService {
         otherCost: Number(r.otherCost ?? 0),
       }))
       .filter((rate) => rate.serviceCode && isSupportedCarrier(rate.carrierCode))
-      .filter((rate) => !isOverweightUspsFirstClass(rate, packageDetails.weightOz));
+      .filter((rate) => !isOverweightUspsFirstClass(rate, packageDetails.weightOz))
+      .filter((rate) => isAllowedService(rate, allowedServiceCodes))
+      .map((rate) => this.applyMarkup(rate, shippingSettings));
 
     if (supportedRates.length === 0 && failures.length > 0) {
       throw new BadRequestException(
@@ -382,6 +396,25 @@ export class ShippingService {
 
   private getCarrierCodeCandidates(carrierCode: string) {
     return SHIPSTATION_CARRIER_ALIASES[carrierCode] ?? [carrierCode];
+  }
+
+  private getAllowedServiceCodes(settings: ShippingApiSettings) {
+    return Array.from(new Set((settings.allowedServiceCodes ?? []).filter(Boolean).map((code) => code.toLowerCase())));
+  }
+
+  private applyMarkup(rate: ShippingRate, settings: ShippingApiSettings): ShippingRate {
+    const markupAmount = Number(settings.markupAmount ?? 0);
+    if (!Number.isFinite(markupAmount) || markupAmount <= 0) return rate;
+
+    const baseCost = Number(rate.shipmentCost ?? 0);
+    const markup = settings.markupType === 'percentage'
+      ? baseCost * (markupAmount / 100)
+      : markupAmount;
+
+    return {
+      ...rate,
+      shipmentCost: roundCurrency(baseCost + markup),
+    };
   }
 
   /** Calls ShipStation /addresses/validate and returns the result. */
@@ -467,6 +500,54 @@ function isOverweightUspsFirstClass(rate: ShippingRate, weightOz: number) {
   if (weightOz <= USPS_FIRST_CLASS_MAX_WEIGHT_OZ) return false;
   const haystack = `${rate.serviceCode} ${rate.serviceName}`.toLowerCase();
   return haystack.includes('first_class') || haystack.includes('first class');
+}
+
+function isAllowedService(rate: ShippingRate, allowedServiceCodes: string[]) {
+  if (allowedServiceCodes.length === 0) return true;
+
+  const serviceKey = mapServiceKey(rate);
+  if (allowedServiceCodes.includes(serviceKey)) return true;
+
+  if (serviceKey === 'usps_priority_mail') {
+    const serviceName = rate.serviceName.toLowerCase();
+    const isFlatRate = serviceName.includes('flat rate');
+    if (allowedServiceCodes.includes('usps_priority_mail_package_only')) return !isFlatRate;
+    if (allowedServiceCodes.includes('usps_priority_mail_flat_rate_only')) return isFlatRate;
+  }
+
+  return false;
+}
+
+function mapServiceKey(rate: ShippingRate) {
+  const serviceCode = rate.serviceCode.toLowerCase();
+  const serviceName = rate.serviceName.toLowerCase();
+  const haystack = `${serviceCode} ${serviceName}`;
+
+  if (haystack.includes('usps')) {
+    if (haystack.includes('first_class') || haystack.includes('first class')) return 'usps_first_class_mail';
+    if (haystack.includes('ground_advantage') || haystack.includes('ground advantage')) return 'usps_ground_advantage';
+    if (haystack.includes('priority_mail_express') || haystack.includes('priority mail express')) return 'usps_priority_mail_express';
+    if (haystack.includes('priority_mail') || haystack.includes('priority mail')) return 'usps_priority_mail';
+  }
+
+  if (haystack.includes('ups')) {
+    if (haystack.includes('ground_saver') || haystack.includes('groundsaver') || haystack.includes('ground saver')) return 'ups_ground_saver';
+    if (haystack.includes('ground')) return 'ups_ground';
+    if (haystack.includes('2nd_day') || haystack.includes('second_day') || haystack.includes('2nd day') || haystack.includes('second day')) return 'ups_2nd_day_air';
+    if (haystack.includes('next_day') || haystack.includes('next day')) return 'ups_next_day_air';
+    if (haystack.includes('3_day') || haystack.includes('three_day') || haystack.includes('3 day') || haystack.includes('three day')) return 'ups_3_day_select';
+  }
+
+  return serviceCode.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function readNumberSetting(value: unknown, fallback: number) {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100;
 }
 
 function formatRateLabel(rate: ShipStationRate) {
