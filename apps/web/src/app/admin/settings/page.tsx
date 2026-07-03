@@ -56,6 +56,7 @@ interface ShippingApiForm {
   accountId: string;
   originPostalCode: string;
   originCountry: string;
+  enabledCarrierCodes: string[];
 }
 
 interface SiteHomepageForm {
@@ -96,6 +97,7 @@ const defaultShippingApiForm: ShippingApiForm = {
   accountId: '',
   originPostalCode: '',
   originCountry: 'US',
+  enabledCarrierCodes: ['stamps_com'],
 };
 
 const defaultHomepageForm: SiteHomepageForm = {
@@ -122,6 +124,12 @@ function readString(value: unknown, fallback = '') {
 
 function readOption<T extends string>(value: unknown, options: readonly T[], fallback: T) {
   return typeof value === 'string' && options.includes(value as T) ? (value as T) : fallback;
+}
+
+function readStringArray(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) return fallback;
+  const strings = value.filter((item): item is string => typeof item === 'string');
+  return strings.length > 0 ? strings : fallback;
 }
 
 function findSetting(settings: Setting[], key: string) {
@@ -191,6 +199,7 @@ export default function AdminSettingsPage() {
       accountId: readString(shippingApi?.accountId, defaultShippingApiForm.accountId),
       originPostalCode: readString(shippingApi?.originPostalCode, defaultShippingApiForm.originPostalCode),
       originCountry: readString(shippingApi?.originCountry, defaultShippingApiForm.originCountry),
+      enabledCarrierCodes: readStringArray(shippingApi?.enabledCarrierCodes, defaultShippingApiForm.enabledCarrierCodes),
     });
   }, []);
 
@@ -614,6 +623,34 @@ export default function AdminSettingsPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <input value={shippingApiForm.originPostalCode} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, originPostalCode: event.target.value }))} placeholder="Origin ZIP/postal code" className="w-full rounded border px-3 py-2 text-sm" />
                 <input value={shippingApiForm.originCountry} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, originCountry: event.target.value }))} placeholder="Origin country" className="w-full rounded border px-3 py-2 text-sm" />
+              </div>
+              <div className="rounded-lg border bg-gray-50 p-3">
+                <p className="text-sm font-medium text-gray-700">ShipStation carriers to quote</p>
+                <p className="mt-1 text-xs text-gray-500">Enable only carriers active in your ShipStation account. USPS is the safest default.</p>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {[
+                    ['stamps_com', 'USPS'],
+                    ['ups', 'UPS'],
+                    ['fedex', 'FedEx'],
+                    ['globalpost', 'GlobalPost'],
+                  ].map(([code, label]) => (
+                    <label key={code} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={shippingApiForm.enabledCarrierCodes.includes(code)}
+                        onChange={(event) =>
+                          setShippingApiForm((currentForm) => ({
+                            ...currentForm,
+                            enabledCarrierCodes: event.target.checked
+                              ? Array.from(new Set([...currentForm.enabledCarrierCodes, code]))
+                              : currentForm.enabledCarrierCodes.filter((carrierCode) => carrierCode !== code),
+                          }))
+                        }
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
               </div>
               <div className="flex justify-end">
                 <button
