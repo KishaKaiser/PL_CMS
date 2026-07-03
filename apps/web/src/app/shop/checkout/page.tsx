@@ -122,6 +122,11 @@ function createManualShippingRate(settings: EcommerceSettings): ShippingRate | n
   };
 }
 
+function formatLiveRateFailureMessage(message?: string, fallbackLabel = 'manual fallback shipping') {
+  const detail = message?.trim() || 'ShipStation did not return live rates for this address.';
+  return `${detail} Showing ${fallbackLabel}. Admins can run Admin → Settings → Shipping → Test Live ShipStation Quote for carrier details.`;
+}
+
 const defaultEcommerceSettings: EcommerceSettings = {
   currency: 'USD',
   taxEnabled: false,
@@ -290,7 +295,7 @@ function CheckoutContent() {
           setShippingRates([manualRate]);
           setSelectedRate(manualRate);
           setAddressSubmitted(true);
-          setRatesError(err.message ? `${err.message} Showing manual fallback shipping.` : '');
+          setRatesError(formatLiveRateFailureMessage(err.message));
           return;
         }
         throw new Error(err.message ?? 'Failed to get shipping rates');
@@ -307,9 +312,9 @@ function CheckoutContent() {
           setShippingRates([manualRate]);
           setSelectedRate(manualRate);
           setAddressSubmitted(true);
-          setRatesError('ShipStation returned no live rates for this address. Showing manual fallback shipping.');
+          setRatesError(formatLiveRateFailureMessage('ShipStation returned no live rates for this address.'));
         } else {
-          setRatesError('ShipStation returned no live rates for this address. Enable manual shipping fallback in Admin → Store Settings, or check the address and ShipStation carrier setup.');
+          setRatesError('ShipStation returned no live rates for this address. Enable manual shipping fallback in Admin → Store Settings, or run Admin → Settings → Shipping → Test Live ShipStation Quote to review carrier details.');
         }
       } else {
         setShippingRates(rates);
