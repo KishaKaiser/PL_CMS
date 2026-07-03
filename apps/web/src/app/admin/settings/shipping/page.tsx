@@ -13,6 +13,25 @@ interface WarehouseAddress {
   country: string;
 }
 
+interface TestQuoteResult {
+  success: boolean;
+  message?: string;
+  rates?: Array<{
+    serviceName: string;
+    serviceCode: string;
+    carrierCode: string;
+    shipmentCost: number;
+    otherCost: number;
+  }>;
+  attempts?: Array<{
+    carrierCode: string;
+    requestBody: Record<string, unknown>;
+    status?: number;
+    rateCount?: number;
+    error?: string;
+  }>;
+}
+
 const emptyForm: WarehouseAddress = {
   fullName: '',
   phone: '',
@@ -24,11 +43,27 @@ const emptyForm: WarehouseAddress = {
   country: 'US',
 };
 
+const defaultTestAddress = {
+  fullName: 'Test Customer',
+  phone: '5555555555',
+  line1: '1600 Pennsylvania Ave NW',
+  line2: '',
+  city: 'Washington',
+  state: 'DC',
+  postalCode: '20500',
+  country: 'US',
+  email: 'test@example.com',
+};
+
 export default function ShippingSettingsPage() {
   const [form, setForm] = useState<WarehouseAddress>(emptyForm);
   const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
+  const [testAddress, setTestAddress] = useState(defaultTestAddress);
+  const [testPackage, setTestPackage] = useState({ weightOz: 16, lengthIn: 10, widthIn: 10, heightIn: 10 });
+  const [testResult, setTestResult] = useState<TestQuoteResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -68,6 +103,32 @@ export default function ShippingSettingsPage() {
       setError(err instanceof Error ? err.message : 'Error saving');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function runTestQuote() {
+    setTesting(true);
+    setError('');
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/proxy/shipping/diagnostics/test-quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: testAddress,
+          weightOz: Number(testPackage.weightOz),
+          lengthIn: Number(testPackage.lengthIn),
+          widthIn: Number(testPackage.widthIn),
+          heightIn: Number(testPackage.heightIn),
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as TestQuoteResult & { message?: string };
+      if (!res.ok) throw new Error(data.message ?? 'Test quote failed.');
+      setTestResult(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Test quote failed.');
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -181,6 +242,63 @@ export default function ShippingSettingsPage() {
           </dl>
         </section>
       )}
+
+      <section className="mt-6 rounded-lg border bg-white p-5 text-sm shadow-sm">
+        <h2 className="mb-3 text-lg font-semibold text-gray-900">Test Live ShipStation Quote</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm font-medium text-gray-700">City
+            <input value={testAddress.city} onChange={(event) => setTestAddress((current) => ({ ...current, city: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">State
+            <input value={testAddress.state} maxLength={2} onChange={(event) => setTestAddress((current) => ({ ...current, state: event.target.value.toUpperCase() }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">ZIP Code
+            <input value={testAddress.postalCode} onChange={(event) => setTestAddress((current) => ({ ...current, postalCode: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">Country
+            <input value={testAddress.country} onChange={(event) => setTestAddress((current) => ({ ...current, country: event.target.value.toUpperCase() }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">Weight (oz)
+            <input type="number" min="1" value={testPackage.weightOz} onChange={(event) => setTestPackage((current) => ({ ...current, weightOz: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            <label className="block text-sm font-medium text-gray-700">L
+              <input type="number" min="1" value={testPackage.lengthIn} onChange={(event) => setTestPackage((current) => ({ ...current, lengthIn: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-sm font-medium text-gray-700">W
+              <input type="number" min="1" value={testPackage.widthIn} onChange={(event) => setTestPackage((current) => ({ ...current, widthIn: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-sm font-medium text-gray-700">H
+              <input type="number" min="1" value={testPackage.heightIn} onChange={(event) => setTestPackage((current) => ({ ...current, heightIn: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+            </label>
+          </div>
+        </div>
+        <button type="button" onClick={() => void runTestQuote()} disabled={testing} className="mt-4 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+          {testing ? 'Testing...' : 'Run Test Quote'}
+        </button>
+        {testResult && (
+          <div className="mt-4 rounded border bg-gray-50 p-4">
+            <p className={testResult.success ? 'font-medium text-green-700' : 'font-medium text-red-700'}>
+              {testResult.success ? `Returned ${testResult.rates?.length ?? 0} rate(s).` : testResult.message}
+            </p>
+            {testResult.rates && testResult.rates.length > 0 && (
+              <ul className="mt-3 space-y-1">
+                {testResult.rates.map((rate) => (
+                  <li key={`${rate.carrierCode}-${rate.serviceCode}`} className="rounded bg-white px-3 py-2">
+                    {rate.serviceName}: ${(Number(rate.shipmentCost) + Number(rate.otherCost)).toFixed(2)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {testResult.attempts && testResult.attempts.length > 0 && (
+              <details className="mt-3">
+                <summary className="cursor-pointer font-medium text-gray-700">Carrier attempts</summary>
+                <pre className="mt-2 max-h-80 overflow-auto rounded bg-gray-900 p-3 text-xs text-gray-100">{JSON.stringify(testResult.attempts, null, 2)}</pre>
+              </details>
+            )}
+          </div>
+        )}
+      </section>
 
       <div className="mt-6">
         <a href="/admin" className="text-sm text-indigo-600 hover:underline">

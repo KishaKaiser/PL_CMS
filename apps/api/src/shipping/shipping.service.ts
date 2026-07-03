@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   GetShippingQuoteDto,
   ShippingAddressDto,
+  TestShippingQuoteDto,
   WarehouseAddressDto,
 } from './shipping.dto';
 
@@ -76,6 +77,14 @@ interface ShippingApiSettings {
   apiKey?: string;
   apiSecret?: string;
   enabledCarrierCodes?: string[];
+}
+
+export interface ShipStationQuoteAttempt {
+  carrierCode: string;
+  requestBody: unknown;
+  status?: number;
+  rateCount?: number;
+  error?: string;
 }
 
 @Injectable()
@@ -166,6 +175,34 @@ export class ShippingService {
     };
   }
 
+  async testShippingQuote(dto: TestShippingQuoteDto) {
+    const attempts: ShipStationQuoteAttempt[] = [];
+    const quoteDto: GetShippingQuoteDto = {
+      address: dto.address,
+      items: [
+        {
+          productId: '__manual_test__',
+          quantity: 1,
+          weightOz: dto.weightOz ?? DEFAULT_ITEM_WEIGHT_OZ,
+          lengthIn: dto.lengthIn ?? 10,
+          widthIn: dto.widthIn ?? 10,
+          heightIn: dto.heightIn ?? 10,
+        },
+      ],
+    };
+
+    try {
+      const rates = await this.getShippingQuoteFromShipStation(quoteDto, attempts);
+      return { success: true, rates, attempts };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown ShipStation quote error',
+        attempts,
+      };
+    }
+  }
+
   /** Calls ShipStation /shipments/getrates and returns available rates. */
   async getShippingQuote(dto: GetShippingQuoteDto): Promise<ShippingRate[]> {
     try {
@@ -178,7 +215,10 @@ export class ShippingService {
     }
   }
 
-  private async getShippingQuoteFromShipStation(dto: GetShippingQuoteDto): Promise<ShippingRate[]> {
+  private async getShippingQuoteFromShipStation(
+    dto: GetShippingQuoteDto,
+    debugAttempts: ShipStationQuoteAttempt[] = [],
+  ): Promise<ShippingRate[]> {
     const warehouse = await this.getWarehouseAddress();
     if (!warehouse) {
       throw new NotFoundException(
@@ -214,6 +254,9 @@ export class ShippingService {
 
     for (const carrierCode of carrierCodes) {
       for (const candidateCode of this.getCarrierCodeCandidates(carrierCode)) {
+        const requestBody = { ...baseRequestBody, carrierCode: candidateCode };
+        const attempt: ShipStationQuoteAttempt = { carrierCode: candidateCode, requestBody };
+        debugAttempts.push(attempt);
         let response: Response;
         try {
           response = await fetch(`${SHIPSTATION_BASE}/shipments/getrates`, {
@@ -222,18 +265,22 @@ export class ShippingService {
               Authorization: authHeader,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ ...baseRequestBody, carrierCode: candidateCode }),
+            body: JSON.stringify(requestBody),
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unable to reach ShipStation';
+          attempt.error = message;
           this.logger.warn(`ShipStation getrates request failed for ${candidateCode}: ${message}`);
           failures.push(`${candidateCode}: Unable to reach ShipStation (${message})`);
           continue;
         }
 
+        attempt.status = response.status;
+
         if (!response.ok) {
           const text = await response.text().catch(() => '');
           const detail = formatShipStationError(text);
+          attempt.error = detail || `HTTP ${response.status}`;
           this.logger.warn(`ShipStation getrates failed for ${candidateCode}: ${response.status} ${text}`);
           if (response.status === 401 || response.status === 403) {
             throw new BadRequestException(
@@ -246,12 +293,15 @@ export class ShippingService {
 
         const carrierRates = (await response.json().catch(() => [])) as unknown;
         if (Array.isArray(carrierRates) && carrierRates.length > 0) {
+          attempt.rateCount = carrierRates.length;
           rates.push(...(carrierRates as ShipStationRate[]));
           break;
         }
         if (Array.isArray(carrierRates)) {
+          attempt.rateCount = 0;
           failures.push(`${candidateCode}: ShipStation returned no rates.`);
         } else {
+          attempt.error = 'ShipStation returned an unexpected response.';
           failures.push(`${candidateCode}: ShipStation returned an unexpected response.`);
         }
       }
