@@ -22,7 +22,7 @@ export class CreateVariantDto {
 
   @IsOptional()
   @IsString()
-  imageUrl?: string;
+  imageUrl?: string | null;
 
   @IsOptional()
   @IsBoolean()
@@ -46,7 +46,7 @@ export class UpdateVariantDto {
 
   @IsOptional()
   @IsString()
-  imageUrl?: string;
+  imageUrl?: string | null;
 
   @IsOptional()
   @IsBoolean()

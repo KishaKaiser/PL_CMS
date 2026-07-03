@@ -89,6 +89,7 @@ const emptyVariantForm = {
   priceOverride: '',
   imageUrl: '',
   onHand: '0',
+  isActive: true,
 };
 
 export default function AdminProductsPage() {
@@ -104,6 +105,7 @@ export default function AdminProductsPage() {
   const [error, setError] = useState('');
   const [importStatus, setImportStatus] = useState('');
   const [variantForms, setVariantForms] = useState<Record<string, typeof emptyVariantForm>>({});
+  const [editVariantForms, setEditVariantForms] = useState<Record<string, typeof emptyVariantForm>>({});
   const [variantErrors, setVariantErrors] = useState<Record<string, string>>({});
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   const [filters, setFilters] = useState({
@@ -324,6 +326,7 @@ export default function AdminProductsPage() {
           sku: variantForm.sku,
           priceOverride: optionalNumber(variantForm.priceOverride),
           imageUrl: variantForm.imageUrl || undefined,
+          isActive: variantForm.isActive,
         }),
       });
       if (!res.ok) {
@@ -348,6 +351,7 @@ export default function AdminProductsPage() {
         ),
       );
       setVariantForms((current) => ({ ...current, [productId]: emptyVariantForm }));
+      setEditVariantForms((current) => ({ ...current, [variant.id]: variantToForm(variant) }));
     } catch (err: unknown) {
       setVariantErrors((current) => ({
         ...current,
@@ -376,10 +380,60 @@ export default function AdminProductsPage() {
             : product,
         ),
       );
+      setEditVariantForms((current) => {
+        const next = { ...current };
+        delete next[variantId];
+        return next;
+      });
     } catch (err: unknown) {
       setVariantErrors((current) => ({
         ...current,
         [productId]: err instanceof Error ? err.message : 'Error deleting variant',
+      }));
+    }
+  }
+
+  async function handleUpdateVariant(productId: string, variantId: string) {
+    const variantForm = editVariantForms[variantId];
+    if (!variantForm) return;
+    setVariantErrors((current) => ({ ...current, [productId]: '' }));
+    try {
+      const res = await fetch(`/api/proxy/products/${productId}/variants/${variantId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          color: serializeVariantColor(variantForm.color, variantForm.swatchTop, variantForm.swatchBottom),
+          sku: variantForm.sku,
+          priceOverride: optionalNumber(variantForm.priceOverride, true),
+          imageUrl: variantForm.imageUrl || null,
+          isActive: variantForm.isActive,
+        }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data?.message ?? 'Failed to update variant');
+      }
+      const variant = (await res.json()) as ProductVariant;
+      const onHand = Math.max(0, parseInt(variantForm.onHand || '0', 10));
+      const inventoryRes = await fetch(`/api/proxy/products/${productId}/variants/${variant.id}/inventory`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onHand, reserved: variant.inventory?.reserved ?? 0 }),
+      });
+      const inventory = inventoryRes.ok ? ((await inventoryRes.json()) as Inventory) : variant.inventory;
+      const updatedVariant = { ...variant, inventory };
+      setProducts((current) =>
+        current.map((product) =>
+          product.id === productId
+            ? { ...product, variants: product.variants.map((item) => item.id === variantId ? updatedVariant : item) }
+            : product,
+        ),
+      );
+      setEditVariantForms((current) => ({ ...current, [variantId]: variantToForm(updatedVariant) }));
+    } catch (err: unknown) {
+      setVariantErrors((current) => ({
+        ...current,
+        [productId]: err instanceof Error ? err.message : 'Error updating variant',
       }));
     }
   }
@@ -781,10 +835,15 @@ export default function AdminProductsPage() {
                       variantForm={variantForms[product.id] ?? emptyVariantForm}
                       mediaAssets={imageMedia}
                       error={variantErrors[product.id]}
+                      editForms={editVariantForms}
                       onFormChange={(nextForm) =>
                         setVariantForms((current) => ({ ...current, [product.id]: nextForm }))
                       }
+                      onEditFormChange={(variantId, nextForm) =>
+                        setEditVariantForms((current) => ({ ...current, [variantId]: nextForm }))
+                      }
                       onAdd={() => handleAddVariant(product.id)}
+                      onUpdate={(variantId) => handleUpdateVariant(product.id, variantId)}
                       onDelete={(variantId) => handleDeleteVariant(product.id, variantId)}
                     />
                       </td>
@@ -1098,16 +1157,22 @@ function VariantPanel({
   variantForm,
   mediaAssets,
   error,
+  editForms,
   onFormChange,
+  onEditFormChange,
   onAdd,
+  onUpdate,
   onDelete,
 }: {
   product: Product;
   variantForm: typeof emptyVariantForm;
   mediaAssets: MediaAsset[];
   error?: string;
+  editForms: Record<string, typeof emptyVariantForm>;
   onFormChange: (form: typeof emptyVariantForm) => void;
+  onEditFormChange: (variantId: string, form: typeof emptyVariantForm) => void;
   onAdd: () => void;
+  onUpdate: (variantId: string) => void;
   onDelete: (variantId: string) => void;
 }) {
   return (
@@ -1128,33 +1193,63 @@ function VariantPanel({
               </tr>
             </thead>
             <tbody>
-              {product.variants.map((variant) => (
-                <tr key={variant.id} className="border-t">
+              {product.variants.map((variant) => {
+                const editForm = editForms[variant.id] ?? variantToForm(variant);
+                return (
+                <tr key={variant.id} className="border-t align-top">
                   <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
+                    <div className="mb-2 flex items-center gap-2">
                       <VariantSwatch color={variant.color} />
                       <span>{parseVariantColor(variant.color).label}</span>
                     </div>
+                    <VariantInput label="Name" value={editForm.color} onChange={(color) => onEditFormChange(variant.id, { ...editForm, color })} />
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <label className="block text-xs font-medium text-gray-600">
+                        Top
+                        <input type="color" value={editForm.swatchTop} onChange={(event) => onEditFormChange(variant.id, { ...editForm, swatchTop: event.target.value })} className="mt-1 h-8 w-full rounded border px-1 py-1" />
+                      </label>
+                      <label className="block text-xs font-medium text-gray-600">
+                        Bottom
+                        <input type="color" value={editForm.swatchBottom || editForm.swatchTop} onChange={(event) => onEditFormChange(variant.id, { ...editForm, swatchBottom: event.target.value })} className="mt-1 h-8 w-full rounded border px-1 py-1" />
+                      </label>
+                    </div>
+                    <button type="button" onClick={() => onEditFormChange(variant.id, { ...editForm, swatchBottom: '' })} className="mt-1 text-xs text-indigo-600 hover:underline">Use one color</button>
                   </td>
-                  <td className="px-3 py-2 font-mono">{variant.sku}</td>
                   <td className="px-3 py-2">
-                    {variant.priceOverride != null
-                      ? `$${Number(variant.priceOverride).toFixed(2)}`
-                      : '-'}
+                    <VariantInput label="SKU" value={editForm.sku} onChange={(sku) => onEditFormChange(variant.id, { ...editForm, sku })} />
                   </td>
                   <td className="px-3 py-2">
-                    {variant.imageUrl ? (
-                      <a href={variant.imageUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">
-                        View
-                      </a>
-                    ) : (
-                      '-'
-                    )}
+                    <VariantInput label="Price" type="number" step="0.01" value={editForm.priceOverride} onChange={(priceOverride) => onEditFormChange(variant.id, { ...editForm, priceOverride })} />
                   </td>
-                  <td className="px-3 py-2">{variant.inventory?.onHand ?? 0}</td>
+                  <td className="px-3 py-2">
+                    <label className="block text-xs font-medium text-gray-600">
+                      Media
+                      <select value={editForm.imageUrl} onChange={(event) => onEditFormChange(variant.id, { ...editForm, imageUrl: event.target.value })} className="mt-1 w-full rounded border px-2 py-1 text-xs">
+                        <option value="">Choose an image</option>
+                        {mediaAssets.map((asset) => <option key={asset.id} value={asset.url}>{asset.title || asset.originalName}</option>)}
+                      </select>
+                    </label>
+                    <VariantInput label="URL" value={editForm.imageUrl} onChange={(imageUrl) => onEditFormChange(variant.id, { ...editForm, imageUrl })} />
+                    {editForm.imageUrl && <img src={editForm.imageUrl} alt="" className="mt-2 h-12 w-12 rounded border object-cover" />}
+                  </td>
+                  <td className="px-3 py-2">
+                    <VariantInput label="Stock" type="number" value={editForm.onHand} onChange={(onHand) => onEditFormChange(variant.id, { ...editForm, onHand })} />
+                  </td>
                   <td className="px-3 py-2">{variant.inventory?.reserved ?? 0}</td>
-                  <td className="px-3 py-2">{variant.isActive ? 'Active' : 'Inactive'}</td>
                   <td className="px-3 py-2">
+                    <label className="flex items-center gap-1 text-xs text-gray-600">
+                      <input type="checkbox" checked={editForm.isActive} onChange={(event) => onEditFormChange(variant.id, { ...editForm, isActive: event.target.checked })} />
+                      Active
+                    </label>
+                  </td>
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => onUpdate(variant.id)}
+                      className="mb-2 rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-700"
+                    >
+                      Save
+                    </button>
                     <button
                       type="button"
                       onClick={() => onDelete(variant.id)}
@@ -1164,7 +1259,8 @@ function VariantPanel({
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1256,6 +1352,20 @@ function VariantPanel({
       </div>
     </div>
   );
+}
+
+function variantToForm(variant: ProductVariant): typeof emptyVariantForm {
+  const swatch = parseVariantColor(variant.color);
+  return {
+    color: swatch.label,
+    swatchTop: /^#[0-9a-f]{6}$/i.test(swatch.topColor) ? swatch.topColor : '#000000',
+    swatchBottom: swatch.bottomColor,
+    sku: variant.sku,
+    priceOverride: variant.priceOverride == null ? '' : String(variant.priceOverride),
+    imageUrl: variant.imageUrl ?? '',
+    onHand: String(variant.inventory?.onHand ?? 0),
+    isActive: variant.isActive,
+  };
 }
 
 function serializeVariantColor(label: string, topColor: string, bottomColor: string) {
