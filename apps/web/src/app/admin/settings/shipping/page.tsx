@@ -29,6 +29,13 @@ interface TestQuoteResult {
     requestBody: Record<string, unknown>;
     status?: number;
     rateCount?: number;
+    services?: Array<{
+      serviceName: string;
+      serviceCode: string;
+      carrierCode: string;
+      shipmentCost: number;
+      otherCost: number;
+    }>;
     error?: string;
   }>;
 }

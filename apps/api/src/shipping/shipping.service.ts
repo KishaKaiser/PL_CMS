@@ -88,6 +88,13 @@ export interface ShipStationQuoteAttempt {
   requestBody: unknown;
   status?: number;
   rateCount?: number;
+  services?: Array<{
+    serviceName: string;
+    serviceCode: string;
+    carrierCode: string;
+    shipmentCost: number;
+    otherCost: number;
+  }>;
   error?: string;
 }
 
@@ -313,6 +320,13 @@ export class ShippingService {
         const carrierRates = (await response.json().catch(() => [])) as unknown;
         if (Array.isArray(carrierRates) && carrierRates.length > 0) {
           attempt.rateCount = carrierRates.length;
+          attempt.services = (carrierRates as ShipStationRate[]).map((rate) => ({
+            serviceName: rate.serviceName ?? '',
+            serviceCode: rate.serviceCode ?? '',
+            carrierCode: rate.carrierCode ?? inferCarrierCode(rate.serviceCode, rate.serviceName),
+            shipmentCost: Number(rate.shipmentCost ?? 0),
+            otherCost: Number(rate.otherCost ?? 0),
+          }));
           rates.push(...(carrierRates as ShipStationRate[]));
           break;
         }
@@ -342,6 +356,13 @@ export class ShippingService {
     if (supportedRates.length === 0 && failures.length > 0) {
       throw new BadRequestException(
         `ShipStation could not return rates. ${failures.join(' ')}`,
+      );
+    }
+
+    if (supportedRates.length === 0 && rates.length > 0) {
+      throw new BadRequestException(
+        'ShipStation returned live rates, but none matched the enabled carriers or allowed service filters. ' +
+          'Check Admin Settings → API settings → Shipping and review Carrier attempts in the test quote tool.',
       );
     }
 
