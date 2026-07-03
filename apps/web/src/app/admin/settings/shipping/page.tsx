@@ -310,8 +310,36 @@ export default function ShippingSettingsPage() {
               </ul>
             )}
             {testResult.attempts && testResult.attempts.length > 0 && (
+              <div className="mt-4 space-y-3">
+                <p className="font-medium text-gray-800">Carrier attempt summary</p>
+                {testResult.attempts.map((attempt) => (
+                  <div key={`${attempt.carrierCode}-${attempt.status ?? 'pending'}`} className="rounded bg-white p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium text-gray-900">{attempt.carrierCode}</span>
+                      <span className="text-xs text-gray-500">
+                        Status {attempt.status ?? 'not reached'} · {attempt.rateCount ?? 0} raw rate(s)
+                      </span>
+                    </div>
+                    {attempt.error && <p className="mt-2 text-xs text-red-600">{attempt.error}</p>}
+                    {attempt.services && attempt.services.length > 0 && (
+                      <ul className="mt-2 space-y-1 text-xs text-gray-700">
+                        {attempt.services.map((service) => (
+                          <li key={`${attempt.carrierCode}-${service.serviceCode}`} className="flex justify-between gap-3">
+                            <span>{service.serviceName || service.serviceCode}</span>
+                            <span className="shrink-0 font-medium">
+                              ${(Number(service.shipmentCost) + Number(service.otherCost)).toFixed(2)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {testResult.attempts && testResult.attempts.length > 0 && (
               <details className="mt-3">
-                <summary className="cursor-pointer font-medium text-gray-700">Carrier attempts</summary>
+                <summary className="cursor-pointer font-medium text-gray-700">Raw carrier attempts JSON</summary>
                 <pre className="mt-2 max-h-80 overflow-auto rounded bg-gray-900 p-3 text-xs text-gray-100">{JSON.stringify(testResult.attempts, null, 2)}</pre>
               </details>
             )}
