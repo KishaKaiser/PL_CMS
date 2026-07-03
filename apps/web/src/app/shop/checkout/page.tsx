@@ -63,6 +63,9 @@ interface EcommerceSettings {
   taxRatePercent: number;
   pricesIncludeTax: boolean;
   termsPageUrl: string;
+  manualShippingEnabled?: boolean;
+  manualShippingAmount?: number;
+  manualShippingLabel?: string;
 }
 
 const emptyAddress: ShippingAddress = {
@@ -108,6 +111,28 @@ function createFreeShippingRate(label: string): ShippingRate {
   };
 }
 
+function createManualShippingRate(settings: EcommerceSettings): ShippingRate | null {
+  if (!settings.manualShippingEnabled) return null;
+  return {
+    carrierCode: 'manual',
+    serviceCode: 'manual_shipping',
+    serviceName: settings.manualShippingLabel || 'Standard shipping',
+    shipmentCost: Number(settings.manualShippingAmount ?? 0),
+    otherCost: 0,
+  };
+}
+
+const defaultEcommerceSettings: EcommerceSettings = {
+  currency: 'USD',
+  taxEnabled: false,
+  taxRatePercent: 0,
+  pricesIncludeTax: false,
+  termsPageUrl: '/terms',
+  manualShippingEnabled: false,
+  manualShippingAmount: 8.95,
+  manualShippingLabel: 'Standard shipping',
+};
+
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const productId = searchParams.get('productId');
@@ -133,7 +158,7 @@ function CheckoutContent() {
   const [coupon, setCoupon] = useState<CouponValidation | null>(null);
   const [couponMessage, setCouponMessage] = useState('');
   const [freeShipping, setFreeShipping] = useState<FreeShippingSettings>({ enabled: false, minimumSubtotal: 0, label: 'Free shipping' });
-  const [ecommerce, setEcommerce] = useState<EcommerceSettings>({ currency: 'USD', taxEnabled: false, taxRatePercent: 0, pricesIncludeTax: false, termsPageUrl: '/terms' });
+  const [ecommerce, setEcommerce] = useState<EcommerceSettings>(defaultEcommerceSettings);
 
   // Load cart: from localStorage first, then fall back to URL params
   useEffect(() => {
@@ -180,7 +205,7 @@ function CheckoutContent() {
     ])
       .then(async ([freeRes, ecommerceRes]) => {
         if (freeRes.ok) setFreeShipping((await freeRes.json()) as FreeShippingSettings);
-        if (ecommerceRes.ok) setEcommerce((await ecommerceRes.json()) as EcommerceSettings);
+        if (ecommerceRes.ok) setEcommerce({ ...defaultEcommerceSettings, ...((await ecommerceRes.json()) as Partial<EcommerceSettings>) });
       })
       .catch(() => undefined);
   }, []);
@@ -260,6 +285,14 @@ function CheckoutContent() {
           setAddressSubmitted(true);
           return;
         }
+        const manualRate = createManualShippingRate(ecommerce);
+        if (manualRate) {
+          setShippingRates([manualRate]);
+          setSelectedRate(manualRate);
+          setAddressSubmitted(true);
+          setRatesError(err.message ? `${err.message} Showing manual fallback shipping.` : '');
+          return;
+        }
         throw new Error(err.message ?? 'Failed to get shipping rates');
       }
       const rates = (await res.json()) as ShippingRate[];
@@ -269,8 +302,14 @@ function CheckoutContent() {
           setShippingRates([freeRate]);
           setSelectedRate(freeRate);
           setAddressSubmitted(true);
+        } else if (createManualShippingRate(ecommerce)) {
+          const manualRate = createManualShippingRate(ecommerce)!;
+          setShippingRates([manualRate]);
+          setSelectedRate(manualRate);
+          setAddressSubmitted(true);
+          setRatesError('ShipStation returned no live rates for this address. Showing manual fallback shipping.');
         } else {
-          setRatesError('No shipping rates available for this address. Please check your address and try again.');
+          setRatesError('ShipStation returned no live rates for this address. Enable manual shipping fallback in Admin → Store Settings, or check the address and ShipStation carrier setup.');
         }
       } else {
         setShippingRates(rates);

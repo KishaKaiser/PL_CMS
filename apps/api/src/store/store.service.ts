@@ -86,6 +86,9 @@ const DEFAULT_ECOMMERCE_SETTINGS: EcommerceSettingsDto = {
   lowStockThreshold: 5,
   holdStockMinutes: 30,
   termsPageUrl: '/terms',
+  manualShippingEnabled: false,
+  manualShippingAmount: 8.95,
+  manualShippingLabel: 'Standard shipping',
 };
 
 const DEFAULT_GOOGLE_MERCHANT_SETTINGS: GoogleMerchantSettingsDto = {
@@ -223,7 +226,8 @@ export class StoreService {
   }
 
   async getEcommerceSettings() {
-    return this.readJson<EcommerceSettingsDto>(ECOMMERCE_SETTINGS_KEY, DEFAULT_ECOMMERCE_SETTINGS);
+    const saved = await this.readJson<Partial<EcommerceSettingsDto>>(ECOMMERCE_SETTINGS_KEY, DEFAULT_ECOMMERCE_SETTINGS);
+    return { ...DEFAULT_ECOMMERCE_SETTINGS, ...saved };
   }
 
   async saveEcommerceSettings(dto: EcommerceSettingsDto) {
@@ -240,6 +244,9 @@ export class StoreService {
       lowStockThreshold: Number(dto.lowStockThreshold ?? DEFAULT_ECOMMERCE_SETTINGS.lowStockThreshold),
       holdStockMinutes: Number(dto.holdStockMinutes ?? DEFAULT_ECOMMERCE_SETTINGS.holdStockMinutes),
       termsPageUrl: dto.termsPageUrl || DEFAULT_ECOMMERCE_SETTINGS.termsPageUrl,
+      manualShippingEnabled: Boolean(dto.manualShippingEnabled),
+      manualShippingAmount: Number(dto.manualShippingAmount ?? DEFAULT_ECOMMERCE_SETTINGS.manualShippingAmount),
+      manualShippingLabel: dto.manualShippingLabel || DEFAULT_ECOMMERCE_SETTINGS.manualShippingLabel,
     };
     await this.writeJson(ECOMMERCE_SETTINGS_KEY, next);
     return next;
