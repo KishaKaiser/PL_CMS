@@ -10,8 +10,8 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PaymentsService } from './payments.service';
+import { PaypalService } from '../checkout/paypal.service';
 import { IsString } from 'class-validator';
 import { AuthGuard } from '@nestjs/passport';
 import { Roles, RolesGuard } from '../auth/roles.guard';
@@ -29,13 +29,13 @@ export class LegacyWebhookDto {
 export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
-    private readonly config: ConfigService,
+    private readonly paypal: PaypalService,
   ) {}
 
   /** Expose PayPal client ID to the frontend (public, safe to share). */
   @Get('paypal-client-id')
   getPaypalClientId() {
-    return { clientId: this.config.get<string>('PAYPAL_CLIENT_ID') ?? '' };
+    return this.paypal.getPublicClientId().then((clientId) => ({ clientId }));
   }
 
   /**

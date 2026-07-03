@@ -26,6 +26,10 @@ export class ShippingAddressDto {
   @IsString()
   line2?: string;
 
+  @IsOptional()
+  @IsIn(['commercial', 'residential'])
+  addressType?: 'commercial' | 'residential';
+
   @IsString()
   city!: string;
 
@@ -58,6 +62,21 @@ export class QuoteItemDto {
   @IsInt()
   @Min(1)
   weightOz?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  lengthIn?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  widthIn?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  heightIn?: number;
 }
 
 export class GetShippingQuoteDto {
@@ -71,7 +90,37 @@ export class GetShippingQuoteDto {
   items!: QuoteItemDto[];
 }
 
+export class TestShippingQuoteDto {
+  @ValidateNested()
+  @Type(() => ShippingAddressDto)
+  address!: ShippingAddressDto;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  weightOz?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  lengthIn?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  widthIn?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  heightIn?: number;
+}
+
 export class WarehouseAddressDto {
+  @IsOptional()
+  @IsString()
+  warehouseId?: string;
+
   @IsString()
   fullName!: string;
 

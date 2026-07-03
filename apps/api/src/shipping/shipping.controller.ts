@@ -15,6 +15,7 @@ import { ShippingService } from './shipping.service';
 import {
   GetShippingQuoteDto,
   ShippingAddressDto,
+  TestShippingQuoteDto,
   WarehouseAddressDto,
 } from './shipping.dto';
 
@@ -50,6 +51,14 @@ export class ShippingController {
   @Roles(Role.ADMIN)
   getDiagnostics() {
     return this.shippingService.getDiagnostics();
+  }
+
+  @Post('diagnostics/test-quote')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  testQuote(@Body() dto: TestShippingQuoteDto) {
+    return this.shippingService.testShippingQuote(dto);
   }
 
   // ── Client-facing: quote & validate ─────────

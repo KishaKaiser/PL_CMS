@@ -29,6 +29,7 @@ interface ShippingAddress {
   phone: string;
   line1: string;
   line2?: string;
+  addressType?: 'commercial' | 'residential';
   city: string;
   state: string;
   postalCode: string;
@@ -73,6 +74,7 @@ const emptyAddress: ShippingAddress = {
   phone: '',
   line1: '',
   line2: '',
+  addressType: 'residential',
   city: '',
   state: '',
   postalCode: '',
@@ -120,6 +122,11 @@ function createManualShippingRate(settings: EcommerceSettings): ShippingRate | n
     shipmentCost: Number(settings.manualShippingAmount ?? 0),
     otherCost: 0,
   };
+}
+
+function formatLiveRateFailureMessage(message?: string, fallbackLabel = 'manual fallback shipping') {
+  const detail = message?.trim() || 'ShipStation did not return live rates for this address.';
+  return `${detail} Showing ${fallbackLabel}. Admins can run Admin → Settings → Shipping → Test Live ShipStation Quote for carrier details.`;
 }
 
 const defaultEcommerceSettings: EcommerceSettings = {
@@ -290,7 +297,7 @@ function CheckoutContent() {
           setShippingRates([manualRate]);
           setSelectedRate(manualRate);
           setAddressSubmitted(true);
-          setRatesError(err.message ? `${err.message} Showing manual fallback shipping.` : '');
+          setRatesError(formatLiveRateFailureMessage(err.message));
           return;
         }
         throw new Error(err.message ?? 'Failed to get shipping rates');
@@ -307,9 +314,9 @@ function CheckoutContent() {
           setShippingRates([manualRate]);
           setSelectedRate(manualRate);
           setAddressSubmitted(true);
-          setRatesError('ShipStation returned no live rates for this address. Showing manual fallback shipping.');
+          setRatesError(formatLiveRateFailureMessage('ShipStation returned no live rates for this address.'));
         } else {
-          setRatesError('ShipStation returned no live rates for this address. Enable manual shipping fallback in Admin → Store Settings, or check the address and ShipStation carrier setup.');
+          setRatesError('ShipStation returned no live rates for this address. Enable manual shipping fallback in Admin → Store Settings, or run Admin → Settings → Shipping → Test Live ShipStation Quote to review carrier details.');
         }
       } else {
         setShippingRates(rates);
@@ -539,6 +546,15 @@ function CheckoutContent() {
                     placeholder="Apartment, suite, unit, etc."
                     className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
                 </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">Address Type</label>
+                  <select value={shippingAddress.addressType ?? 'residential'}
+                    onChange={(e) => setShippingAddress({ ...shippingAddress, addressType: e.target.value as ShippingAddress['addressType'] })}
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
+                    <option value="commercial">Commercial</option>
+                    <option value="residential">Residential</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">City *</label>
                   <input required value={shippingAddress.city}
@@ -636,9 +652,7 @@ function CheckoutContent() {
 
               {!paypalClientId ? (
                 <div className="rounded border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
-                  PayPal checkout is not configured. Please set{' '}
-                  <code>NEXT_PUBLIC_PAYPAL_CLIENT_ID</code> or{' '}
-                  <code>PAYPAL_CLIENT_ID</code> in your environment.
+                  PayPal checkout is not configured. Add the PayPal client ID and secret in Admin Settings → API settings → Billing.
                 </div>
               ) : (
                 <div id="paypal-button-container" className="min-h-12" />

@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   GetShippingQuoteDto,
   ShippingAddressDto,
+  TestShippingQuoteDto,
   WarehouseAddressDto,
 } from './shipping.dto';
 
@@ -17,17 +18,27 @@ const SHIPSTATION_BASE = 'https://ssapi.shipstation.com';
 const WAREHOUSE_ADDRESS_KEY = 'warehouse_address';
 const SHIPPING_API_SETTINGS_KEY = 'shipping_api_settings';
 const SHIPSTATION_SERVICES = [
-  { carrierCode: 'stamps_com', carrierName: 'United States Post Office', serviceCode: 'usps_ground_advantage', serviceName: 'USPS Ground Advantage' },
-  { carrierCode: 'stamps_com', carrierName: 'United States Post Office', serviceCode: 'usps_priority_mail', serviceName: 'USPS Priority Mail' },
+  { carrierCode: 'usps', carrierName: 'United States Post Office', serviceCode: 'usps_ground_advantage', serviceName: 'USPS Ground Advantage' },
+  { carrierCode: 'usps', carrierName: 'United States Post Office', serviceCode: 'usps_priority_mail', serviceName: 'USPS Priority Mail' },
   { carrierCode: 'ups', carrierName: 'UPS', serviceCode: 'ups_ground', serviceName: 'UPS Ground' },
   { carrierCode: 'ups', carrierName: 'UPS', serviceCode: 'ups_2nd_day_air', serviceName: 'UPS 2nd Day Air' },
   { carrierCode: 'fedex', carrierName: 'FedEx', serviceCode: 'fedex_ground', serviceName: 'FedEx Ground' },
   { carrierCode: 'fedex', carrierName: 'FedEx', serviceCode: 'fedex_2day', serviceName: 'FedEx 2Day' },
-  { carrierCode: 'globalpost', carrierName: 'GlobalPost', serviceCode: 'globalpost_economy_intl', serviceName: 'GlobalPost Economy International' },
-  { carrierCode: 'globalpost', carrierName: 'GlobalPost', serviceCode: 'globalpost_standard_intl', serviceName: 'GlobalPost Standard International' },
+  { carrierCode: 'global_post', carrierName: 'GlobalPost', serviceCode: 'globalpost_economy_intl', serviceName: 'GlobalPost Economy International' },
+  { carrierCode: 'global_post', carrierName: 'GlobalPost', serviceCode: 'globalpost_standard_intl', serviceName: 'GlobalPost Standard International' },
 ];
+const SHIPSTATION_CARRIER_ALIASES: Record<string, string[]> = {
+  usps: ['stamps_com', 'usps'],
+  stamps_com: ['stamps_com', 'usps'],
+  ups: ['ups_walleted', 'ups'],
+  ups_walleted: ['ups_walleted', 'ups'],
+  fedex: ['fedex'],
+  global_post: ['global_post', 'globalpost'],
+  globalpost: ['global_post', 'globalpost'],
+};
 /** Default weight per item when no weight is provided by the product (16 oz = 1 lb). */
 const DEFAULT_ITEM_WEIGHT_OZ = 16;
+const USPS_FIRST_CLASS_MAX_WEIGHT_OZ = 16;
 
 export interface ShippingRate {
   serviceName: string;
@@ -44,6 +55,8 @@ interface ShipStationRate {
   carrierName?: string;
   shipmentCost?: number;
   otherCost?: number;
+  deliveryDays?: number;
+  deliveryDate?: string;
 }
 
 interface ShipStationValidateResponse {
@@ -62,9 +75,28 @@ interface ShipStationValidateResponse {
 }
 
 interface ShippingApiSettings {
+  provider?: 'manual' | 'shipstation' | 'shippo' | 'easypost';
   apiKey?: string;
   apiSecret?: string;
   enabledCarrierCodes?: string[];
+  allowedServiceCodes?: string[];
+  markupType?: 'fixed' | 'percentage';
+  markupAmount?: number;
+}
+
+export interface ShipStationQuoteAttempt {
+  carrierCode: string;
+  requestBody: unknown;
+  status?: number;
+  rateCount?: number;
+  services?: Array<{
+    serviceName: string;
+    serviceCode: string;
+    carrierCode: string;
+    shipmentCost: number;
+    otherCost: number;
+  }>;
+  error?: string;
 }
 
 @Injectable()
@@ -97,11 +129,17 @@ export class ShippingService {
       if (!parsed || typeof parsed !== 'object') return {};
       const candidate = parsed as Record<string, unknown>;
       return {
+        provider: isShippingProvider(candidate.provider) ? candidate.provider : 'manual',
         apiKey: typeof candidate.apiKey === 'string' ? candidate.apiKey.trim() : '',
         apiSecret: typeof candidate.apiSecret === 'string' ? candidate.apiSecret.trim() : '',
         enabledCarrierCodes: Array.isArray(candidate.enabledCarrierCodes)
           ? candidate.enabledCarrierCodes.filter((value): value is string => typeof value === 'string')
-          : ['stamps_com'],
+          : ['usps'],
+        allowedServiceCodes: Array.isArray(candidate.allowedServiceCodes)
+          ? candidate.allowedServiceCodes.filter((value): value is string => typeof value === 'string')
+          : [],
+        markupType: candidate.markupType === 'percentage' ? 'percentage' : 'fixed',
+        markupAmount: readNumberSetting(candidate.markupAmount, 0),
       };
     } catch {
       return {};
@@ -141,9 +179,21 @@ export class ShippingService {
     const saved = await this.getSavedShippingApiSettings();
     const envKey = this.config.get<string>('SHIPSTATION_API_KEY') || '';
     const envSecret = this.config.get<string>('SHIPSTATION_API_SECRET') || '';
+    const carriersRequested = this.getEnabledCarrierCodes(saved);
+    const credentialsConfigured = Boolean((saved.apiKey && saved.apiSecret) || (envKey && envSecret));
+    const setupIssues = [
+      saved.provider !== 'shipstation' ? 'Shipping provider is not set to ShipStation.' : '',
+      !warehouse ? 'Warehouse origin address is not configured.' : '',
+      !credentialsConfigured ? 'ShipStation API key and secret are not configured.' : '',
+      carriersRequested.length === 0 ? 'No ShipStation carriers are enabled.' : '',
+    ].filter(Boolean);
 
     return {
+      provider: saved.provider ?? 'manual',
+      shipStationReady: setupIssues.length === 0,
+      setupIssues,
       warehouseConfigured: Boolean(warehouse),
+      warehouseIdConfigured: Boolean(warehouse?.warehouseId),
       warehousePostalCode: warehouse?.postalCode ?? null,
       warehouseState: warehouse?.state ?? null,
       savedApiKeyConfigured: Boolean(saved.apiKey),
@@ -151,8 +201,39 @@ export class ShippingService {
       envApiKeyConfigured: Boolean(envKey),
       envApiSecretConfigured: Boolean(envSecret),
       credentialsSource: saved.apiKey && saved.apiSecret ? 'admin-settings' : envKey && envSecret ? 'environment' : 'missing',
-      carriersRequested: this.getEnabledCarrierCodes(saved),
+      carriersRequested,
+      allowedServiceCodes: saved.allowedServiceCodes ?? [],
+      markupType: saved.markupType ?? 'fixed',
+      markupAmount: saved.markupAmount ?? 0,
     };
+  }
+
+  async testShippingQuote(dto: TestShippingQuoteDto) {
+    const attempts: ShipStationQuoteAttempt[] = [];
+    const quoteDto: GetShippingQuoteDto = {
+      address: dto.address,
+      items: [
+        {
+          productId: '__manual_test__',
+          quantity: 1,
+          weightOz: dto.weightOz ?? DEFAULT_ITEM_WEIGHT_OZ,
+          lengthIn: dto.lengthIn ?? 10,
+          widthIn: dto.widthIn ?? 10,
+          heightIn: dto.heightIn ?? 10,
+        },
+      ],
+    };
+
+    try {
+      const rates = await this.getShippingQuoteFromShipStation(quoteDto, attempts);
+      return { success: true, rates, attempts };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown ShipStation quote error',
+        attempts,
+      };
+    }
   }
 
   /** Calls ShipStation /shipments/getrates and returns available rates. */
@@ -167,7 +248,10 @@ export class ShippingService {
     }
   }
 
-  private async getShippingQuoteFromShipStation(dto: GetShippingQuoteDto): Promise<ShippingRate[]> {
+  private async getShippingQuoteFromShipStation(
+    dto: GetShippingQuoteDto,
+    debugAttempts: ShipStationQuoteAttempt[] = [],
+  ): Promise<ShippingRate[]> {
     const warehouse = await this.getWarehouseAddress();
     if (!warehouse) {
       throw new NotFoundException(
@@ -176,77 +260,111 @@ export class ShippingService {
       );
     }
 
-    const totalWeightOz = dto.items.reduce(
-      (sum, item) => sum + (item.weightOz ?? DEFAULT_ITEM_WEIGHT_OZ) * item.quantity,
-      0,
-    );
+    const packageDetails = await this.getPackageDetails(dto.items);
 
     const baseRequestBody = {
-      serviceCode: null,
-      packageCode: 'package',
       fromPostalCode: warehouse.postalCode,
+      fromCity: warehouse.city,
+      fromState: warehouse.state,
+      fromCountry: warehouse.country,
       toState: dto.address.state,
       toCountry: dto.address.country,
       toPostalCode: dto.address.postalCode,
       toCity: dto.address.city,
-      weight: { value: totalWeightOz, units: 'ounces' },
-      residential: true,
+      weight: { value: packageDetails.weightOz, units: 'ounces' },
+      dimensions: { ...packageDetails.dimensions, units: 'inches' },
+      confirmation: 'none',
+      residential: dto.address.addressType !== 'commercial',
+      ...(warehouse.warehouseId?.trim() ? { fromWarehouseId: warehouse.warehouseId.trim() } : {}),
     };
 
     const authHeader = await this.getAuthHeader();
     const shippingSettings = await this.getSavedShippingApiSettings();
     const carrierCodes = this.getEnabledCarrierCodes(shippingSettings);
+    const allowedServiceCodes = this.getAllowedServiceCodes(shippingSettings);
     const rates: ShipStationRate[] = [];
     const failures: string[] = [];
 
+    const shouldSkipUps = ['US', 'CA'].includes(dto.address.country) && !dto.address.state.trim();
+
     for (const carrierCode of carrierCodes) {
-      let response: Response;
-      try {
-        response = await fetch(`${SHIPSTATION_BASE}/shipments/getrates`, {
-          method: 'POST',
-          headers: {
-            Authorization: authHeader,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ...baseRequestBody, carrierCode }),
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unable to reach ShipStation';
-        this.logger.warn(`ShipStation getrates request failed for ${carrierCode}: ${message}`);
-        failures.push(`${carrierCode}: Unable to reach ShipStation (${message})`);
+      if (carrierCode === 'ups' && shouldSkipUps) {
+        failures.push('ups: Destination state is required for US/CA UPS rates.');
         continue;
       }
-
-      if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        const detail = formatShipStationError(text);
-        this.logger.warn(`ShipStation getrates failed for ${carrierCode}: ${response.status} ${text}`);
-        if (response.status === 401 || response.status === 403) {
-          throw new BadRequestException(
-            `ShipStation rejected the API credentials (${response.status}). ${detail}`,
-          );
+      for (const candidateCode of this.getCarrierCodeCandidates(carrierCode)) {
+        const requestBody = { ...baseRequestBody, carrierCode: candidateCode };
+        const attempt: ShipStationQuoteAttempt = { carrierCode: candidateCode, requestBody };
+        debugAttempts.push(attempt);
+        let response: Response;
+        try {
+          response = await fetch(`${SHIPSTATION_BASE}/shipments/getrates`, {
+            method: 'POST',
+            headers: {
+              Authorization: authHeader,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to reach ShipStation';
+          attempt.error = message;
+          this.logger.warn(`ShipStation getrates request failed for ${candidateCode}: ${message}`);
+          failures.push(`${candidateCode}: Unable to reach ShipStation (${message})`);
+          continue;
         }
-        failures.push(`${carrierCode}: ${detail || `HTTP ${response.status}`}`);
-        continue;
-      }
 
-      const carrierRates = (await response.json().catch(() => [])) as unknown;
-      if (Array.isArray(carrierRates)) {
-        rates.push(...(carrierRates as ShipStationRate[]));
-      } else {
-        failures.push(`${carrierCode}: ShipStation returned an unexpected response.`);
+        attempt.status = response.status;
+
+        if (!response.ok) {
+          const text = await response.text().catch(() => '');
+          const detail = formatShipStationError(text);
+          attempt.error = detail || `HTTP ${response.status}`;
+          this.logger.warn(`ShipStation getrates failed for ${candidateCode}: ${response.status} ${text}`);
+          if (response.status === 401 || response.status === 403) {
+            throw new BadRequestException(
+              `ShipStation rejected the API credentials (${response.status}). ${detail}`,
+            );
+          }
+          failures.push(`${candidateCode}: ${detail || `HTTP ${response.status}`}`);
+          continue;
+        }
+
+        const carrierRates = (await response.json().catch(() => [])) as unknown;
+        if (Array.isArray(carrierRates) && carrierRates.length > 0) {
+          attempt.rateCount = carrierRates.length;
+          attempt.services = (carrierRates as ShipStationRate[]).map((rate) => ({
+            serviceName: rate.serviceName ?? '',
+            serviceCode: rate.serviceCode ?? '',
+            carrierCode: rate.carrierCode ?? inferCarrierCode(rate.serviceCode, rate.serviceName),
+            shipmentCost: Number(rate.shipmentCost ?? 0),
+            otherCost: Number(rate.otherCost ?? 0),
+          }));
+          rates.push(...(carrierRates as ShipStationRate[]));
+          break;
+        }
+        if (Array.isArray(carrierRates)) {
+          attempt.rateCount = 0;
+          failures.push(`${candidateCode}: ShipStation returned no rates.`);
+        } else {
+          attempt.error = 'ShipStation returned an unexpected response.';
+          failures.push(`${candidateCode}: ShipStation returned an unexpected response.`);
+        }
       }
     }
 
     const supportedRates = rates
       .map((r) => ({
-        serviceName: r.serviceName ?? r.serviceCode ?? 'Shipping',
+        serviceName: formatRateLabel(r),
         serviceCode: r.serviceCode ?? '',
-        carrierCode: r.carrierCode ?? r.carrierName ?? '',
+        carrierCode: r.carrierCode ?? inferCarrierCode(r.serviceCode, r.serviceName),
         shipmentCost: Number(r.shipmentCost ?? 0),
         otherCost: Number(r.otherCost ?? 0),
       }))
-      .filter((rate) => rate.serviceCode && isSupportedCarrier(rate.carrierCode));
+      .filter((rate) => rate.serviceCode && isSupportedCarrier(rate.carrierCode))
+      .filter((rate) => !isOverweightUspsFirstClass(rate, packageDetails.weightOz))
+      .filter((rate) => isAllowedService(rate, allowedServiceCodes))
+      .map((rate) => this.applyMarkup(rate, shippingSettings));
 
     if (supportedRates.length === 0 && failures.length > 0) {
       throw new BadRequestException(
@@ -254,13 +372,85 @@ export class ShippingService {
       );
     }
 
+    if (supportedRates.length === 0 && rates.length > 0) {
+      throw new BadRequestException(
+        'ShipStation returned live rates, but none matched the enabled carriers or allowed service filters. ' +
+          'Check Admin Settings → API settings → Shipping and review Carrier attempts in the test quote tool.',
+      );
+    }
+
     return supportedRates;
+  }
+
+  private async getPackageDetails(items: GetShippingQuoteDto['items']) {
+    const productIds = Array.from(new Set(items.map((item) => item.productId).filter(Boolean)));
+    const products = productIds.length > 0
+      ? await this.prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, weightOz: true, lengthIn: true, widthIn: true, heightIn: true },
+        })
+      : [];
+    const productMap = new Map(products.map((product) => [product.id, product]));
+
+    let weightOz = 0;
+    let maxLength = 0;
+    let maxWidth = 0;
+    let totalHeight = 0;
+    let hasDimensions = false;
+
+    for (const item of items) {
+      const product = productMap.get(item.productId);
+      const itemWeight = Number(product?.weightOz ?? item.weightOz ?? DEFAULT_ITEM_WEIGHT_OZ);
+      weightOz += Math.max(1, itemWeight) * item.quantity;
+
+      const length = Number(product?.lengthIn ?? item.lengthIn ?? 0);
+      const width = Number(product?.widthIn ?? item.widthIn ?? 0);
+      const height = Number(product?.heightIn ?? item.heightIn ?? 0);
+      if (length > 0 && width > 0 && height > 0) {
+        hasDimensions = true;
+        maxLength = Math.max(maxLength, length);
+        maxWidth = Math.max(maxWidth, width);
+        totalHeight += height * item.quantity;
+      }
+    }
+
+    return {
+      weightOz: Math.max(1, Math.ceil(weightOz)),
+      dimensions: {
+        length: Math.max(1, Math.ceil(hasDimensions ? maxLength : 10)),
+        width: Math.max(1, Math.ceil(hasDimensions ? maxWidth : 10)),
+        height: Math.max(1, Math.ceil(hasDimensions ? totalHeight : 10)),
+      },
+    };
   }
 
   private getEnabledCarrierCodes(settings: ShippingApiSettings) {
     const supported = Array.from(new Set(SHIPSTATION_SERVICES.map((service) => service.carrierCode)));
-    const selected = settings.enabledCarrierCodes?.filter((code) => supported.includes(code)) ?? [];
-    return selected.length > 0 ? selected : ['stamps_com'];
+    const selected = settings.enabledCarrierCodes?.map((code) => normalizeCarrierCode(code)).filter((code) => supported.includes(code)) ?? [];
+    return selected.length > 0 ? Array.from(new Set(selected)) : ['usps'];
+  }
+
+  private getCarrierCodeCandidates(carrierCode: string) {
+    return SHIPSTATION_CARRIER_ALIASES[carrierCode] ?? [carrierCode];
+  }
+
+  private getAllowedServiceCodes(settings: ShippingApiSettings) {
+    return Array.from(new Set((settings.allowedServiceCodes ?? []).filter(Boolean).map((code) => code.toLowerCase())));
+  }
+
+  private applyMarkup(rate: ShippingRate, settings: ShippingApiSettings): ShippingRate {
+    const markupAmount = Number(settings.markupAmount ?? 0);
+    if (!Number.isFinite(markupAmount) || markupAmount <= 0) return rate;
+
+    const baseCost = Number(rate.shipmentCost ?? 0);
+    const markup = settings.markupType === 'percentage'
+      ? baseCost * (markupAmount / 100)
+      : markupAmount;
+
+    return {
+      ...rate,
+      shipmentCost: roundCurrency(baseCost + markup),
+    };
   }
 
   /** Calls ShipStation /addresses/validate and returns the result. */
@@ -302,6 +492,7 @@ export class ShippingService {
           phone: address.phone,
           line1: data.address.street1 ?? address.line1,
           line2: data.address.street2 ?? address.line2,
+          addressType: address.addressType,
           city: data.address.city ?? address.city,
           state: data.address.state ?? address.state,
           postalCode: data.address.postalCode ?? address.postalCode,
@@ -320,8 +511,98 @@ export class ShippingService {
 
 function isSupportedCarrier(carrierCode?: string | null) {
   if (!carrierCode) return false;
+  const normalized = normalizeCarrierCode(carrierCode);
+  return ['usps', 'ups', 'fedex', 'global_post'].some((carrier) => normalized.includes(carrier));
+}
+
+function isShippingProvider(value: unknown): value is ShippingApiSettings['provider'] {
+  return value === 'manual' || value === 'shipstation' || value === 'shippo' || value === 'easypost';
+}
+
+function normalizeCarrierCode(carrierCode: string) {
   const normalized = carrierCode.toLowerCase();
-  return ['stamps', 'usps', 'ups', 'fedex', 'globalpost'].some((carrier) => normalized.includes(carrier));
+  if (normalized === 'stamps_com') return 'usps';
+  if (normalized === 'ups_walleted') return 'ups';
+  if (normalized === 'globalpost') return 'global_post';
+  return normalized;
+}
+
+function inferCarrierCode(serviceCode?: string, serviceName?: string) {
+  const haystack = `${serviceCode ?? ''} ${serviceName ?? ''}`.toLowerCase();
+  if (haystack.includes('usps') || haystack.includes('first class') || haystack.includes('priority mail')) return 'usps';
+  if (haystack.includes('ups')) return 'ups';
+  if (haystack.includes('fedex')) return 'fedex';
+  if (haystack.includes('globalpost') || haystack.includes('global post')) return 'global_post';
+  return '';
+}
+
+function isOverweightUspsFirstClass(rate: ShippingRate, weightOz: number) {
+  if (normalizeCarrierCode(rate.carrierCode) !== 'usps') return false;
+  if (weightOz <= USPS_FIRST_CLASS_MAX_WEIGHT_OZ) return false;
+  const haystack = `${rate.serviceCode} ${rate.serviceName}`.toLowerCase();
+  return haystack.includes('first_class') || haystack.includes('first class');
+}
+
+function isAllowedService(rate: ShippingRate, allowedServiceCodes: string[]) {
+  if (allowedServiceCodes.length === 0) return true;
+
+  const serviceKey = mapServiceKey(rate);
+  if (allowedServiceCodes.includes(serviceKey)) return true;
+
+  if (serviceKey === 'usps_priority_mail') {
+    const serviceName = rate.serviceName.toLowerCase();
+    const isFlatRate = serviceName.includes('flat rate');
+    if (allowedServiceCodes.includes('usps_priority_mail_package_only')) return !isFlatRate;
+    if (allowedServiceCodes.includes('usps_priority_mail_flat_rate_only')) return isFlatRate;
+  }
+
+  return false;
+}
+
+function mapServiceKey(rate: ShippingRate) {
+  const serviceCode = rate.serviceCode.toLowerCase();
+  const serviceName = rate.serviceName.toLowerCase();
+  const haystack = `${serviceCode} ${serviceName}`;
+
+  if (haystack.includes('usps')) {
+    if (haystack.includes('first_class') || haystack.includes('first class')) return 'usps_first_class_mail';
+    if (haystack.includes('ground_advantage') || haystack.includes('ground advantage')) return 'usps_ground_advantage';
+    if (haystack.includes('priority_mail_express') || haystack.includes('priority mail express')) return 'usps_priority_mail_express';
+    if (haystack.includes('priority_mail') || haystack.includes('priority mail')) return 'usps_priority_mail';
+  }
+
+  if (haystack.includes('ups')) {
+    if (haystack.includes('ground_saver') || haystack.includes('groundsaver') || haystack.includes('ground saver')) return 'ups_ground_saver';
+    if (haystack.includes('ground')) return 'ups_ground';
+    if (haystack.includes('2nd_day') || haystack.includes('second_day') || haystack.includes('2nd day') || haystack.includes('second day')) return 'ups_2nd_day_air';
+    if (haystack.includes('next_day') || haystack.includes('next day')) return 'ups_next_day_air';
+    if (haystack.includes('3_day') || haystack.includes('three_day') || haystack.includes('3 day') || haystack.includes('three day')) return 'ups_3_day_select';
+  }
+
+  return serviceCode.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function readNumberSetting(value: unknown, fallback: number) {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function formatRateLabel(rate: ShipStationRate) {
+  const label = rate.serviceName ?? rate.serviceCode ?? 'Shipping';
+  if (rate.deliveryDate) {
+    const timestamp = Date.parse(rate.deliveryDate);
+    if (!Number.isNaN(timestamp)) {
+      return `${label} (Est. Delivery: ${new Date(timestamp).toLocaleDateString('en-US')})`;
+    }
+  }
+  if (rate.deliveryDays && rate.deliveryDays > 0) {
+    return `${label} (${rate.deliveryDays} ${rate.deliveryDays === 1 ? 'day' : 'days'})`;
+  }
+  return label;
 }
 
 function formatShipStationError(text: string) {

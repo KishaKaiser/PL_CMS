@@ -57,6 +57,9 @@ interface ShippingApiForm {
   originPostalCode: string;
   originCountry: string;
   enabledCarrierCodes: string[];
+  allowedServiceCodes: string[];
+  markupType: 'fixed' | 'percentage';
+  markupAmount: string;
 }
 
 interface SiteHomepageForm {
@@ -97,8 +100,25 @@ const defaultShippingApiForm: ShippingApiForm = {
   accountId: '',
   originPostalCode: '',
   originCountry: 'US',
-  enabledCarrierCodes: ['stamps_com'],
+  enabledCarrierCodes: ['usps'],
+  allowedServiceCodes: [],
+  markupType: 'fixed',
+  markupAmount: '0',
 };
+
+const shipStationServiceOptions = [
+  ['usps_first_class_mail', 'USPS - First Class Mail'],
+  ['usps_ground_advantage', 'USPS - Ground Advantage'],
+  ['usps_priority_mail', 'USPS - Priority Mail (All)'],
+  ['usps_priority_mail_package_only', 'USPS - Priority Mail Package Only'],
+  ['usps_priority_mail_flat_rate_only', 'USPS - Priority Mail Flat Rate Only'],
+  ['usps_priority_mail_express', 'USPS - Priority Mail Express'],
+  ['ups_ground', 'UPS - Ground'],
+  ['ups_ground_saver', 'UPS - Ground Saver'],
+  ['ups_2nd_day_air', 'UPS - 2nd Day Air'],
+  ['ups_next_day_air', 'UPS - Next Day Air'],
+  ['ups_3_day_select', 'UPS - 3 Day Select'],
+] as const;
 
 const defaultHomepageForm: SiteHomepageForm = {
   ...DEFAULT_HOMEPAGE_SETTINGS,
@@ -122,13 +142,21 @@ function readString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
 }
 
+function readStringOrNumber(value: unknown, fallback = '') {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return fallback;
+}
+
 function readOption<T extends string>(value: unknown, options: readonly T[], fallback: T) {
   return typeof value === 'string' && options.includes(value as T) ? (value as T) : fallback;
 }
 
 function readStringArray(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) return fallback;
-  const strings = value.filter((item): item is string => typeof item === 'string');
+  const strings = value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item === 'stamps_com' ? 'usps' : item === 'globalpost' ? 'global_post' : item);
   return strings.length > 0 ? strings : fallback;
 }
 
@@ -200,6 +228,9 @@ export default function AdminSettingsPage() {
       originPostalCode: readString(shippingApi?.originPostalCode, defaultShippingApiForm.originPostalCode),
       originCountry: readString(shippingApi?.originCountry, defaultShippingApiForm.originCountry),
       enabledCarrierCodes: readStringArray(shippingApi?.enabledCarrierCodes, defaultShippingApiForm.enabledCarrierCodes),
+      allowedServiceCodes: readStringArray(shippingApi?.allowedServiceCodes, defaultShippingApiForm.allowedServiceCodes),
+      markupType: readOption(shippingApi?.markupType, ['fixed', 'percentage'] as const, defaultShippingApiForm.markupType),
+      markupAmount: readStringOrNumber(shippingApi?.markupAmount, defaultShippingApiForm.markupAmount),
     });
   }, []);
 
@@ -589,6 +620,22 @@ export default function AdminSettingsPage() {
               <div>
                 <h3 className="text-sm font-semibold text-gray-700">Shipping</h3>
                 <p className="text-xs text-gray-500">Keep carrier and fulfillment API details with store settings.</p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShippingApiForm((currentForm) => ({
+                      ...currentForm,
+                      provider: 'shipstation',
+                      enabledCarrierCodes: ['usps', 'ups'],
+                      allowedServiceCodes: [],
+                      markupType: 'fixed',
+                      markupAmount: '0',
+                    }))
+                  }
+                  className="mt-3 rounded border border-purple-200 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-50"
+                >
+                  Use PLShipping defaults
+                </button>
               </div>
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 <p className="font-medium">Warehouse origin address</p>
@@ -629,10 +676,10 @@ export default function AdminSettingsPage() {
                 <p className="mt-1 text-xs text-gray-500">Enable only carriers active in your ShipStation account. USPS is the safest default.</p>
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
                   {[
-                    ['stamps_com', 'USPS'],
+                    ['usps', 'USPS'],
                     ['ups', 'UPS'],
                     ['fedex', 'FedEx'],
-                    ['globalpost', 'GlobalPost'],
+                    ['global_post', 'GlobalPost'],
                   ].map(([code, label]) => (
                     <label key={code} className="flex items-center gap-2 text-sm text-gray-700">
                       <input
@@ -650,6 +697,63 @@ export default function AdminSettingsPage() {
                       {label}
                     </label>
                   ))}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-gray-50 p-3">
+                <p className="text-sm font-medium text-gray-700">Allowed ShipStation services</p>
+                <p className="mt-1 text-xs text-gray-500">Leave all unchecked to show every returned service for the enabled carriers.</p>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {shipStationServiceOptions.map(([code, label]) => (
+                    <label key={code} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={shippingApiForm.allowedServiceCodes.includes(code)}
+                        onChange={(event) =>
+                          setShippingApiForm((currentForm) => ({
+                            ...currentForm,
+                            allowedServiceCodes: event.target.checked
+                              ? Array.from(new Set([...currentForm.allowedServiceCodes, code]))
+                              : currentForm.allowedServiceCodes.filter((serviceCode) => serviceCode !== code),
+                          }))
+                        }
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-gray-50 p-3">
+                <p className="text-sm font-medium text-gray-700">Shipping rate markup</p>
+                <p className="mt-1 text-xs text-gray-500">Add a fixed dollar amount or percentage to live ShipStation rates.</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Markup type
+                    <select
+                      value={shippingApiForm.markupType}
+                      onChange={(event) =>
+                        setShippingApiForm((currentForm) => ({
+                          ...currentForm,
+                          markupType: event.target.value as ShippingApiForm['markupType'],
+                        }))
+                      }
+                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                    >
+                      <option value="fixed">Fixed amount</option>
+                      <option value="percentage">Percentage</option>
+                    </select>
+                  </label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Markup amount
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={shippingApiForm.markupAmount}
+                      onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, markupAmount: event.target.value }))}
+                      placeholder={shippingApiForm.markupType === 'percentage' ? '10' : '2.50'}
+                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                    />
+                  </label>
                 </div>
               </div>
               <div className="flex justify-end">
