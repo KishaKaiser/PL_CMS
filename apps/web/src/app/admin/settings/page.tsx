@@ -620,6 +620,22 @@ export default function AdminSettingsPage() {
               <div>
                 <h3 className="text-sm font-semibold text-gray-700">Shipping</h3>
                 <p className="text-xs text-gray-500">Keep carrier and fulfillment API details with store settings.</p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShippingApiForm((currentForm) => ({
+                      ...currentForm,
+                      provider: 'shipstation',
+                      enabledCarrierCodes: ['usps', 'ups'],
+                      allowedServiceCodes: [],
+                      markupType: 'fixed',
+                      markupAmount: '0',
+                    }))
+                  }
+                  className="mt-3 rounded border border-purple-200 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-50"
+                >
+                  Use PLShipping defaults
+                </button>
               </div>
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 <p className="font-medium">Warehouse origin address</p>
