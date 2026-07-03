@@ -1,4 +1,5 @@
 import { IsArray, IsBoolean, IsEmail, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class StoreCouponDto {
   @IsOptional()
@@ -70,6 +71,7 @@ export class CartRecoverySettingsDto {
 
 export class TrackCartDto {
   @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
   @IsEmail()
   email?: string;
 

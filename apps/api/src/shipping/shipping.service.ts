@@ -163,14 +163,22 @@ export class ShippingService {
     const failures: string[] = [];
 
     for (const carrierCode of carrierCodes) {
-      const response = await fetch(`${SHIPSTATION_BASE}/shipments/getrates`, {
-        method: 'POST',
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ...baseRequestBody, carrierCode }),
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${SHIPSTATION_BASE}/shipments/getrates`, {
+          method: 'POST',
+          headers: {
+            Authorization: authHeader,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ...baseRequestBody, carrierCode }),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to reach ShipStation';
+        this.logger.warn(`ShipStation getrates request failed for ${carrierCode}: ${message}`);
+        failures.push(`${carrierCode}: Unable to reach ShipStation (${message})`);
+        continue;
+      }
 
       if (!response.ok) {
         const text = await response.text().catch(() => '');
@@ -185,7 +193,12 @@ export class ShippingService {
         continue;
       }
 
-      rates.push(...((await response.json()) as ShipStationRate[]));
+      const carrierRates = (await response.json().catch(() => [])) as unknown;
+      if (Array.isArray(carrierRates)) {
+        rates.push(...(carrierRates as ShipStationRate[]));
+      } else {
+        failures.push(`${carrierCode}: ShipStation returned an unexpected response.`);
+      }
     }
 
     const supportedRates = rates.map((r) => ({
