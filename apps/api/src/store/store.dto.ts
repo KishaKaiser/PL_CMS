@@ -136,6 +136,19 @@ export class EcommerceSettingsDto {
 
   @IsString()
   termsPageUrl!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  manualShippingEnabled?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  manualShippingAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  manualShippingLabel?: string;
 }
 
 export class GoogleMerchantSettingsDto {

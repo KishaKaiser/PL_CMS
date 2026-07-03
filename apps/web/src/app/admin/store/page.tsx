@@ -45,6 +45,9 @@ interface EcommerceSettings {
   lowStockThreshold: number;
   holdStockMinutes: number;
   termsPageUrl: string;
+  manualShippingEnabled: boolean;
+  manualShippingAmount: number;
+  manualShippingLabel: string;
 }
 
 const emptyCoupon: Coupon = {
@@ -58,25 +61,30 @@ const emptyCoupon: Coupon = {
   enabled: true,
 };
 
+const defaultEcommerceSettings: EcommerceSettings = {
+  storeName: 'Psychic Link Store',
+  currency: 'USD',
+  orderPrefix: 'PL',
+  taxEnabled: false,
+  taxRatePercent: 0,
+  pricesIncludeTax: false,
+  guestCheckoutEnabled: false,
+  requirePhone: true,
+  inventoryTrackingEnabled: true,
+  lowStockThreshold: 5,
+  holdStockMinutes: 30,
+  termsPageUrl: '/terms',
+  manualShippingEnabled: false,
+  manualShippingAmount: 8.95,
+  manualShippingLabel: 'Standard shipping',
+};
+
 export default function AdminStorePage() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [couponForm, setCouponForm] = useState<Coupon>(emptyCoupon);
   const [freeShipping, setFreeShipping] = useState<FreeShippingSettings>({ enabled: false, minimumSubtotal: 75, label: 'Free shipping' });
   const [cartRecovery, setCartRecovery] = useState<CartRecoverySettings>({ enabled: false, delayMinutes: 60, expiresDays: 7 });
-  const [ecommerce, setEcommerce] = useState<EcommerceSettings>({
-    storeName: 'Psychic Link Store',
-    currency: 'USD',
-    orderPrefix: 'PL',
-    taxEnabled: false,
-    taxRatePercent: 0,
-    pricesIncludeTax: false,
-    guestCheckoutEnabled: false,
-    requirePhone: true,
-    inventoryTrackingEnabled: true,
-    lowStockThreshold: 5,
-    holdStockMinutes: 30,
-    termsPageUrl: '/terms',
-  });
+  const [ecommerce, setEcommerce] = useState<EcommerceSettings>(defaultEcommerceSettings);
   const [carts, setCarts] = useState<Array<{ id: string; email?: string; subtotal: number; status: string; createdAt: string; recoverAfter: string }>>([]);
   const [emails, setEmails] = useState<StoreEmailTemplate[]>([]);
   const [message, setMessage] = useState('');
@@ -96,7 +104,7 @@ export default function AdminStorePage() {
         fetch('/api/proxy/store/admin/emails'),
       ]);
       if (!ecommerceRes.ok || !couponsRes.ok || !freeRes.ok || !recoveryRes.ok || !cartsRes.ok || !emailsRes.ok) throw new Error('Could not load store settings.');
-      setEcommerce((await ecommerceRes.json()) as EcommerceSettings);
+      setEcommerce({ ...defaultEcommerceSettings, ...((await ecommerceRes.json()) as Partial<EcommerceSettings>) });
       setCoupons((await couponsRes.json()) as Coupon[]);
       setFreeShipping((await freeRes.json()) as FreeShippingSettings);
       setCartRecovery((await recoveryRes.json()) as CartRecoverySettings);
@@ -176,6 +184,15 @@ export default function AdminStorePage() {
               <label className="block text-sm font-medium text-gray-700">Low Stock Threshold<input type="number" min="0" value={ecommerce.lowStockThreshold} onChange={(event) => setEcommerce((current) => ({ ...current, lowStockThreshold: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
               <label className="block text-sm font-medium text-gray-700">Hold Stock Minutes<input type="number" min="0" value={ecommerce.holdStockMinutes} onChange={(event) => setEcommerce((current) => ({ ...current, holdStockMinutes: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
               <label className="block text-sm font-medium text-gray-700 md:col-span-3">Terms Page URL<input value={ecommerce.termsPageUrl} onChange={(event) => setEcommerce((current) => ({ ...current, termsPageUrl: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+            </div>
+            <div className="mt-5 rounded-lg border bg-gray-50 p-4">
+              <h3 className="text-sm font-semibold text-gray-800">Manual shipping fallback</h3>
+              <p className="mt-1 text-xs text-gray-500">Used at checkout when ShipStation cannot return a live rate.</p>
+              <div className="mt-3 grid gap-4 md:grid-cols-3">
+                <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={ecommerce.manualShippingEnabled} onChange={(event) => setEcommerce((current) => ({ ...current, manualShippingEnabled: event.target.checked }))} /> Enable fallback</label>
+                <label className="block text-sm font-medium text-gray-700">Fallback Amount<input type="number" min="0" step="0.01" value={ecommerce.manualShippingAmount} onChange={(event) => setEcommerce((current) => ({ ...current, manualShippingAmount: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+                <label className="block text-sm font-medium text-gray-700">Fallback Label<input value={ecommerce.manualShippingLabel} onChange={(event) => setEcommerce((current) => ({ ...current, manualShippingLabel: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+              </div>
             </div>
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={ecommerce.taxEnabled} onChange={(event) => setEcommerce((current) => ({ ...current, taxEnabled: event.target.checked }))} /> Enable tax calculation</label>
