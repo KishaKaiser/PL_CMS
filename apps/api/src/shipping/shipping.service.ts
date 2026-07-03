@@ -64,6 +64,7 @@ interface ShipStationValidateResponse {
 interface ShippingApiSettings {
   apiKey?: string;
   apiSecret?: string;
+  enabledCarrierCodes?: string[];
 }
 
 @Injectable()
@@ -98,6 +99,9 @@ export class ShippingService {
       return {
         apiKey: typeof candidate.apiKey === 'string' ? candidate.apiKey.trim() : '',
         apiSecret: typeof candidate.apiSecret === 'string' ? candidate.apiSecret.trim() : '',
+        enabledCarrierCodes: Array.isArray(candidate.enabledCarrierCodes)
+          ? candidate.enabledCarrierCodes.filter((value): value is string => typeof value === 'string')
+          : ['stamps_com'],
       };
     } catch {
       return {};
@@ -147,7 +151,7 @@ export class ShippingService {
       envApiKeyConfigured: Boolean(envKey),
       envApiSecretConfigured: Boolean(envSecret),
       credentialsSource: saved.apiKey && saved.apiSecret ? 'admin-settings' : envKey && envSecret ? 'environment' : 'missing',
-      carriersRequested: Array.from(new Set(SHIPSTATION_SERVICES.map((service) => service.carrierCode))),
+      carriersRequested: this.getEnabledCarrierCodes(saved),
     };
   }
 
@@ -190,7 +194,8 @@ export class ShippingService {
     };
 
     const authHeader = await this.getAuthHeader();
-    const carrierCodes = Array.from(new Set(SHIPSTATION_SERVICES.map((service) => service.carrierCode)));
+    const shippingSettings = await this.getSavedShippingApiSettings();
+    const carrierCodes = this.getEnabledCarrierCodes(shippingSettings);
     const rates: ShipStationRate[] = [];
     const failures: string[] = [];
 
@@ -245,11 +250,17 @@ export class ShippingService {
 
     if (supportedRates.length === 0 && failures.length > 0) {
       throw new BadRequestException(
-        `ShipStation could not return rates. ${failures.slice(0, 3).join(' ')}`,
+        `ShipStation could not return rates. ${failures.join(' ')}`,
       );
     }
 
     return supportedRates;
+  }
+
+  private getEnabledCarrierCodes(settings: ShippingApiSettings) {
+    const supported = Array.from(new Set(SHIPSTATION_SERVICES.map((service) => service.carrierCode)));
+    const selected = settings.enabledCarrierCodes?.filter((code) => supported.includes(code)) ?? [];
+    return selected.length > 0 ? selected : ['stamps_com'];
   }
 
   /** Calls ShipStation /addresses/validate and returns the result. */
