@@ -1,5 +1,6 @@
 'use client';
 
+import type { Dispatch, SetStateAction } from 'react';
 import { Suspense, useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Script from 'next/script';
@@ -18,7 +19,15 @@ declare global {
 }
 
 interface CartItem {
-  product: { id: string; name: string; price: number; currency: string; minutesPack: number };
+  product: {
+    id: string;
+    name: string;
+    price: number;
+    currency: string;
+    minutesPack: number;
+    type?: 'PHYSICAL' | 'DIGITAL' | 'MINUTE_PACK';
+    digitalDelivery?: 'NONE' | 'ASTROLOGY_REPORT';
+  };
   variantId?: string;
   variantColor?: string;
   quantity: number;
@@ -58,6 +67,18 @@ interface FreeShippingSettings {
   label: string;
 }
 
+interface AstrologyForm {
+  productId: string;
+  fullName: string;
+  birthDate: string;
+  birthTime: string;
+  birthCity: string;
+  birthState: string;
+  birthCountry: string;
+  timezone: string;
+  notes: string;
+}
+
 interface EcommerceSettings {
   currency: string;
   taxEnabled: boolean;
@@ -91,10 +112,22 @@ function storedToCartItem(s: StoredCartItem): CartItem {
       price: s.variantPrice ?? s.productPrice,
       currency: s.currency,
       minutesPack: 0,
+      type: s.productType,
+      digitalDelivery: s.digitalDelivery,
     },
     variantId: s.variantId,
     variantColor: s.variantColor,
     quantity: s.quantity,
+  };
+}
+
+function createVirtualRate(): ShippingRate {
+  return {
+    carrierCode: 'virtual',
+    serviceCode: 'digital_delivery',
+    serviceName: 'Digital delivery',
+    shipmentCost: 0,
+    otherCost: 0,
   };
 }
 
@@ -166,6 +199,7 @@ function CheckoutContent() {
   const [couponMessage, setCouponMessage] = useState('');
   const [freeShipping, setFreeShipping] = useState<FreeShippingSettings>({ enabled: false, minimumSubtotal: 0, label: 'Free shipping' });
   const [ecommerce, setEcommerce] = useState<EcommerceSettings>(defaultEcommerceSettings);
+  const [astrologyForms, setAstrologyForms] = useState<Record<string, AstrologyForm>>({});
 
   // Load cart: from localStorage first, then fall back to URL params
   useEffect(() => {
@@ -243,6 +277,16 @@ function CheckoutContent() {
   const taxableSubtotal = Math.max(0, itemsTotal - discountAmount);
   const taxAmount = ecommerce.taxEnabled && !ecommerce.pricesIncludeTax ? taxableSubtotal * (Number(ecommerce.taxRatePercent) / 100) : 0;
   const grandTotal = Math.max(0, taxableSubtotal + taxAmount + shippingCost);
+  const astrologyItems = cart.filter((item) => item.product.digitalDelivery === 'ASTROLOGY_REPORT');
+  const requiresShipping = cart.some((item) => item.product.type === 'PHYSICAL' || !item.product.type);
+  const canPay = requiresShipping ? Boolean(selectedRate) : astrologyItems.every((item) => isAstrologyFormComplete(astrologyForms[item.product.id]));
+
+  useEffect(() => {
+    if (!requiresShipping && cart.length > 0 && !selectedRate) {
+      setSelectedRate(createVirtualRate());
+      setAddressSubmitted(true);
+    }
+  }, [cart.length, requiresShipping, selectedRate]);
 
   const applyCoupon = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -330,7 +374,7 @@ function CheckoutContent() {
   };
 
   const renderPaypalButtons = useCallback(() => {
-    if (!window.paypal || cart.length === 0 || paypalRendered || !selectedRate) return;
+    if (!window.paypal || cart.length === 0 || paypalRendered || !selectedRate || !canPay) return;
 
     window.paypal
       .Buttons({
@@ -350,6 +394,7 @@ function CheckoutContent() {
               shippingService: selectedRate.serviceCode,
               shippingAmount: shippingCost,
               couponCode: coupon?.valid ? coupon.code : undefined,
+              astrologyForms: astrologyItems.map((item) => astrologyForms[item.product.id]).filter(Boolean),
             }),
           });
           if (!res.ok) {
@@ -384,13 +429,13 @@ function CheckoutContent() {
       })
       .render('#paypal-button-container');
     setPaypalRendered(true);
-  }, [cart, coupon, paypalRendered, selectedRate, shippingAddress, shippingCost]);
+  }, [astrologyForms, astrologyItems, canPay, cart, coupon, paypalRendered, selectedRate, shippingAddress, shippingCost]);
 
   useEffect(() => {
-    if (paypalLoaded && cart.length > 0 && selectedRate) {
+    if (paypalLoaded && cart.length > 0 && selectedRate && canPay) {
       renderPaypalButtons();
     }
-  }, [paypalLoaded, cart, selectedRate, renderPaypalButtons]);
+  }, [paypalLoaded, canPay, cart, selectedRate, renderPaypalButtons]);
 
   if (successParam) {
     return (
@@ -504,8 +549,37 @@ function CheckoutContent() {
             )}
           </div>
 
+          {astrologyItems.length > 0 && (
+            <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-lg font-semibold">Astrology Chart Details</h2>
+              <p className="mb-4 text-sm text-gray-500">
+                Enter the birth details for the astrology report. After payment, the report will appear in your dashboard Downloads menu.
+              </p>
+              <div className="space-y-6">
+                {astrologyItems.map((item) => {
+                  const value = astrologyForms[item.product.id] ?? createEmptyAstrologyForm(item.product.id);
+                  return (
+                    <div key={item.product.id} className="rounded-xl border border-purple-100 bg-purple-50/40 p-4">
+                      <h3 className="mb-3 font-semibold text-gray-950">{item.product.name}</h3>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <CheckoutInput label="Full name" value={value.fullName} required onChange={(fullName) => updateAstrologyForm(setAstrologyForms, item.product.id, { fullName })} />
+                        <CheckoutInput label="Birth date" type="date" value={value.birthDate} required onChange={(birthDate) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthDate })} />
+                        <CheckoutInput label="Birth time" type="time" value={value.birthTime} required onChange={(birthTime) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthTime })} />
+                        <CheckoutInput label="Birth city" value={value.birthCity} required onChange={(birthCity) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthCity })} />
+                        <CheckoutInput label="Birth state / province" value={value.birthState} required onChange={(birthState) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthState })} />
+                        <CheckoutInput label="Birth country" value={value.birthCountry} required onChange={(birthCountry) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthCountry })} />
+                        <CheckoutInput label="Timezone" value={value.timezone} onChange={(timezone) => updateAstrologyForm(setAstrologyForms, item.product.id, { timezone })} />
+                        <CheckoutInput label="Notes" value={value.notes} onChange={(notes) => updateAstrologyForm(setAstrologyForms, item.product.id, { notes })} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Step 1: Shipping address form */}
-          {!addressSubmitted && (
+          {requiresShipping && !addressSubmitted && (
             <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold">1. Shipping Address</h2>
               {ratesError && (
@@ -594,7 +668,7 @@ function CheckoutContent() {
           )}
 
           {/* Step 2: Select a shipping rate */}
-          {addressSubmitted && shippingRates.length > 0 && !selectedRate && (
+          {requiresShipping && addressSubmitted && shippingRates.length > 0 && !selectedRate && (
             <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold">2. Select Shipping Method</h2>
               <p className="mb-3 text-sm text-gray-500">
@@ -627,32 +701,42 @@ function CheckoutContent() {
           {selectedRate && (
             <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-semibold">3. Payment</h2>
-              <div className="mb-4 rounded bg-gray-50 p-3 text-sm">
-                <p className="text-gray-600">
-                  <span className="font-medium">Shipping to:</span>{' '}
-                  {shippingAddress.fullName}, {shippingAddress.line1}
-                  {shippingAddress.line2 ? `, ${shippingAddress.line2}` : ''},{' '}
-                  {shippingAddress.city}, {shippingAddress.state} {shippingAddress.postalCode}
-                  {' '}
-                  <button onClick={() => { setAddressSubmitted(false); setShippingRates([]); setSelectedRate(null); setPaypalRendered(false); }}
-                    className="text-purple-600 hover:underline">
-                    (change)
-                  </button>
-                </p>
-                <p className="mt-1 text-gray-600">
-                  <span className="font-medium">Shipping method:</span>{' '}
-                  {selectedRate.serviceName} — ${shippingCost.toFixed(2)}
-                  {' '}
-                  <button onClick={() => { setSelectedRate(null); setPaypalRendered(false); }}
-                    className="text-purple-600 hover:underline">
-                    (change)
-                  </button>
-                </p>
-              </div>
+              {requiresShipping ? (
+                <div className="mb-4 rounded bg-gray-50 p-3 text-sm">
+                  <p className="text-gray-600">
+                    <span className="font-medium">Shipping to:</span>{' '}
+                    {shippingAddress.fullName}, {shippingAddress.line1}
+                    {shippingAddress.line2 ? `, ${shippingAddress.line2}` : ''},{' '}
+                    {shippingAddress.city}, {shippingAddress.state} {shippingAddress.postalCode}
+                    {' '}
+                    <button onClick={() => { setAddressSubmitted(false); setShippingRates([]); setSelectedRate(null); setPaypalRendered(false); }}
+                      className="text-purple-600 hover:underline">
+                      (change)
+                    </button>
+                  </p>
+                  <p className="mt-1 text-gray-600">
+                    <span className="font-medium">Shipping method:</span>{' '}
+                    {selectedRate.serviceName} - ${shippingCost.toFixed(2)}
+                    {' '}
+                    <button onClick={() => { setSelectedRate(null); setPaypalRendered(false); }}
+                      className="text-purple-600 hover:underline">
+                      (change)
+                    </button>
+                  </p>
+                </div>
+              ) : (
+                <div className="mb-4 rounded bg-purple-50 p-3 text-sm text-purple-800">
+                  This is a virtual order. No shipping address is required.
+                </div>
+              )}
 
               {!paypalClientId ? (
                 <div className="rounded border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
                   PayPal checkout is not configured. Add the PayPal client ID and secret in Admin Settings → API settings → Billing.
+                </div>
+              ) : !canPay ? (
+                <div className="rounded border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+                  Complete the astrology chart details above to continue.
                 </div>
               ) : (
                 <div id="paypal-button-container" className="min-h-12" />
@@ -688,5 +772,71 @@ async function readErrorResponse(res: Response) {
   }
   const text = await res.text().catch(() => '');
   return { message: text || `Request failed with status ${res.status}` };
+}
+
+function createEmptyAstrologyForm(productId: string): AstrologyForm {
+  return {
+    productId,
+    fullName: '',
+    birthDate: '',
+    birthTime: '',
+    birthCity: '',
+    birthState: '',
+    birthCountry: 'United States',
+    timezone: '',
+    notes: '',
+  };
+}
+
+function updateAstrologyForm(
+  setForms: Dispatch<SetStateAction<Record<string, AstrologyForm>>>,
+  productId: string,
+  patch: Partial<AstrologyForm>,
+) {
+  setForms((current) => ({
+    ...current,
+    [productId]: {
+      ...(current[productId] ?? createEmptyAstrologyForm(productId)),
+      ...patch,
+    },
+  }));
+}
+
+function isAstrologyFormComplete(form: AstrologyForm | undefined) {
+  return Boolean(
+    form?.fullName.trim() &&
+      form.birthDate &&
+      form.birthTime &&
+      form.birthCity.trim() &&
+      form.birthState.trim() &&
+      form.birthCountry.trim(),
+  );
+}
+
+function CheckoutInput({
+  label,
+  value,
+  onChange,
+  required,
+  type = 'text',
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  type?: string;
+}) {
+  return (
+    <label className="block text-sm font-medium text-gray-700">
+      {label}{required ? ' *' : ''}
+      <input
+        type={type}
+        value={value}
+        required={required}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+      />
+    </label>
+  );
 }
 

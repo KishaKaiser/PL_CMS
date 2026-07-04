@@ -3,9 +3,10 @@ import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
 import { PaypalService } from './paypal.service';
 import { StoreModule } from '../store/store.module';
+import { AstrologyModule } from '../astrology/astrology.module';
 
 @Module({
-  imports: [StoreModule],
+  imports: [StoreModule, AstrologyModule],
   controllers: [CheckoutController],
   providers: [CheckoutService, PaypalService],
   exports: [PaypalService],

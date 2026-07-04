@@ -30,7 +30,7 @@ export class AccountService {
     });
     if (!user) throw new NotFoundException('Account not found');
 
-    const [orders, addresses, paymentMethods, walletTransactions, conversations] =
+    const [orders, addresses, paymentMethods, walletTransactions, conversations, downloads] =
       await Promise.all([
         this.prisma.order.findMany({
           where: { userId },
@@ -59,6 +59,15 @@ export class AccountService {
         this.prisma.message.findMany({
           where: { recipientId: userId, readAt: null },
           select: { id: true },
+        }),
+        this.prisma.astrologyReport.findMany({
+          where: { userId },
+          include: {
+            product: { select: { id: true, name: true } },
+            order: { select: { id: true, status: true, createdAt: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 12,
         }),
       ]);
 
@@ -90,6 +99,7 @@ export class AccountService {
         transactions: walletTransactions,
       },
       messages: { unreadCount: conversations.length },
+      downloads,
       advisor: user.advisorProfile
         ? { profile: user.advisorProfile, payoutMethods, callTransactions }
         : null,

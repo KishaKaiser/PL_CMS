@@ -21,6 +21,8 @@ interface ProductVariant {
 interface Product {
   id: string;
   name: string;
+  type?: 'PHYSICAL' | 'DIGITAL' | 'MINUTE_PACK';
+  digitalDelivery?: 'NONE' | 'ASTROLOGY_REPORT';
   shortDescription?: string | null;
   price: string | number;
   currency: string;
@@ -59,6 +61,8 @@ export default function ProductDetailClient({ product, variants, productImage, p
       productId: product.id,
       productName: product.name,
       productPrice: Number(product.price),
+      productType: product.type,
+      digitalDelivery: product.digitalDelivery,
       currency: product.currency,
       variantId: selected?.id,
       variantColor: selectedSwatch?.label,

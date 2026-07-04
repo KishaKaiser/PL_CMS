@@ -35,6 +35,8 @@ interface MediaAsset {
 interface Product {
   id: string;
   name: string;
+  type: 'PHYSICAL' | 'DIGITAL' | 'MINUTE_PACK';
+  digitalDelivery?: 'NONE' | 'ASTROLOGY_REPORT';
   description?: string | null;
   shortDescription?: string | null;
   price: number | string;
@@ -61,6 +63,8 @@ interface Product {
 
 const emptyProductForm = {
   name: '',
+  type: 'DIGITAL' as 'PHYSICAL' | 'DIGITAL' | 'MINUTE_PACK',
+  digitalDelivery: 'NONE' as 'NONE' | 'ASTROLOGY_REPORT',
   description: '',
   shortDescription: '',
   regularPrice: '',
@@ -184,6 +188,8 @@ export default function AdminProductsPage() {
   function openEditForm(product: Product) {
     setForm({
       name: product.name,
+      type: product.type ?? 'DIGITAL',
+      digitalDelivery: product.digitalDelivery ?? 'NONE',
       description: product.description ?? '',
       shortDescription: product.shortDescription ?? '',
       regularPrice: String(product.regularPrice ?? product.price ?? ''),
@@ -528,6 +534,43 @@ export default function AdminProductsPage() {
               required
               className="md:col-span-2"
             />
+            <label className="block text-sm font-medium text-gray-700">
+              Product Type
+              <select
+                value={form.type}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    type: event.target.value as typeof emptyProductForm.type,
+                    digitalDelivery: event.target.value === 'DIGITAL' ? current.digitalDelivery : 'NONE',
+                  }))
+                }
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              >
+                <option value="DIGITAL">Digital / Virtual</option>
+                <option value="PHYSICAL">Physical</option>
+                <option value="MINUTE_PACK">Advisor minutes pack</option>
+              </select>
+            </label>
+
+            <label className="block text-sm font-medium text-gray-700">
+              Digital Delivery
+              <select
+                value={form.digitalDelivery}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    digitalDelivery: event.target.value as typeof emptyProductForm.digitalDelivery,
+                    type: event.target.value === 'ASTROLOGY_REPORT' ? 'DIGITAL' : current.type,
+                  }))
+                }
+                disabled={form.type !== 'DIGITAL'}
+                className="mt-1 w-full rounded border px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                <option value="NONE">No automatic download</option>
+                <option value="ASTROLOGY_REPORT">Astrology report form + download</option>
+              </select>
+            </label>
             <label className="block text-sm font-medium text-gray-700 md:col-span-2">
               Short Description (HTML allowed)
               <textarea
@@ -872,6 +915,8 @@ function buildProductPayload(form: typeof emptyProductForm, clearBlankValues: bo
   const regularPrice = parseFloat(form.regularPrice);
   return {
     name: form.name,
+    type: form.type,
+    digitalDelivery: form.type === 'DIGITAL' ? form.digitalDelivery : 'NONE',
     description: form.description || undefined,
     shortDescription: form.shortDescription || undefined,
     price: regularPrice,

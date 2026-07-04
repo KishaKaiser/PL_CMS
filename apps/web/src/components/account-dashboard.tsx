@@ -8,6 +8,7 @@ type DashboardMode = 'client' | 'advisor';
 type DashboardSection =
   | 'messages'
   | 'orders'
+  | 'downloads'
   | 'addresses'
   | 'payments'
   | 'wallet'
@@ -94,6 +95,19 @@ interface CallTransaction {
   client?: { user?: { name: string; email: string } };
 }
 
+interface AstrologyDownload {
+  id: string;
+  status: string;
+  reportUrl?: string | null;
+  reportText?: string | null;
+  fileName?: string | null;
+  errorMessage?: string | null;
+  createdAt: string;
+  generatedAt?: string | null;
+  product: { id: string; name: string };
+  order: { id: string; status: string; createdAt: string };
+}
+
 interface DashboardData {
   user: DashboardUser;
   orders: DashboardOrder[];
@@ -104,6 +118,7 @@ interface DashboardData {
     transactions: WalletTransaction[];
   };
   messages: { unreadCount: number };
+  downloads: AstrologyDownload[];
   advisor: null | {
     profile: AdvisorProfile;
     payoutMethods: PayoutMethod[];
@@ -289,6 +304,17 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     );
   }
 
+  async function handleGenerateDownload(downloadId: string) {
+    await saveAction(`download-${downloadId}`, async () => {
+      const res = await fetch(`/api/proxy/account/downloads/${downloadId}/generate`, { method: 'POST' });
+      if (!res.ok) {
+        const responseBody = (await res.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(responseBody?.message ?? 'Report generation failed');
+      }
+      setSuccess('Astrology report request submitted.');
+    });
+  }
+
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
     window.location.href = '/';
@@ -338,6 +364,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
   const navItems: Array<{ id: DashboardSection; label: string; icon: string; badge?: number }> = [
     { id: 'messages', label: 'Messages', icon: 'fa-regular fa-comments', badge: data.messages.unreadCount },
     { id: 'orders', label: 'Orders', icon: 'fa-solid fa-bag-shopping' },
+    { id: 'downloads', label: 'Downloads', icon: 'fa-solid fa-download' },
     { id: 'addresses', label: 'Saved Addresses', icon: 'fa-solid fa-location-dot' },
     { id: 'payments', label: 'Saved Payments', icon: 'fa-regular fa-credit-card' },
     { id: 'wallet', label: 'Wallet', icon: 'fa-solid fa-wallet' },
@@ -470,6 +497,64 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                       <div className="text-right">
                         <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">{order.status}</span>
                         <p className="mt-2 text-lg font-bold">${Number(order.totalAmount).toFixed(2)} {order.currency}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeSection === 'downloads' && (
+            <div>
+              {data.downloads.length === 0 ? (
+                <EmptyText text="No downloads are available yet." />
+              ) : (
+                <div className="divide-y">
+                  {data.downloads.map((download) => (
+                    <div key={download.id} className="flex flex-wrap items-center justify-between gap-4 py-5">
+                      <div>
+                        <p className="font-semibold text-gray-950">{download.product.name}</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          Order #{download.order.id.slice(0, 12)} · {new Date(download.createdAt).toLocaleDateString()}
+                        </p>
+                        {download.errorMessage && (
+                          <p className="mt-2 max-w-2xl rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                            {download.errorMessage}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
+                          {download.status.replaceAll('_', ' ')}
+                        </span>
+                        {download.reportUrl ? (
+                          <a
+                            href={download.reportUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-lg bg-purple-700 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-800"
+                          >
+                            Open Download
+                          </a>
+                        ) : download.reportText ? (
+                          <a
+                            href={`data:text/plain;charset=utf-8,${encodeURIComponent(download.reportText)}`}
+                            download={download.fileName ?? 'astrology-report.txt'}
+                            className="rounded-lg bg-purple-700 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-800"
+                          >
+                            Download Report
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void handleGenerateDownload(download.id)}
+                            disabled={saving === `download-${download.id}`}
+                            className="rounded-lg border border-purple-500 px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-50"
+                          >
+                            {saving === `download-${download.id}` ? 'Sending...' : 'Generate Report'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}

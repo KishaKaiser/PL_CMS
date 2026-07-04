@@ -11,6 +11,7 @@ import { CreateCheckoutDto } from './checkout.dto';
 import { PaypalService } from './paypal.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { StoreService } from '../store/store.service';
+import { AstrologyReportsService } from '../astrology/astrology-reports.service';
 
 @Injectable()
 export class CheckoutService {
@@ -21,6 +22,7 @@ export class CheckoutService {
     private readonly paypal: PaypalService,
     private readonly config: ConfigService,
     private readonly store: StoreService,
+    private readonly astrologyReports: AstrologyReportsService,
   ) {}
 
   /** Build and persist an Order row; returns it with items. */
@@ -67,8 +69,13 @@ export class CheckoutService {
       return sum.add(unitPrice.mul(item.quantity));
     }, new Decimal(0));
 
+    const requiresShipping = products.some((product) => product.type === 'PHYSICAL');
     let shippingDecimal =
       dto.shippingAmount != null ? new Decimal(dto.shippingAmount) : new Decimal(0);
+
+    if (!requiresShipping) {
+      shippingDecimal = new Decimal(0);
+    }
 
     // Require carrier and service when a non-zero shipping amount is provided,
     // so clients cannot set arbitrary shipping costs for physical products.
@@ -137,7 +144,7 @@ export class CheckoutService {
         }
       }
 
-      return tx.order.create({
+      const order = await tx.order.create({
         data: {
           userId,
           totalAmount,
@@ -164,8 +171,18 @@ export class CheckoutService {
               }
             : {}),
         },
-        include: { items: true, shippingAddress: true },
+        include: { items: { include: { product: true } }, shippingAddress: true },
       });
+
+      await this.astrologyReports.createReportsForOrder(
+        tx,
+        userId,
+        order.id,
+        order.items,
+        dto.astrologyForms,
+      );
+
+      return order;
     });
 
     return order;
@@ -389,6 +406,7 @@ export class CheckoutService {
 
     await this.decrementInventory(order.id);
     const minutesCredited = await this.creditMinutesIfNeeded(order.id, payment.id);
+    await this.astrologyReports.generateReadyReports(order.id, userId);
 
     return {
       success: true,

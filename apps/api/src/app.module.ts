@@ -22,6 +22,7 @@ import { FormsModule } from './forms/forms.module';
 import { SlidersModule } from './sliders/sliders.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { StoreModule } from './store/store.module';
+import { AstrologyModule } from './astrology/astrology.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { StoreModule } from './store/store.module';
     SlidersModule,
     NewsletterModule,
     StoreModule,
+    AstrologyModule,
   ],
 })
 export class AppModule {}
