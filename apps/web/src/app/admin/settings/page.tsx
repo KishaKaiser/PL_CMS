@@ -62,6 +62,11 @@ interface ShippingApiForm {
   markupAmount: string;
 }
 
+interface AstrologyApiForm {
+  endpointUrl: string;
+  apiKey: string;
+}
+
 interface SiteHomepageForm {
   mode: 'landing' | 'latest_posts' | 'page';
   pageSlug: string;
@@ -78,6 +83,7 @@ const SITE_POSTS_PAGE_KEY = SITE_SETTING_KEYS.SITE_POSTS_PAGE;
 const SITE_EXTENSION_POINTS_KEY = SITE_SETTING_KEYS.SITE_EXTENSION_POINTS;
 const BILLING_API_SETTINGS_KEY = 'billing_api_settings';
 const SHIPPING_API_SETTINGS_KEY = 'shipping_api_settings';
+const ASTROLOGY_API_SETTINGS_KEY = 'astrology_api_settings';
 
 const defaultIdentityForm: SiteIdentityForm = {
   ...DEFAULT_SITE_IDENTITY,
@@ -104,6 +110,11 @@ const defaultShippingApiForm: ShippingApiForm = {
   allowedServiceCodes: [],
   markupType: 'fixed',
   markupAmount: '0',
+};
+
+const defaultAstrologyApiForm: AstrologyApiForm = {
+  endpointUrl: '',
+  apiKey: '',
 };
 
 const shipStationServiceOptions = [
@@ -188,6 +199,7 @@ export default function AdminSettingsPage() {
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [billingApiForm, setBillingApiForm] = useState<BillingApiForm>(defaultBillingApiForm);
   const [shippingApiForm, setShippingApiForm] = useState<ShippingApiForm>(defaultShippingApiForm);
+  const [astrologyApiForm, setAstrologyApiForm] = useState<AstrologyApiForm>(defaultAstrologyApiForm);
 
   const publishedPages = useMemo(
     () => pages.filter((page) => Boolean(page.publishedAt)),
@@ -200,6 +212,7 @@ export default function AdminSettingsPage() {
     const postsPage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_POSTS_PAGE_KEY));
     const billingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, BILLING_API_SETTINGS_KEY));
     const shippingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SHIPPING_API_SETTINGS_KEY));
+    const astrologyApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, ASTROLOGY_API_SETTINGS_KEY));
 
     setIdentityForm({
       title: readString(identity?.title, defaultIdentityForm.title),
@@ -239,6 +252,10 @@ export default function AdminSettingsPage() {
       allowedServiceCodes: readStringArray(shippingApi?.allowedServiceCodes, defaultShippingApiForm.allowedServiceCodes),
       markupType: readOption(shippingApi?.markupType, ['fixed', 'percentage'] as const, defaultShippingApiForm.markupType),
       markupAmount: readStringOrNumber(shippingApi?.markupAmount, defaultShippingApiForm.markupAmount),
+    });
+    setAstrologyApiForm({
+      endpointUrl: readString(astrologyApi?.endpointUrl, defaultAstrologyApiForm.endpointUrl),
+      apiKey: readString(astrologyApi?.apiKey, defaultAstrologyApiForm.apiKey),
     });
   }, []);
 
@@ -788,6 +805,37 @@ export default function AdminSettingsPage() {
                   {saving[SHIPPING_API_SETTINGS_KEY] ? 'Saving…' : 'Save shipping API'}
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-4 rounded-lg border border-gray-200 p-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">Astrology Reports</h3>
+              <p className="text-xs text-gray-500">
+                Connect PL_CMS checkout to the astrology report backend.
+              </p>
+            </div>
+            <input
+              value={astrologyApiForm.endpointUrl}
+              onChange={(event) => setAstrologyApiForm((currentForm) => ({ ...currentForm, endpointUrl: event.target.value }))}
+              placeholder="Report endpoint URL, for example http://api-astrology.link/generate-report"
+              className="w-full rounded border px-3 py-2 text-sm"
+            />
+            <input
+              value={astrologyApiForm.apiKey}
+              onChange={(event) => setAstrologyApiForm((currentForm) => ({ ...currentForm, apiKey: event.target.value }))}
+              placeholder="API key or token (optional)"
+              className="w-full rounded border px-3 py-2 text-sm"
+            />
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => void saveManagedSetting(ASTROLOGY_API_SETTINGS_KEY, astrologyApiForm)}
+                disabled={saving[ASTROLOGY_API_SETTINGS_KEY] || loading}
+                className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {saving[ASTROLOGY_API_SETTINGS_KEY] ? 'Saving…' : 'Save astrology API'}
+              </button>
             </div>
           </div>
         </section>

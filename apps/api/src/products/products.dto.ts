@@ -8,12 +8,23 @@ import {
   IsString,
   Min,
   Max,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateProductDto {
   @IsString()
   name!: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['PHYSICAL', 'DIGITAL', 'MINUTE_PACK'])
+  type?: 'PHYSICAL' | 'DIGITAL' | 'MINUTE_PACK';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['NONE', 'ASTROLOGY_REPORT'])
+  digitalDelivery?: 'NONE' | 'ASTROLOGY_REPORT';
 
   @IsOptional()
   @IsString()
@@ -122,6 +133,16 @@ export class UpdateProductDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['PHYSICAL', 'DIGITAL', 'MINUTE_PACK'])
+  type?: 'PHYSICAL' | 'DIGITAL' | 'MINUTE_PACK';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['NONE', 'ASTROLOGY_REPORT'])
+  digitalDelivery?: 'NONE' | 'ASTROLOGY_REPORT';
 
   @IsOptional()
   @IsString()

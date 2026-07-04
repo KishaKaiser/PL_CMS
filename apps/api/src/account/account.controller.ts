@@ -31,13 +31,17 @@ import {
   UpdateAdvisorProfileDto,
 } from './account.dto';
 import { AccountService } from './account.service';
+import { AstrologyReportsService } from '../astrology/astrology-reports.service';
 
 type AuthenticatedRequest = { user: { id: string } };
 
 @Controller('account')
 @UseGuards(AuthGuard('jwt'))
 export class AccountController {
-  constructor(private readonly accountService: AccountService) {}
+  constructor(
+    private readonly accountService: AccountService,
+    private readonly astrologyReports: AstrologyReportsService,
+  ) {}
 
   @Get('dashboard')
   getDashboard(@Request() req: AuthenticatedRequest) {
@@ -47,6 +51,16 @@ export class AccountController {
   @Patch('me')
   updateAccount(@Request() req: AuthenticatedRequest, @Body() dto: UpdateAccountDto) {
     return this.accountService.updateAccount(req.user.id, dto);
+  }
+
+  @Get('downloads')
+  listDownloads(@Request() req: AuthenticatedRequest) {
+    return this.astrologyReports.listUserDownloads(req.user.id);
+  }
+
+  @Post('downloads/:id/generate')
+  generateDownload(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.astrologyReports.generateReport(id, req.user.id);
   }
 
   @Get('addresses')

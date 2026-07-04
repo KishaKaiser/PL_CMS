@@ -7,6 +7,8 @@ import { addToCart } from '../../lib/cart';
 interface Product {
   id: string;
   name: string;
+  type?: 'PHYSICAL' | 'DIGITAL' | 'MINUTE_PACK';
+  digitalDelivery?: 'NONE' | 'ASTROLOGY_REPORT';
   shortDescription?: string | null;
   description?: string;
   imageUrl?: string | null;
@@ -94,6 +96,8 @@ export function ProductGrid({ products }: Props) {
                     productId: product.id,
                     productName: product.name,
                     productPrice: price,
+                    productType: product.type,
+                    digitalDelivery: product.digitalDelivery,
                     currency: product.currency,
                     quantity: 1,
                   });

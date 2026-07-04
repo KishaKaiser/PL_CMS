@@ -93,6 +93,7 @@ model User {
   contentRevisions  ContentRevision[]
   builderLayoutsUpdated BuilderLayout[] @relation("BuilderLayoutUpdatedBy")
   builderLayoutVersions BuilderLayoutVersion[] @relation("BuilderLayoutVersionCreatedBy")
+  astrologyReports AstrologyReport[]
   builderTemplates BuilderTemplate[] @relation("BuilderTemplateCreatedBy")
   globalComponents GlobalComponent[] @relation("GlobalComponentCreatedBy")
   cmsThemes CmsTheme[] @relation("CmsThemeCreatedBy")
@@ -719,6 +720,7 @@ model Product {
   stockStatus  String   @default("IN_STOCK")
   imageUrl     String?
   featuredMediaId String?
+  digitalDelivery String @default("NONE")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -728,6 +730,7 @@ model Product {
   categories Category[]
   tags       Tag[]
   reviews    ProductReview[]
+  astrologyReports AstrologyReport[]
 
   @@index([featuredMediaId])
   @@map("products")
@@ -824,6 +827,7 @@ model Order {
   walletTransactions WalletTransaction[]
   shippingAddress   OrderAddress?
   shipments         Shipment[]
+  astrologyReports  AstrologyReport[]
 
   @@index([userId])
   @@map("orders")
@@ -863,10 +867,39 @@ model OrderItem {
   order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
   variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  astrologyReport AstrologyReport?
 
   @@index([orderId])
   @@index([productId])
   @@map("order_items")
+}
+
+model AstrologyReport {
+  id           String   @id @default(cuid())
+  userId       String
+  orderId      String
+  orderItemId  String   @unique
+  productId    String
+  status       String   @default("PENDING")
+  formData     Json
+  reportUrl    String?
+  reportText   String?
+  fileName     String?
+  errorMessage String?
+  submittedAt  DateTime @default(now())
+  generatedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([orderId])
+  @@index([productId])
+  @@map("astrology_reports")
 }
 
 // ──────────────────────────────────────────────

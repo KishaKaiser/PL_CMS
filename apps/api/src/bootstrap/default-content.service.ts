@@ -168,6 +168,7 @@ export class DefaultContentService implements OnModuleInit {
     await this.ensureModules();
     const theme = await this.ensureDefaultTheme();
     await this.ensureDefaultPages(theme.id);
+    await this.ensureAstrologyProduct();
     return {
       themeSlug: DEFAULT_THEME.slug,
       pages: DEFAULT_PAGES.map((page) => page.slug),
@@ -249,5 +250,28 @@ export class DefaultContentService implements OnModuleInit {
         },
       });
     }
+  }
+
+  private async ensureAstrologyProduct() {
+    const existing = await this.prisma.product.findFirst({
+      where: { name: 'Astrology Chart', digitalDelivery: 'ASTROLOGY_REPORT' },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    await this.prisma.product.create({
+      data: {
+        name: 'Astrology Chart',
+        type: 'DIGITAL',
+        digitalDelivery: 'ASTROLOGY_REPORT',
+        description: '<p>Personal astrology chart report generated from customer birth details.</p>',
+        shortDescription: '<p>A personalized virtual astrology chart report.</p>',
+        price: 25,
+        regularPrice: 25,
+        currency: 'USD',
+        isActive: true,
+        stockStatus: 'IN_STOCK',
+      },
+    });
   }
 }

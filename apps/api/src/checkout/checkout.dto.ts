@@ -23,6 +23,37 @@ export class CheckoutItemDto {
   quantity!: number;
 }
 
+export class AstrologyReportFormDto {
+  @IsString()
+  productId!: string;
+
+  @IsString()
+  fullName!: string;
+
+  @IsString()
+  birthDate!: string;
+
+  @IsString()
+  birthTime!: string;
+
+  @IsString()
+  birthCity!: string;
+
+  @IsString()
+  birthState!: string;
+
+  @IsString()
+  birthCountry!: string;
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
 export class CreateCheckoutDto {
   @IsArray()
   @ValidateNested({ each: true })
@@ -54,4 +85,10 @@ export class CreateCheckoutDto {
   @IsOptional()
   @IsString()
   couponCode?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AstrologyReportFormDto)
+  astrologyForms?: AstrologyReportFormDto[];
 }

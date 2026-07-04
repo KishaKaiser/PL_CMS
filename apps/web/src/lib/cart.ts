@@ -2,6 +2,8 @@ export interface CartItem {
   productId: string;
   productName: string;
   productPrice: number;
+  productType?: 'PHYSICAL' | 'DIGITAL' | 'MINUTE_PACK';
+  digitalDelivery?: 'NONE' | 'ASTROLOGY_REPORT';
   currency: string;
   variantId?: string;
   variantColor?: string;
