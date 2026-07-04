@@ -19,6 +19,7 @@ const WAREHOUSE_ADDRESS_KEY = 'warehouse_address';
 const SHIPPING_API_SETTINGS_KEY = 'shipping_api_settings';
 const SHIPSTATION_SERVICES = [
   { carrierCode: 'usps', carrierName: 'United States Post Office', serviceCode: 'usps_ground_advantage', serviceName: 'USPS Ground Advantage' },
+  { carrierCode: 'usps', carrierName: 'United States Post Office', serviceCode: 'usps_parcel_select_ground', serviceName: 'USPS Parcel Select Ground Package' },
   { carrierCode: 'usps', carrierName: 'United States Post Office', serviceCode: 'usps_priority_mail', serviceName: 'USPS Priority Mail' },
   { carrierCode: 'ups', carrierName: 'UPS', serviceCode: 'ups_ground', serviceName: 'UPS Ground' },
   { carrierCode: 'ups', carrierName: 'UPS', serviceCode: 'ups_2nd_day_air', serviceName: 'UPS 2nd Day Air' },
@@ -550,8 +551,8 @@ function isAllowedService(rate: ShippingRate, allowedServiceCodes: string[]) {
   if (allowedServiceCodes.includes(serviceKey)) return true;
 
   if (serviceKey === 'usps_priority_mail') {
-    const serviceName = rate.serviceName.toLowerCase();
-    const isFlatRate = serviceName.includes('flat rate');
+    const haystack = `${rate.serviceCode} ${rate.serviceName}`.toLowerCase();
+    const isFlatRate = haystack.includes('flat_rate') || haystack.includes('flat rate');
     if (allowedServiceCodes.includes('usps_priority_mail_package_only')) return !isFlatRate;
     if (allowedServiceCodes.includes('usps_priority_mail_flat_rate_only')) return isFlatRate;
   }
@@ -567,6 +568,7 @@ function mapServiceKey(rate: ShippingRate) {
   if (haystack.includes('usps')) {
     if (haystack.includes('first_class') || haystack.includes('first class')) return 'usps_first_class_mail';
     if (haystack.includes('ground_advantage') || haystack.includes('ground advantage')) return 'usps_ground_advantage';
+    if (haystack.includes('parcel_select') || haystack.includes('parcel select')) return 'usps_parcel_select_ground';
     if (haystack.includes('priority_mail_express') || haystack.includes('priority mail express')) return 'usps_priority_mail_express';
     if (haystack.includes('priority_mail') || haystack.includes('priority mail')) return 'usps_priority_mail';
   }
