@@ -109,8 +109,9 @@ const defaultShippingApiForm: ShippingApiForm = {
 const shipStationServiceOptions = [
   ['usps_first_class_mail', 'USPS - First Class Mail'],
   ['usps_ground_advantage', 'USPS - Ground Advantage'],
+  ['usps_parcel_select_ground', 'USPS - Parcel Select Ground Package'],
   ['usps_priority_mail', 'USPS - Priority Mail (All)'],
-  ['usps_priority_mail_package_only', 'USPS - Priority Mail Package Only'],
+  ['usps_priority_mail_package_only', 'USPS - Priority Mail Package'],
   ['usps_priority_mail_flat_rate_only', 'USPS - Priority Mail Flat Rate Only'],
   ['usps_priority_mail_express', 'USPS - Priority Mail Express'],
   ['ups_ground', 'UPS - Ground'],
@@ -119,6 +120,13 @@ const shipStationServiceOptions = [
   ['ups_next_day_air', 'UPS - Next Day Air'],
   ['ups_3_day_select', 'UPS - 3 Day Select'],
 ] as const;
+
+const preferredCheckoutServiceCodes = [
+  'usps_priority_mail_package_only',
+  'usps_parcel_select_ground',
+  'ups_ground',
+  'ups_2nd_day_air',
+];
 
 const defaultHomepageForm: SiteHomepageForm = {
   ...DEFAULT_HOMEPAGE_SETTINGS,
@@ -635,6 +643,20 @@ export default function AdminSettingsPage() {
                   className="mt-3 rounded border border-purple-200 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-50"
                 >
                   Use PLShipping defaults
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShippingApiForm((currentForm) => ({
+                      ...currentForm,
+                      provider: 'shipstation',
+                      enabledCarrierCodes: ['usps', 'ups'],
+                      allowedServiceCodes: preferredCheckoutServiceCodes,
+                    }))
+                  }
+                  className="ml-2 mt-3 rounded border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-800 hover:bg-purple-100"
+                >
+                  Use preferred checkout services
                 </button>
               </div>
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
