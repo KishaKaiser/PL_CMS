@@ -548,16 +548,45 @@ function isAllowedService(rate: ShippingRate, allowedServiceCodes: string[]) {
   if (allowedServiceCodes.length === 0) return true;
 
   const serviceKey = mapServiceKey(rate);
+  if (
+    serviceKey === 'usps_parcel_select_ground' &&
+    allowedServiceCodes.includes('usps_parcel_select_ground')
+  ) {
+    return isUspsPackageRate(rate);
+  }
+
   if (allowedServiceCodes.includes(serviceKey)) return true;
 
   if (serviceKey === 'usps_priority_mail') {
-    const haystack = `${rate.serviceCode} ${rate.serviceName}`.toLowerCase();
-    const isFlatRate = haystack.includes('flat_rate') || haystack.includes('flat rate');
-    if (allowedServiceCodes.includes('usps_priority_mail_package_only')) return !isFlatRate;
+    const isFlatRate = isUspsFlatRate(rate);
+    if (allowedServiceCodes.includes('usps_priority_mail_package_only')) return isUspsPackageRate(rate) && !isFlatRate;
     if (allowedServiceCodes.includes('usps_priority_mail_flat_rate_only')) return isFlatRate;
   }
 
   return false;
+}
+
+function isUspsFlatRate(rate: ShippingRate) {
+  const haystack = `${rate.serviceCode} ${rate.serviceName}`.toLowerCase();
+  return haystack.includes('flat_rate') || haystack.includes('flat rate');
+}
+
+function isUspsPackageRate(rate: ShippingRate) {
+  const haystack = `${rate.serviceCode} ${rate.serviceName}`.toLowerCase();
+  const nonPackageTypes = [
+    'thick_envelope',
+    'thick envelope',
+    'flat_rate',
+    'flat rate',
+    ' envelope',
+    '_envelope',
+    'letter',
+    'postcard',
+    'large envelope',
+    'legal flat',
+    'padded flat',
+  ];
+  return !nonPackageTypes.some((type) => haystack.includes(type));
 }
 
 function mapServiceKey(rate: ShippingRate) {
