@@ -8,14 +8,74 @@ import { getCart, clearCart, CartItem as StoredCartItem } from '../../../lib/car
 
 declare global {
   interface Window {
-    paypal?: {
-      Buttons: (config: {
-        createOrder: () => Promise<string>;
-        onApprove: (data: { orderID: string }) => Promise<void>;
-        onError: (err: unknown) => void;
-      }) => { render: (selector: string) => void };
+    paypal?: PayPalNamespace;
+    google?: GooglePayNamespace;
+    ApplePaySession?: {
+      new (version: number, request: Record<string, unknown>): {
+        begin: () => void;
+        onvalidatemerchant: ((event: { validationURL: string }) => void) | null;
+        onpaymentauthorized: ((event: { payment: { token: unknown } }) => void) | null;
+        completeMerchantValidation: (merchantSession: unknown) => void;
+        completePayment: (status: number) => void;
+      };
+      canMakePayments: () => boolean;
+      STATUS_SUCCESS: number;
+      STATUS_FAILURE: number;
     };
   }
+}
+
+interface PayPalButtonConfig {
+  fundingSource?: string;
+  createOrder: () => Promise<string>;
+  onApprove: (data: { orderID: string }) => Promise<void>;
+  onError: (err: unknown) => void;
+}
+
+interface PayPalButton {
+  isEligible?: () => boolean;
+  render: (selector: string) => Promise<void> | void;
+}
+
+interface PayPalNamespace {
+  Buttons: (config: PayPalButtonConfig) => PayPalButton;
+  FUNDING?: {
+    PAYPAL?: string;
+    VENMO?: string;
+  };
+  Applepay?: () => {
+    config: () => Promise<{
+      isEligible: boolean;
+      countryCode: string;
+      currencyCode: string;
+      merchantCapabilities: string[];
+      supportedNetworks: string[];
+    }>;
+    validateMerchant: (event: { validationURL: string }) => Promise<unknown>;
+    confirmOrder: (payload: { orderId: string; token: unknown }) => Promise<void>;
+  };
+  Googlepay?: () => {
+    config: () => Promise<{
+      isEligible: boolean;
+      allowedPaymentMethods: unknown[];
+      merchantInfo: Record<string, unknown>;
+      apiVersion: number;
+      apiVersionMinor: number;
+    }>;
+    confirmOrder: (payload: { orderId: string; paymentMethodData: unknown }) => Promise<{ status: string }>;
+  };
+}
+
+interface GooglePayNamespace {
+  payments?: {
+    api?: {
+      PaymentsClient: new (config: { environment: 'TEST' | 'PRODUCTION' }) => {
+        isReadyToPay: (request: Record<string, unknown>) => Promise<{ result: boolean }>;
+        createButton: (config: { onClick: () => void; buttonType?: string; buttonColor?: string }) => HTMLElement;
+        loadPaymentData: (request: Record<string, unknown>) => Promise<{ paymentMethodData?: unknown }>;
+      };
+    };
+  };
 }
 
 interface CartItem {
@@ -173,6 +233,34 @@ const defaultEcommerceSettings: EcommerceSettings = {
   manualShippingLabel: 'Standard shipping',
 };
 
+const paypalFundingButtons = [
+  { key: 'paypal', label: 'PayPal', fundingKey: 'PAYPAL' },
+  { key: 'venmo', label: 'Venmo', fundingKey: 'VENMO' },
+] as const;
+
+function createPaypalSdkUrl(clientId: string) {
+  const params = new URLSearchParams({
+    'client-id': clientId,
+    currency: 'USD',
+    intent: 'capture',
+    components: 'buttons,applepay,googlepay',
+    'enable-funding': 'venmo,paylater,card',
+  });
+  return `https://www.paypal.com/sdk/js?${params.toString()}`;
+}
+
+function clearPaymentButtonContainers() {
+  [
+    'paypal-button-paypal',
+    'paypal-button-venmo',
+    'paypal-apple-pay-container',
+    'paypal-google-pay-container',
+  ].forEach((id) => {
+    const container = document.getElementById(id);
+    if (container) container.replaceChildren();
+  });
+}
+
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const productId = searchParams.get('productId');
@@ -185,7 +273,9 @@ function CheckoutContent() {
   const [message, setMessage] = useState('');
   const [paypalLoaded, setPaypalLoaded] = useState(false);
   const [paypalClientId, setPaypalClientId] = useState('');
+  const [paypalEnvironment, setPaypalEnvironment] = useState<'sandbox' | 'live'>('sandbox');
   const [paypalRendered, setPaypalRendered] = useState(false);
+  const [googlePayLoaded, setGooglePayLoaded] = useState(false);
 
   // Shipping state
   const [shippingAddress, setShippingAddress] = useState<ShippingAddress>(emptyAddress);
@@ -231,8 +321,9 @@ function CheckoutContent() {
   useEffect(() => {
     fetch('/api/proxy/payments/paypal-client-id')
       .then((r) => r.json())
-      .then((data: { clientId?: string }) => {
+      .then((data: { clientId?: string; environment?: 'sandbox' | 'live' }) => {
         if (data.clientId) setPaypalClientId(data.clientId);
+        if (data.environment === 'live' || data.environment === 'sandbox') setPaypalEnvironment(data.environment);
       })
       .catch(() => {
         // Silently fail; user will see "not configured" message
@@ -373,69 +464,192 @@ function CheckoutContent() {
     }
   };
 
+  const createPaypalOrder = useCallback(async () => {
+    setStatus('loading');
+    const res = await fetch('/api/proxy/checkout/paypal-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: cart.map((item) => ({
+          productId: item.product.id,
+          variantId: item.variantId,
+          quantity: item.quantity,
+        })),
+        shippingAddress,
+        shippingCarrier: selectedRate?.carrierCode,
+        shippingService: selectedRate?.serviceCode,
+        shippingAmount: shippingCost,
+        couponCode: coupon?.valid ? coupon.code : undefined,
+        astrologyForms: astrologyItems.map((item) => astrologyForms[item.product.id]).filter(Boolean),
+      }),
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { message?: string };
+      setStatus('error');
+      setMessage(err.message ?? 'Failed to create order');
+      throw new Error(err.message ?? 'Failed to create order');
+    }
+    const data = (await res.json()) as { paypalOrderId: string };
+    return data.paypalOrderId;
+  }, [astrologyForms, astrologyItems, cart, coupon, selectedRate, shippingAddress, shippingCost]);
+
+  const capturePaypalOrder = useCallback(async (paypalOrderId: string) => {
+    const res = await fetch(
+      `/api/proxy/checkout/paypal-capture/${paypalOrderId}`,
+      { method: 'POST' },
+    );
+    if (!res.ok) {
+      setStatus('error');
+      setMessage('Payment capture failed. Please contact support.');
+      return;
+    }
+    clearCart();
+    setStatus('success');
+    setMessage('Payment successful! Your order has been confirmed.');
+    setCart([]);
+  }, []);
+
+  const handlePaypalError = useCallback((err: unknown) => {
+    setStatus('error');
+    setMessage('PayPal encountered an error. Check that the saved PayPal client ID, secret, and environment match your PayPal account.');
+    console.error('PayPal error:', err);
+  }, []);
+
   const renderPaypalButtons = useCallback(() => {
     if (!window.paypal || cart.length === 0 || paypalRendered || !selectedRate || !canPay) return;
 
-    window.paypal
-      .Buttons({
-        createOrder: async () => {
-          setStatus('loading');
-          const res = await fetch('/api/proxy/checkout/paypal-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              items: cart.map((item) => ({
-                productId: item.product.id,
-                variantId: item.variantId,
-                quantity: item.quantity,
-              })),
-              shippingAddress,
-              shippingCarrier: selectedRate.carrierCode,
-              shippingService: selectedRate.serviceCode,
-              shippingAmount: shippingCost,
-              couponCode: coupon?.valid ? coupon.code : undefined,
-              astrologyForms: astrologyItems.map((item) => astrologyForms[item.product.id]).filter(Boolean),
-            }),
-          });
-          if (!res.ok) {
-            const err = (await res.json().catch(() => ({}))) as { message?: string };
-            setStatus('error');
-            setMessage(err.message ?? 'Failed to create order');
-            throw new Error(err.message ?? 'Failed to create order');
-          }
-          const data = (await res.json()) as { paypalOrderId: string };
-          return data.paypalOrderId;
-        },
-        onApprove: async (data) => {
-          const res = await fetch(
-            `/api/proxy/checkout/paypal-capture/${data.orderID}`,
-            { method: 'POST' },
-          );
-          if (!res.ok) {
-            setStatus('error');
-            setMessage('Payment capture failed. Please contact support.');
-            return;
-          }
-          clearCart();
-          setStatus('success');
-          setMessage('🎉 Payment successful! Your order has been confirmed.');
-          setCart([]);
-        },
-        onError: (err) => {
-          setStatus('error');
-          setMessage('PayPal encountered an error. Please try again.');
-          console.error('PayPal error:', err);
-        },
-      })
-      .render('#paypal-button-container');
     setPaypalRendered(true);
-  }, [astrologyForms, astrologyItems, canPay, cart, coupon, paypalRendered, selectedRate, shippingAddress, shippingCost]);
+    const paypal = window.paypal;
+    const renderButtons = async () => {
+      let renderedAnyButton = false;
+      for (const option of paypalFundingButtons) {
+        const fundingSource = option.fundingKey === 'PAYPAL'
+          ? paypal.FUNDING?.PAYPAL
+          : paypal.FUNDING?.VENMO;
+        const button = paypal.Buttons({
+          fundingSource,
+          createOrder: createPaypalOrder,
+          onApprove: async (data) => capturePaypalOrder(data.orderID),
+          onError: handlePaypalError,
+        });
+        if (button.isEligible && !button.isEligible()) continue;
+        try {
+          await Promise.resolve(button.render(`#paypal-button-${option.key}`));
+          renderedAnyButton = true;
+        } catch (err) {
+          console.warn(`${option.label} button could not render`, err);
+        }
+      }
+      if (!renderedAnyButton) {
+        setStatus('error');
+        setMessage('No PayPal payment methods are available for this browser or account.');
+      }
+    };
+    void renderButtons();
+  }, [canPay, capturePaypalOrder, cart.length, createPaypalOrder, handlePaypalError, paypalRendered, selectedRate]);
+
+  const renderApplePay = useCallback(() => {
+    const paypal = window.paypal;
+    const ApplePaySession = window.ApplePaySession;
+    const container = document.getElementById('paypal-apple-pay-container');
+    if (!paypal?.Applepay || !ApplePaySession?.canMakePayments() || !container || container.childElementCount > 0 || !selectedRate || !canPay) return;
+
+    const applePay = paypal.Applepay();
+    void applePay.config().then((config) => {
+      if (!config.isEligible) return;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'w-full rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white hover:bg-gray-900';
+      button.textContent = 'Pay with Apple Pay';
+      button.onclick = async () => {
+        try {
+          const orderId = await createPaypalOrder();
+          const session = new ApplePaySession(4, {
+            countryCode: config.countryCode,
+            currencyCode: config.currencyCode,
+            merchantCapabilities: config.merchantCapabilities,
+            supportedNetworks: config.supportedNetworks,
+            total: { label: 'The Psychic Link', amount: grandTotal.toFixed(2), type: 'final' },
+          });
+          session.onvalidatemerchant = async (event) => {
+            const merchantSession = await applePay.validateMerchant(event);
+            session.completeMerchantValidation(merchantSession);
+          };
+          session.onpaymentauthorized = async (event) => {
+            try {
+              await applePay.confirmOrder({ orderId, token: event.payment.token });
+              await capturePaypalOrder(orderId);
+              session.completePayment(ApplePaySession.STATUS_SUCCESS);
+            } catch (err) {
+              handlePaypalError(err);
+              session.completePayment(ApplePaySession.STATUS_FAILURE);
+            }
+          };
+          session.begin();
+        } catch (err) {
+          handlePaypalError(err);
+        }
+      };
+      container.appendChild(button);
+    }).catch((err) => console.warn('Apple Pay is not available', err));
+  }, [canPay, capturePaypalOrder, createPaypalOrder, grandTotal, handlePaypalError, selectedRate]);
+
+  const renderGooglePay = useCallback(() => {
+    const paypal = window.paypal;
+    const googlePay = window.google?.payments?.api;
+    const container = document.getElementById('paypal-google-pay-container');
+    if (!paypal?.Googlepay || !googlePay || !container || container.childElementCount > 0 || !selectedRate || !canPay) return;
+
+    const paymentsClient = new googlePay.PaymentsClient({ environment: paypalEnvironment === 'live' ? 'PRODUCTION' : 'TEST' });
+    const paypalGooglePay = paypal.Googlepay();
+    void paypalGooglePay.config().then(async (config) => {
+      if (!config.isEligible) return;
+      const ready = await paymentsClient.isReadyToPay({
+        apiVersion: config.apiVersion,
+        apiVersionMinor: config.apiVersionMinor,
+        allowedPaymentMethods: config.allowedPaymentMethods,
+      });
+      if (!ready.result) return;
+      const button = paymentsClient.createButton({
+        buttonType: 'pay',
+        buttonColor: 'black',
+        onClick: async () => {
+          try {
+            const orderId = await createPaypalOrder();
+            const paymentData = await paymentsClient.loadPaymentData({
+              apiVersion: config.apiVersion,
+              apiVersionMinor: config.apiVersionMinor,
+              allowedPaymentMethods: config.allowedPaymentMethods,
+              merchantInfo: config.merchantInfo,
+              transactionInfo: {
+                countryCode: 'US',
+                currencyCode: ecommerce.currency || 'USD',
+                totalPriceStatus: 'FINAL',
+                totalPrice: grandTotal.toFixed(2),
+              },
+            });
+            await paypalGooglePay.confirmOrder({ orderId, paymentMethodData: paymentData.paymentMethodData });
+            await capturePaypalOrder(orderId);
+          } catch (err) {
+            handlePaypalError(err);
+          }
+        },
+      });
+      container.appendChild(button);
+    }).catch((err) => console.warn('Google Pay is not available', err));
+  }, [canPay, capturePaypalOrder, createPaypalOrder, ecommerce.currency, grandTotal, handlePaypalError, paypalEnvironment, selectedRate]);
 
   useEffect(() => {
     if (paypalLoaded && cart.length > 0 && selectedRate && canPay) {
       renderPaypalButtons();
+      renderApplePay();
+      if (googlePayLoaded) renderGooglePay();
     }
-  }, [paypalLoaded, canPay, cart, selectedRate, renderPaypalButtons]);
+  }, [paypalLoaded, googlePayLoaded, canPay, cart, selectedRate, renderPaypalButtons, renderApplePay, renderGooglePay]);
+
+  useEffect(() => {
+    if (!paypalRendered) clearPaymentButtonContainers();
+  }, [paypalRendered]);
 
   if (successParam) {
     return (
@@ -465,8 +679,18 @@ function CheckoutContent() {
     <>
       {paypalClientId && (
         <Script
-          src={`https://www.paypal.com/sdk/js?client-id=${paypalClientId}&currency=USD`}
+          src={createPaypalSdkUrl(paypalClientId)}
           onLoad={() => setPaypalLoaded(true)}
+          onError={() => {
+            setStatus('error');
+            setMessage('PayPal checkout could not load. Check the PayPal client ID and browser connection.');
+          }}
+        />
+      )}
+      {paypalClientId && (
+        <Script
+          src="https://pay.google.com/gp/p/js/pay.js"
+          onLoad={() => setGooglePayLoaded(true)}
         />
       )}
 
@@ -739,7 +963,15 @@ function CheckoutContent() {
                   Complete the astrology chart details above to continue.
                 </div>
               ) : (
-                <div id="paypal-button-container" className="min-h-12" />
+                <div className="space-y-3">
+                  <div id="paypal-button-paypal" className="min-h-12" />
+                  <div id="paypal-button-venmo" className="min-h-12" />
+                  <div id="paypal-apple-pay-container" />
+                  <div id="paypal-google-pay-container" />
+                  <p className="text-xs text-gray-500">
+                    Apple Pay, Google Pay, and Venmo appear only when PayPal marks them eligible for this browser, device, and PayPal account.
+                  </p>
+                </div>
               )}
             </div>
           )}

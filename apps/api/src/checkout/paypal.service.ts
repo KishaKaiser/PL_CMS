@@ -51,6 +51,14 @@ export class PaypalService {
     return settings.paypalClientId || this.config.get<string>('PAYPAL_CLIENT_ID') || '';
   }
 
+  async getPublicConfig(): Promise<{ clientId: string; environment: 'sandbox' | 'live' }> {
+    const credentials = await this.getCredentials();
+    return {
+      clientId: credentials.clientId,
+      environment: credentials.environment === 'live' ? 'live' : 'sandbox',
+    };
+  }
+
   private async getCredentials() {
     const settings = await this.getSavedBillingSettings();
     return {
