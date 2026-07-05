@@ -35,7 +35,7 @@ export class PaymentsController {
   /** Expose PayPal client ID to the frontend (public, safe to share). */
   @Get('paypal-client-id')
   getPaypalClientId() {
-    return this.paypal.getPublicClientId().then((clientId) => ({ clientId }));
+    return this.paypal.getPublicConfig();
   }
 
   /**
