@@ -666,7 +666,7 @@ function CheckoutContent() {
       }
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'w-full rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white hover:bg-gray-900';
+      button.className = 'h-12 w-full rounded-lg bg-black px-4 text-sm font-semibold text-white hover:bg-gray-900';
       button.textContent = 'Pay with Apple Pay';
       button.onclick = async () => {
         try {
@@ -755,6 +755,9 @@ function CheckoutContent() {
           }
         },
       });
+      button.style.width = '100%';
+      button.style.height = '48px';
+      button.style.minHeight = '48px';
       container.appendChild(button);
     }).catch((err) => {
       renderedWallets.current.delete('googlepay');
@@ -1100,13 +1103,6 @@ function CheckoutContent() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="space-y-3">
-                    <div id="paypal-button-paypal" className="min-h-12" />
-                    <div id="paypal-button-venmo" className="min-h-12" />
-                    <div id="paypal-button-paylater" className="min-h-12" />
-                    <div id="paypal-apple-pay-container" />
-                    <div id="paypal-google-pay-container" />
-                  </div>
                   <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                     <h3 className="text-sm font-semibold text-gray-900">Debit or credit card</h3>
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -1140,6 +1136,13 @@ function CheckoutContent() {
                         Card fields require PayPal Advanced Credit and Debit Card Payments plus a valid PayPal client token.
                       </p>
                     )}
+                  </div>
+                  <div className="space-y-3">
+                    <div id="paypal-button-paypal" className="min-h-12" />
+                    <div id="paypal-button-venmo" className="min-h-12" />
+                    <div id="paypal-button-paylater" className="min-h-12" />
+                    <div id="paypal-apple-pay-container" className="min-h-12 overflow-hidden rounded-lg" />
+                    <div id="paypal-google-pay-container" className="min-h-12 overflow-hidden rounded-lg" />
                   </div>
                   <p className="text-xs text-gray-500">
                     Apple Pay, Google Pay, and Venmo appear only when PayPal marks them eligible for this browser, device, and PayPal account.
