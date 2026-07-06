@@ -265,6 +265,17 @@ function createManualShippingRate(settings: EcommerceSettings): ShippingRate | n
   };
 }
 
+function formatShippingServiceName(rate?: Pick<ShippingRate, 'carrierCode' | 'serviceName'> | null) {
+  if (!rate) return '';
+  const name = rate.serviceName || 'Shipping';
+  if (rate.carrierCode?.toLowerCase() !== 'usps') return name;
+  return name
+    .replace(/\s*-\s*Package\b/gi, '')
+    .replace(/\s+Package\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function formatLiveRateFailureMessage(message?: string, fallbackLabel = 'manual fallback shipping') {
   const detail = message?.trim() || 'ShipStation did not return live rates for this address.';
   return `${detail} Showing ${fallbackLabel}. Admins can run Admin → Settings → Shipping → Test Live ShipStation Quote for carrier details.`;
@@ -392,7 +403,7 @@ function CheckoutContent() {
   const [ecommerce, setEcommerce] = useState<EcommerceSettings>(defaultEcommerceSettings);
   const [astrologyForms, setAstrologyForms] = useState<Record<string, AstrologyForm>>({});
 
-  const paymentButtonContainerClass = 'min-h-12 w-full overflow-hidden rounded-lg [&>*]:!max-w-none [&>*]:!w-full [&_iframe]:!max-w-none [&_iframe]:!w-full';
+  const paymentButtonContainerClass = 'relative z-0 min-h-12 w-full overflow-hidden rounded-lg [&>*]:!max-w-none [&>*]:!w-full [&_iframe]:!max-w-none [&_iframe]:!w-full';
 
   // Load cart: from localStorage first, then fall back to URL params
   useEffect(() => {
@@ -1020,7 +1031,7 @@ function CheckoutContent() {
             ))}
             {selectedRate && (
               <div className="flex justify-between py-2 text-sm text-gray-600">
-                <span>Shipping ({selectedRate.serviceName})</span>
+                <span>Shipping ({formatShippingServiceName(selectedRate)})</span>
                 <span>${shippingCost.toFixed(2)}</span>
               </div>
             )}
@@ -1191,7 +1202,7 @@ function CheckoutContent() {
                       onClick={() => setSelectedRate(rate)}
                       className="flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm hover:border-purple-400 hover:bg-purple-50"
                     >
-                      <span className="font-medium">{rate.serviceName}</span>
+                      <span className="font-medium">{formatShippingServiceName(rate)}</span>
                       <span className="font-semibold text-purple-700">${total.toFixed(2)}</span>
                     </button>
                   );
@@ -1219,7 +1230,7 @@ function CheckoutContent() {
                   </p>
                   <p className="mt-1 text-gray-600">
                     <span className="font-medium">Shipping method:</span>{' '}
-                    {selectedRate.serviceName} - ${shippingCost.toFixed(2)}
+                    {formatShippingServiceName(selectedRate)} - ${shippingCost.toFixed(2)}
                     {' '}
                     <button onClick={() => { setSelectedRate(null); setPaypalRendered(false); }}
                       className="text-purple-600 hover:underline">

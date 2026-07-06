@@ -116,7 +116,7 @@ export function StorefrontHeader({
       <div
         ref={mainRowRef}
         className={`grid grid-cols-[auto_1fr_auto] items-center gap-4 bg-white px-6 py-6 lg:grid-cols-[1fr_auto_1fr] lg:px-12 lg:py-8 ${
-          stuck ? 'fixed left-0 right-0 top-0 z-50 border-b border-gray-100 shadow-md' : stickyEnabled ? 'z-40 border-b border-gray-100 shadow-sm' : ''
+          stuck ? 'fixed left-0 right-0 top-0 z-[100] border-b border-gray-100 shadow-md' : stickyEnabled ? 'z-[90] border-b border-gray-100 shadow-sm' : ''
         }`}
       >
         <nav className="flex items-center gap-6 text-base text-neutral-800">
@@ -163,7 +163,7 @@ export function StorefrontHeader({
       </div>
 
       {menuOpen && (
-        <nav className={`${stuck ? 'fixed left-0 right-0 z-50 shadow-md' : ''} border-t border-gray-200 bg-white px-6 py-4 lg:hidden`} style={stuck ? { top: mainRowHeight } : undefined}>
+        <nav className={`${stuck ? 'fixed left-0 right-0 z-[100] shadow-md' : ''} border-t border-gray-200 bg-white px-6 py-4 lg:hidden`} style={stuck ? { top: mainRowHeight } : undefined}>
           <div className="grid gap-3">
             {navLinks.map((link) => (
               <a key={link.href} href={link.href} className="rounded px-2 py-2 text-base font-medium text-neutral-800 hover:bg-purple-50 hover:text-purple-700">
