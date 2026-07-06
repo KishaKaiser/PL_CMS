@@ -30,11 +30,11 @@ export async function PublicSiteShell({ children, siteConfig, showHeader = true,
       </a>
       {showHeader && (
         config.themeLayouts.header ? (
-          <header className="border-b bg-white">
+          <header className="border-b bg-white print:hidden">
             <BuilderContent layout={config.themeLayouts.header} showChrome={false} accountLink={accountLink} menus={config.menus} />
           </header>
         ) : (
-          <header className="border-b bg-white">
+          <header className="border-b bg-white print:hidden">
             <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-6 py-5 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
                 {logo && <img src={logo} alt={config.identity.title} className="h-12 w-12 rounded object-cover" />}
@@ -65,11 +65,11 @@ export async function PublicSiteShell({ children, siteConfig, showHeader = true,
 
       {showFooter && (
         config.themeLayouts.footer ? (
-          <footer className="border-t bg-white">
+          <footer className="border-t bg-white print:hidden">
             <BuilderContent layout={config.themeLayouts.footer} showChrome={false} menus={config.menus} />
           </footer>
         ) : (
-          <footer className="border-t bg-white">
+          <footer className="border-t bg-white print:hidden">
             <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-6 py-6 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
               <p>{config.identity.footerText}</p>
               <div className="flex flex-wrap gap-4">
