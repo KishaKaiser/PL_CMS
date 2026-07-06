@@ -310,6 +310,7 @@ function CheckoutContent() {
   const [paypalClientToken, setPaypalClientToken] = useState('');
   const [paypalEnvironment, setPaypalEnvironment] = useState<'sandbox' | 'live'>('sandbox');
   const [paypalRendered, setPaypalRendered] = useState(false);
+  const [showCardFields, setShowCardFields] = useState(false);
   const [cardFieldsReady, setCardFieldsReady] = useState(false);
   const [googlePayLoaded, setGooglePayLoaded] = useState(false);
   const cardFields = useRef<PayPalCardFields | null>(null);
@@ -328,6 +329,8 @@ function CheckoutContent() {
   const [freeShipping, setFreeShipping] = useState<FreeShippingSettings>({ enabled: false, minimumSubtotal: 0, label: 'Free shipping' });
   const [ecommerce, setEcommerce] = useState<EcommerceSettings>(defaultEcommerceSettings);
   const [astrologyForms, setAstrologyForms] = useState<Record<string, AstrologyForm>>({});
+
+  const paymentButtonContainerClass = 'min-h-12 w-full overflow-hidden rounded-lg [&>*]:!max-w-none [&>*]:!w-full [&_iframe]:!max-w-none [&_iframe]:!w-full';
 
   // Load cart: from localStorage first, then fall back to URL params
   useEffect(() => {
@@ -598,7 +601,7 @@ function CheckoutContent() {
 
   const renderCardFields = useCallback(() => {
     const paypal = window.paypal;
-    if (!paypal?.CardFields || !selectedRate || !canPay || renderedWallets.current.has('card-fields')) return;
+    if (!showCardFields || !paypal?.CardFields || !selectedRate || !canPay || renderedWallets.current.has('card-fields')) return;
 
     renderedWallets.current.add('card-fields');
     const fields = paypal.CardFields({
@@ -639,7 +642,7 @@ function CheckoutContent() {
         console.warn('PayPal card fields could not render', err);
       }
     })();
-  }, [canPay, capturePaypalOrder, createPaypalOrder, handlePaypalError, selectedRate]);
+  }, [canPay, capturePaypalOrder, createPaypalOrder, handlePaypalError, selectedRate, showCardFields]);
 
   const submitCardFields = useCallback(async () => {
     if (!cardFields.current) return;
@@ -650,6 +653,17 @@ function CheckoutContent() {
       handlePaypalError(err);
     }
   }, [handlePaypalError]);
+
+  const toggleCardFields = useCallback(() => {
+    setShowCardFields((visible) => {
+      if (visible) {
+        cardFields.current = null;
+        setCardFieldsReady(false);
+        renderedWallets.current.delete('card-fields');
+      }
+      return !visible;
+    });
+  }, []);
 
   const renderApplePay = useCallback(() => {
     const paypal = window.paypal;
@@ -768,11 +782,11 @@ function CheckoutContent() {
   useEffect(() => {
     if (paypalLoaded && cart.length > 0 && selectedRate && canPay) {
       renderPaypalButtons();
-      renderCardFields();
+      if (showCardFields) renderCardFields();
       renderApplePay();
       if (googlePayLoaded) renderGooglePay();
     }
-  }, [paypalLoaded, googlePayLoaded, canPay, cart, selectedRate, renderPaypalButtons, renderCardFields, renderApplePay, renderGooglePay]);
+  }, [paypalLoaded, googlePayLoaded, canPay, cart, selectedRate, showCardFields, renderPaypalButtons, renderCardFields, renderApplePay, renderGooglePay]);
 
   useEffect(() => {
     if (!paypalRendered) {
@@ -1103,46 +1117,56 @@ function CheckoutContent() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                    <h3 className="text-sm font-semibold text-gray-900">Debit or credit card</h3>
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      <div className="md:col-span-2">
-                        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Name on card</label>
-                        <div id="paypal-card-name" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
+                  <button
+                    type="button"
+                    onClick={toggleCardFields}
+                    aria-expanded={showCardFields}
+                    className="h-12 w-full rounded-lg bg-purple-700 px-4 text-sm font-semibold text-white hover:bg-purple-800"
+                  >
+                    Pay by card
+                  </button>
+                  {showCardFields && (
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <h3 className="text-sm font-semibold text-gray-900">Debit or credit card</h3>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <div className="md:col-span-2">
+                          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Name on card</label>
+                          <div id="paypal-card-name" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Card number</label>
+                          <div id="paypal-card-number" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Expiration</label>
+                          <div id="paypal-card-expiry" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">CVV</label>
+                          <div id="paypal-card-cvv" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
+                        </div>
                       </div>
-                      <div className="md:col-span-2">
-                        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Card number</label>
-                        <div id="paypal-card-number" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Expiration</label>
-                        <div id="paypal-card-expiry" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">CVV</label>
-                        <div id="paypal-card-cvv" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
-                      </div>
+                      <button
+                        type="button"
+                        disabled={!cardFieldsReady || status === 'loading'}
+                        onClick={submitCardFields}
+                        className="mt-4 h-12 w-full rounded-lg bg-purple-700 px-4 text-sm font-semibold text-white hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {status === 'loading' ? 'Processing...' : 'Pay by card'}
+                      </button>
+                      {!paypalClientToken && (
+                        <p className="mt-3 text-xs text-yellow-700">
+                          Card fields require PayPal Advanced Credit and Debit Card Payments plus a valid PayPal client token.
+                        </p>
+                      )}
                     </div>
-                    <button
-                      type="button"
-                      disabled={!cardFieldsReady || status === 'loading'}
-                      onClick={submitCardFields}
-                      className="mt-4 h-12 w-full rounded-lg bg-purple-700 px-4 text-sm font-semibold text-white hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {status === 'loading' ? 'Processing...' : 'Pay by card'}
-                    </button>
-                    {!paypalClientToken && (
-                      <p className="mt-3 text-xs text-yellow-700">
-                        Card fields require PayPal Advanced Credit and Debit Card Payments plus a valid PayPal client token.
-                      </p>
-                    )}
-                  </div>
+                  )}
                   <div className="space-y-3">
-                    <div id="paypal-button-paypal" className="min-h-12" />
-                    <div id="paypal-button-venmo" className="min-h-12" />
-                    <div id="paypal-button-paylater" className="min-h-12" />
-                    <div id="paypal-apple-pay-container" className="min-h-12 overflow-hidden rounded-lg" />
-                    <div id="paypal-google-pay-container" className="min-h-12 overflow-hidden rounded-lg" />
+                    <div id="paypal-button-paypal" className={paymentButtonContainerClass} />
+                    <div id="paypal-button-venmo" className={paymentButtonContainerClass} />
+                    <div id="paypal-button-paylater" className={paymentButtonContainerClass} />
+                    <div id="paypal-apple-pay-container" className={paymentButtonContainerClass} />
+                    <div id="paypal-google-pay-container" className={paymentButtonContainerClass} />
                   </div>
                   <p className="text-xs text-gray-500">
                     Apple Pay, Google Pay, and Venmo appear only when PayPal marks them eligible for this browser, device, and PayPal account.
