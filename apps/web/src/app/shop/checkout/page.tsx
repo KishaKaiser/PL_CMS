@@ -1,7 +1,7 @@
 'use client';
 
 import type { Dispatch, SetStateAction } from 'react';
-import { Suspense, useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { getCart, clearCart, CartItem as StoredCartItem } from '../../../lib/cart';
@@ -283,6 +283,7 @@ function CheckoutContent() {
   const [paypalEnvironment, setPaypalEnvironment] = useState<'sandbox' | 'live'>('sandbox');
   const [paypalRendered, setPaypalRendered] = useState(false);
   const [googlePayLoaded, setGooglePayLoaded] = useState(false);
+  const renderedWallets = useRef(new Set<string>());
 
   // Shipping state
   const [shippingAddress, setShippingAddress] = useState<ShippingAddress>(emptyAddress);
@@ -531,6 +532,8 @@ function CheckoutContent() {
       let renderedAnyButton = false;
       for (const option of paypalFundingButtons) {
         const fundingSource = paypal.FUNDING?.[option.fundingKey];
+        if (!fundingSource || renderedWallets.current.has(option.key)) continue;
+        renderedWallets.current.add(option.key);
         const button = paypal.Buttons({
           fundingSource,
           createOrder: createPaypalOrder,
@@ -542,6 +545,7 @@ function CheckoutContent() {
           await Promise.resolve(button.render(`#paypal-button-${option.key}`));
           renderedAnyButton = true;
         } catch (err) {
+          renderedWallets.current.delete(option.key);
           console.warn(`${option.label} button could not render`, err);
         }
       }
@@ -557,11 +561,15 @@ function CheckoutContent() {
     const paypal = window.paypal;
     const ApplePaySession = window.ApplePaySession;
     const container = document.getElementById('paypal-apple-pay-container');
-    if (!paypal?.Applepay || !ApplePaySession?.canMakePayments() || !container || container.childElementCount > 0 || !selectedRate || !canPay) return;
+    if (!paypal?.Applepay || !ApplePaySession?.canMakePayments() || !container || container.childElementCount > 0 || renderedWallets.current.has('applepay') || !selectedRate || !canPay) return;
 
+    renderedWallets.current.add('applepay');
     const applePay = paypal.Applepay();
     void applePay.config().then((config) => {
-      if (!config.isEligible) return;
+      if (!config.isEligible) {
+        renderedWallets.current.delete('applepay');
+        return;
+      }
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'w-full rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white hover:bg-gray-900';
@@ -599,25 +607,35 @@ function CheckoutContent() {
         }
       };
       container.appendChild(button);
-    }).catch((err) => console.warn('Apple Pay is not available', err));
+    }).catch((err) => {
+      renderedWallets.current.delete('applepay');
+      console.warn('Apple Pay is not available', err);
+    });
   }, [canPay, capturePaypalOrder, createPaypalOrder, grandTotal, handlePaypalError, selectedRate]);
 
   const renderGooglePay = useCallback(() => {
     const paypal = window.paypal;
     const googlePay = window.google?.payments?.api;
     const container = document.getElementById('paypal-google-pay-container');
-    if (!paypal?.Googlepay || !googlePay || !container || container.childElementCount > 0 || !selectedRate || !canPay) return;
+    if (!paypal?.Googlepay || !googlePay || !container || container.childElementCount > 0 || renderedWallets.current.has('googlepay') || !selectedRate || !canPay) return;
 
+    renderedWallets.current.add('googlepay');
     const paymentsClient = new googlePay.PaymentsClient({ environment: paypalEnvironment === 'live' ? 'PRODUCTION' : 'TEST' });
     const paypalGooglePay = paypal.Googlepay();
     void paypalGooglePay.config().then(async (config) => {
-      if (!config.isEligible) return;
+      if (!config.isEligible) {
+        renderedWallets.current.delete('googlepay');
+        return;
+      }
       const ready = await paymentsClient.isReadyToPay({
         apiVersion: config.apiVersion,
         apiVersionMinor: config.apiVersionMinor,
         allowedPaymentMethods: config.allowedPaymentMethods,
       });
-      if (!ready.result) return;
+      if (!ready.result) {
+        renderedWallets.current.delete('googlepay');
+        return;
+      }
       const button = paymentsClient.createButton({
         buttonType: 'pay',
         buttonColor: 'black',
@@ -644,7 +662,10 @@ function CheckoutContent() {
         },
       });
       container.appendChild(button);
-    }).catch((err) => console.warn('Google Pay is not available', err));
+    }).catch((err) => {
+      renderedWallets.current.delete('googlepay');
+      console.warn('Google Pay is not available', err);
+    });
   }, [canPay, capturePaypalOrder, createPaypalOrder, ecommerce.currency, grandTotal, handlePaypalError, paypalEnvironment, selectedRate]);
 
   useEffect(() => {
@@ -656,7 +677,10 @@ function CheckoutContent() {
   }, [paypalLoaded, googlePayLoaded, canPay, cart, selectedRate, renderPaypalButtons, renderApplePay, renderGooglePay]);
 
   useEffect(() => {
-    if (!paypalRendered) clearPaymentButtonContainers();
+    if (!paypalRendered) {
+      renderedWallets.current.clear();
+      clearPaymentButtonContainers();
+    }
   }, [paypalRendered]);
 
   if (successParam) {
@@ -698,9 +722,6 @@ function CheckoutContent() {
       {paypalClientId && (
         <Script
           src="https://applepay.cdn-apple.com/jsapi/1.latest/apple-pay-sdk.js"
-          onLoad={() => {
-            if (paypalLoaded) renderApplePay();
-          }}
         />
       )}
       {paypalClientId && (
