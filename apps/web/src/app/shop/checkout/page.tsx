@@ -42,6 +42,9 @@ interface PayPalNamespace {
   FUNDING?: {
     PAYPAL?: string;
     VENMO?: string;
+    CARD?: string;
+    PAYLATER?: string;
+    CREDIT?: string;
   };
   Applepay?: () => {
     config: () => Promise<{
@@ -51,7 +54,7 @@ interface PayPalNamespace {
       merchantCapabilities: string[];
       supportedNetworks: string[];
     }>;
-    validateMerchant: (event: { validationURL: string }) => Promise<unknown>;
+    validateMerchant: (event: { validationUrl: string; displayName?: string }) => Promise<{ merchantSession?: unknown }>;
     confirmOrder: (payload: { orderId: string; token: unknown }) => Promise<void>;
   };
   Googlepay?: () => {
@@ -235,7 +238,9 @@ const defaultEcommerceSettings: EcommerceSettings = {
 
 const paypalFundingButtons = [
   { key: 'paypal', label: 'PayPal', fundingKey: 'PAYPAL' },
+  { key: 'card', label: 'Debit or credit card', fundingKey: 'CARD' },
   { key: 'venmo', label: 'Venmo', fundingKey: 'VENMO' },
+  { key: 'paylater', label: 'Pay Later', fundingKey: 'PAYLATER' },
 ] as const;
 
 function createPaypalSdkUrl(clientId: string) {
@@ -244,7 +249,7 @@ function createPaypalSdkUrl(clientId: string) {
     currency: 'USD',
     intent: 'capture',
     components: 'buttons,applepay,googlepay',
-    'enable-funding': 'venmo,paylater,card',
+    'enable-funding': 'venmo,paylater,card,credit',
   });
   return `https://www.paypal.com/sdk/js?${params.toString()}`;
 }
@@ -252,7 +257,9 @@ function createPaypalSdkUrl(clientId: string) {
 function clearPaymentButtonContainers() {
   [
     'paypal-button-paypal',
+    'paypal-button-card',
     'paypal-button-venmo',
+    'paypal-button-paylater',
     'paypal-apple-pay-container',
     'paypal-google-pay-container',
   ].forEach((id) => {
@@ -511,7 +518,7 @@ function CheckoutContent() {
 
   const handlePaypalError = useCallback((err: unknown) => {
     setStatus('error');
-    setMessage('PayPal encountered an error. Check that the saved PayPal client ID, secret, and environment match your PayPal account.');
+    setMessage((currentMessage) => currentMessage || 'PayPal encountered an error. Check that the saved PayPal client ID, secret, and environment match your PayPal account.');
     console.error('PayPal error:', err);
   }, []);
 
@@ -523,9 +530,7 @@ function CheckoutContent() {
     const renderButtons = async () => {
       let renderedAnyButton = false;
       for (const option of paypalFundingButtons) {
-        const fundingSource = option.fundingKey === 'PAYPAL'
-          ? paypal.FUNDING?.PAYPAL
-          : paypal.FUNDING?.VENMO;
+        const fundingSource = paypal.FUNDING?.[option.fundingKey];
         const button = paypal.Buttons({
           fundingSource,
           createOrder: createPaypalOrder,
@@ -572,8 +577,11 @@ function CheckoutContent() {
             total: { label: 'The Psychic Link', amount: grandTotal.toFixed(2), type: 'final' },
           });
           session.onvalidatemerchant = async (event) => {
-            const merchantSession = await applePay.validateMerchant(event);
-            session.completeMerchantValidation(merchantSession);
+            const validation = await applePay.validateMerchant({
+              validationUrl: event.validationURL,
+              displayName: 'The Psychic Link',
+            });
+            session.completeMerchantValidation(validation.merchantSession ?? validation);
           };
           session.onpaymentauthorized = async (event) => {
             try {
@@ -684,6 +692,14 @@ function CheckoutContent() {
           onError={() => {
             setStatus('error');
             setMessage('PayPal checkout could not load. Check the PayPal client ID and browser connection.');
+          }}
+        />
+      )}
+      {paypalClientId && (
+        <Script
+          src="https://applepay.cdn-apple.com/jsapi/1.latest/apple-pay-sdk.js"
+          onLoad={() => {
+            if (paypalLoaded) renderApplePay();
           }}
         />
       )}
@@ -965,7 +981,9 @@ function CheckoutContent() {
               ) : (
                 <div className="space-y-3">
                   <div id="paypal-button-paypal" className="min-h-12" />
+                  <div id="paypal-button-card" className="min-h-12" />
                   <div id="paypal-button-venmo" className="min-h-12" />
+                  <div id="paypal-button-paylater" className="min-h-12" />
                   <div id="paypal-apple-pay-container" />
                   <div id="paypal-google-pay-container" />
                   <p className="text-xs text-gray-500">
