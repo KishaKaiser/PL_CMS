@@ -555,6 +555,13 @@ function isAllowedService(rate: ShippingRate, allowedServiceCodes: string[]) {
     return isUspsPackageRate(rate);
   }
 
+  if (
+    serviceKey === 'usps_first_class_mail' &&
+    allowedServiceCodes.includes('usps_first_class_mail')
+  ) {
+    return isUspsPackageRate(rate);
+  }
+
   if (allowedServiceCodes.includes(serviceKey)) return true;
 
   if (serviceKey === 'usps_priority_mail') {
