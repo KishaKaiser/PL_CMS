@@ -32,6 +32,7 @@ interface PayPalButtonConfig {
     shape?: 'rect' | 'pill';
     height?: number;
     tagline?: boolean;
+    disableMaxWidth?: boolean;
   };
   createOrder: () => Promise<string>;
   onApprove: (data: { orderID: string }) => Promise<void>;
@@ -147,6 +148,25 @@ interface CouponValidation {
   code: string;
   discountAmount: number;
   message: string;
+}
+
+interface PurchasedItem {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  variantColor?: string;
+}
+
+interface CompletedOrder {
+  orderId: string;
+  paypalOrderId?: string;
+  items: PurchasedItem[];
+  subtotal: number;
+  shipping: number;
+  discount: number;
+  tax: number;
+  total: number;
+  currency: string;
 }
 
 interface FreeShippingSettings {
@@ -295,16 +315,58 @@ function clearPaymentButtonContainers() {
   });
 }
 
+function stretchPaymentContainer(container: HTMLElement | null) {
+  if (!container) return;
+  container.style.width = '100%';
+  container.style.maxWidth = 'none';
+  container.querySelectorAll<HTMLElement>('*').forEach((element) => {
+    element.style.width = '100%';
+    element.style.maxWidth = 'none';
+    element.style.minWidth = '100%';
+  });
+}
+
+function createCompletedOrderSnapshot(params: {
+  orderId: string;
+  paypalOrderId?: string;
+  cart: CartItem[];
+  subtotal: number;
+  shipping: number;
+  discount: number;
+  tax: number;
+  total: number;
+  currency: string;
+}): CompletedOrder {
+  return {
+    orderId: params.orderId,
+    paypalOrderId: params.paypalOrderId,
+    items: params.cart.map((item) => ({
+      name: item.product.name,
+      quantity: item.quantity,
+      unitPrice: Number(item.product.price),
+      variantColor: item.variantColor,
+    })),
+    subtotal: params.subtotal,
+    shipping: params.shipping,
+    discount: params.discount,
+    tax: params.tax,
+    total: params.total,
+    currency: params.currency,
+  };
+}
+
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const productId = searchParams.get('productId');
   const variantId = searchParams.get('variantId');
   const successParam = searchParams.get('success');
   const cancelledParam = searchParams.get('cancelled');
+  const successOrderId = searchParams.get('orderId');
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [completedOrder, setCompletedOrder] = useState<CompletedOrder | null>(null);
   const [paypalLoaded, setPaypalLoaded] = useState(false);
   const [paypalClientId, setPaypalClientId] = useState('');
   const [paypalClientToken, setPaypalClientToken] = useState('');
@@ -385,6 +447,47 @@ function CheckoutContent() {
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!successParam || !successOrderId || completedOrder) return;
+    void fetch(`/api/proxy/checkout/orders/${successOrderId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((order: {
+        id: string;
+        paypalOrderId?: string | null;
+        totalAmount: string | number;
+        currency: string;
+        shippingAmount?: string | number | null;
+        items?: Array<{
+          quantity: number;
+          unitPrice: string | number;
+          product?: { name?: string };
+        }>;
+      } | null) => {
+        if (!order) return;
+        const items = (order.items ?? []).map((item) => ({
+          name: item.product?.name ?? 'Product',
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+        }));
+        const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+        const shipping = Number(order.shippingAmount ?? 0);
+        const total = Number(order.totalAmount);
+        setCompletedOrder({
+          orderId: order.id,
+          paypalOrderId: order.paypalOrderId ?? undefined,
+          items,
+          subtotal,
+          shipping,
+          discount: 0,
+          tax: Math.max(0, total - subtotal - shipping),
+          total,
+          currency: order.currency || 'USD',
+        });
+        setStatus('success');
+      })
+      .catch(() => undefined);
+  }, [completedOrder, successOrderId, successParam]);
 
   useEffect(() => {
     if (cart.length === 0) return;
@@ -547,11 +650,26 @@ function CheckoutContent() {
       setMessage('Payment capture failed. Please contact support.');
       return;
     }
+    const data = (await res.json().catch(() => ({}))) as { orderId?: string; paypalOrderId?: string };
+    const orderSnapshot = createCompletedOrderSnapshot({
+      orderId: data.orderId ?? paypalOrderId,
+      paypalOrderId: data.paypalOrderId ?? paypalOrderId,
+      cart,
+      subtotal: itemsTotal,
+      shipping: shippingCost,
+      discount: discountAmount,
+      tax: taxAmount,
+      total: grandTotal,
+      currency: ecommerce.currency || 'USD',
+    });
     clearCart();
+    setCompletedOrder(orderSnapshot);
     setStatus('success');
     setMessage('Payment successful! Your order has been confirmed.');
     setCart([]);
-  }, []);
+    setShowCardFields(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [cart, discountAmount, ecommerce.currency, grandTotal, itemsTotal, shippingCost, taxAmount]);
 
   const handlePaypalError = useCallback((err: unknown) => {
     setStatus('error');
@@ -577,6 +695,7 @@ function CheckoutContent() {
             shape: 'rect',
             height: 48,
             tagline: false,
+            disableMaxWidth: true,
           },
           createOrder: createPaypalOrder,
           onApprove: async (data) => capturePaypalOrder(data.orderID),
@@ -585,6 +704,7 @@ function CheckoutContent() {
         if (button.isEligible && !button.isEligible()) continue;
         try {
           await Promise.resolve(button.render(`#paypal-button-${option.key}`));
+          stretchPaymentContainer(document.getElementById(`paypal-button-${option.key}`));
           renderedAnyButton = true;
         } catch (err) {
           renderedWallets.current.delete(option.key);
@@ -715,6 +835,7 @@ function CheckoutContent() {
         }
       };
       container.appendChild(button);
+      stretchPaymentContainer(container);
     }).catch((err) => {
       renderedWallets.current.delete('applepay');
       console.warn('Apple Pay is not available', err);
@@ -773,6 +894,7 @@ function CheckoutContent() {
       button.style.height = '48px';
       button.style.minHeight = '48px';
       container.appendChild(button);
+      stretchPaymentContainer(container);
     }).catch((err) => {
       renderedWallets.current.delete('googlepay');
       console.warn('Google Pay is not available', err);
@@ -797,11 +919,15 @@ function CheckoutContent() {
     }
   }, [paypalRendered]);
 
+  if (completedOrder) {
+    return <OrderSuccessPanel order={completedOrder} />;
+  }
+
   if (successParam) {
     return (
       <div className="rounded-lg border border-green-200 bg-green-50 p-8 text-center">
         <h1 className="mb-3 text-2xl font-bold text-green-700">Payment Successful!</h1>
-        <p className="text-gray-600">Your order has been confirmed. Enjoy your minutes!</p>
+        <p className="text-gray-600">Loading your order confirmation...</p>
         <a href="/client" className="mt-6 inline-block text-purple-600 hover:underline">
           Go to Client Portal →
         </a>
@@ -1152,7 +1278,7 @@ function CheckoutContent() {
                         onClick={submitCardFields}
                         className="mt-4 h-12 w-full rounded-lg bg-purple-700 px-4 text-sm font-semibold text-white hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {status === 'loading' ? 'Processing...' : 'Pay by card'}
+                        {status === 'loading' ? 'Processing...' : 'Submit Payment'}
                       </button>
                       {!paypalClientToken && (
                         <p className="mt-3 text-xs text-yellow-700">
@@ -1195,6 +1321,94 @@ export default function CheckoutPage() {
       </Suspense>
     </main>
   );
+}
+
+function OrderSuccessPanel({ order }: { order: CompletedOrder }) {
+  const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  return (
+    <div className="rounded-2xl border border-green-200 bg-white p-6 shadow-sm print:border-0 print:shadow-none">
+      <div className="flex flex-col gap-4 border-b pb-5 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-wide text-green-700">Order placed</p>
+          <h1 className="mt-2 text-3xl font-bold text-gray-950">Thank you for your order.</h1>
+          <p className="mt-2 text-gray-600">
+            Your payment was successful and your order has been confirmed.
+          </p>
+          <p className="mt-3 text-sm text-gray-500">
+            Order #{order.orderId}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="h-11 rounded-lg border border-purple-200 px-4 text-sm font-semibold text-purple-700 hover:bg-purple-50 print:hidden"
+        >
+          Print receipt
+        </button>
+      </div>
+
+      <div className="mt-6">
+        <h2 className="text-lg font-semibold text-gray-950">Products purchased</h2>
+        <div className="mt-3 overflow-hidden rounded-xl border">
+          {order.items.map((item, index) => (
+            <div key={`${item.name}-${index}`} className="flex items-start justify-between gap-4 border-b p-4 last:border-b-0">
+              <div>
+                <p className="font-medium text-gray-950">{item.name}</p>
+                {item.variantColor && <p className="text-sm text-gray-500">{item.variantColor}</p>}
+                <p className="text-sm text-gray-500">Qty {item.quantity}</p>
+              </div>
+              <p className="font-semibold text-gray-900">
+                {formatCurrency(item.unitPrice * item.quantity, order.currency)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-xl bg-gray-50 p-4">
+        <div className="flex justify-between py-1 text-sm text-gray-600">
+          <span>Items ({itemCount})</span>
+          <span>{formatCurrency(order.subtotal, order.currency)}</span>
+        </div>
+        {order.discount > 0 && (
+          <div className="flex justify-between py-1 text-sm text-emerald-700">
+            <span>Discount</span>
+            <span>-{formatCurrency(order.discount, order.currency)}</span>
+          </div>
+        )}
+        <div className="flex justify-between py-1 text-sm text-gray-600">
+          <span>Shipping</span>
+          <span>{formatCurrency(order.shipping, order.currency)}</span>
+        </div>
+        {order.tax > 0 && (
+          <div className="flex justify-between py-1 text-sm text-gray-600">
+            <span>Tax</span>
+            <span>{formatCurrency(order.tax, order.currency)}</span>
+          </div>
+        )}
+        <div className="mt-3 flex justify-between border-t pt-3 text-lg font-bold text-gray-950">
+          <span>Total paid</span>
+          <span>{formatCurrency(order.total, order.currency)}</span>
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-3 print:hidden">
+        <a href="/client/orders" className="rounded-lg bg-purple-700 px-4 py-3 text-sm font-semibold text-white hover:bg-purple-800">
+          View orders
+        </a>
+        <a href="/shop" className="rounded-lg border border-purple-200 px-4 py-3 text-sm font-semibold text-purple-700 hover:bg-purple-50">
+          Continue shopping
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function formatCurrency(amount: number, currency: string) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currency || 'USD',
+  }).format(Number.isFinite(amount) ? amount : 0);
 }
 
 async function readErrorResponse(res: Response) {
