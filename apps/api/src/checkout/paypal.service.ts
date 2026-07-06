@@ -8,6 +8,11 @@ interface PaypalAccessTokenResponse {
   expires_in: number;
 }
 
+interface PaypalClientTokenResponse {
+  client_token: string;
+  expires_in: number;
+}
+
 interface PaypalOrderUnit {
   reference_id: string;
   amount: { currency_code: string; value: string };
@@ -57,6 +62,29 @@ export class PaypalService {
       clientId: credentials.clientId,
       environment: credentials.environment === 'live' ? 'live' : 'sandbox',
     };
+  }
+
+  async getClientToken(): Promise<{ clientToken: string }> {
+    const credentialsConfig = await this.getCredentials();
+    const token = await this.getAccessToken();
+
+    const res = await fetch(`${this.getBaseUrl(credentialsConfig.environment)}/v1/identity/generate-token`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Accept-Language': 'en_US',
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      this.logger.error(`PayPal client token error: ${text}`);
+      throw new InternalServerErrorException('Failed to generate PayPal client token');
+    }
+
+    const data = (await res.json()) as PaypalClientTokenResponse;
+    return { clientToken: data.client_token };
   }
 
   private async getCredentials() {

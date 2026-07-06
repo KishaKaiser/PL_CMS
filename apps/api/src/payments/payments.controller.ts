@@ -38,6 +38,12 @@ export class PaymentsController {
     return this.paypal.getPublicConfig();
   }
 
+  /** Expose a short-lived PayPal client token for Advanced Card Fields. */
+  @Get('paypal-client-token')
+  getPaypalClientToken() {
+    return this.paypal.getClientToken();
+  }
+
   /**
    * PayPal webhook endpoint.
    * PayPal sends raw JSON; we pass headers + raw body for signature verification.

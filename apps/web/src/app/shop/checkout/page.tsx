@@ -27,6 +27,12 @@ declare global {
 
 interface PayPalButtonConfig {
   fundingSource?: string;
+  style?: {
+    layout?: 'vertical' | 'horizontal';
+    shape?: 'rect' | 'pill';
+    height?: number;
+    tagline?: boolean;
+  };
   createOrder: () => Promise<string>;
   onApprove: (data: { orderID: string }) => Promise<void>;
   onError: (err: unknown) => void;
@@ -39,10 +45,10 @@ interface PayPalButton {
 
 interface PayPalNamespace {
   Buttons: (config: PayPalButtonConfig) => PayPalButton;
+  CardFields?: (config: PayPalCardFieldsConfig) => PayPalCardFields;
   FUNDING?: {
     PAYPAL?: string;
     VENMO?: string;
-    CARD?: string;
     PAYLATER?: string;
     CREDIT?: string;
   };
@@ -67,6 +73,25 @@ interface PayPalNamespace {
     }>;
     confirmOrder: (payload: { orderId: string; paymentMethodData: unknown }) => Promise<{ status: string }>;
   };
+}
+
+interface PayPalCardFieldsConfig {
+  style?: {
+    input?: Record<string, string>;
+    '.invalid'?: Record<string, string>;
+  };
+  createOrder: () => Promise<string>;
+  onApprove: (data: { orderID: string }) => Promise<void>;
+  onError: (err: unknown) => void;
+}
+
+interface PayPalCardFields {
+  isEligible?: () => boolean;
+  NameField: () => { render: (selector: string) => Promise<void> | void };
+  NumberField: () => { render: (selector: string) => Promise<void> | void };
+  ExpiryField: () => { render: (selector: string) => Promise<void> | void };
+  CVVField: () => { render: (selector: string) => Promise<void> | void };
+  submit: () => Promise<void>;
 }
 
 interface GooglePayNamespace {
@@ -238,7 +263,6 @@ const defaultEcommerceSettings: EcommerceSettings = {
 
 const paypalFundingButtons = [
   { key: 'paypal', label: 'PayPal', fundingKey: 'PAYPAL' },
-  { key: 'card', label: 'Debit or credit card', fundingKey: 'CARD' },
   { key: 'venmo', label: 'Venmo', fundingKey: 'VENMO' },
   { key: 'paylater', label: 'Pay Later', fundingKey: 'PAYLATER' },
 ] as const;
@@ -248,8 +272,8 @@ function createPaypalSdkUrl(clientId: string) {
     'client-id': clientId,
     currency: 'USD',
     intent: 'capture',
-    components: 'buttons,applepay,googlepay',
-    'enable-funding': 'venmo,paylater,card,credit',
+    components: 'buttons,card-fields,applepay,googlepay',
+    'enable-funding': 'venmo,paylater,credit',
   });
   return `https://www.paypal.com/sdk/js?${params.toString()}`;
 }
@@ -257,9 +281,12 @@ function createPaypalSdkUrl(clientId: string) {
 function clearPaymentButtonContainers() {
   [
     'paypal-button-paypal',
-    'paypal-button-card',
     'paypal-button-venmo',
     'paypal-button-paylater',
+    'paypal-card-name',
+    'paypal-card-number',
+    'paypal-card-expiry',
+    'paypal-card-cvv',
     'paypal-apple-pay-container',
     'paypal-google-pay-container',
   ].forEach((id) => {
@@ -280,9 +307,12 @@ function CheckoutContent() {
   const [message, setMessage] = useState('');
   const [paypalLoaded, setPaypalLoaded] = useState(false);
   const [paypalClientId, setPaypalClientId] = useState('');
+  const [paypalClientToken, setPaypalClientToken] = useState('');
   const [paypalEnvironment, setPaypalEnvironment] = useState<'sandbox' | 'live'>('sandbox');
   const [paypalRendered, setPaypalRendered] = useState(false);
+  const [cardFieldsReady, setCardFieldsReady] = useState(false);
   const [googlePayLoaded, setGooglePayLoaded] = useState(false);
+  const cardFields = useRef<PayPalCardFields | null>(null);
   const renderedWallets = useRef(new Set<string>());
 
   // Shipping state
@@ -327,11 +357,14 @@ function CheckoutContent() {
 
   // Fetch PayPal client ID
   useEffect(() => {
-    fetch('/api/proxy/payments/paypal-client-id')
-      .then((r) => r.json())
-      .then((data: { clientId?: string; environment?: 'sandbox' | 'live' }) => {
+    Promise.all([
+      fetch('/api/proxy/payments/paypal-client-id').then((r) => r.json()),
+      fetch('/api/proxy/payments/paypal-client-token').then((r) => (r.ok ? r.json() : {})),
+    ])
+      .then(([data, tokenData]: [{ clientId?: string; environment?: 'sandbox' | 'live' }, { clientToken?: string }]) => {
         if (data.clientId) setPaypalClientId(data.clientId);
         if (data.environment === 'live' || data.environment === 'sandbox') setPaypalEnvironment(data.environment);
+        if (tokenData.clientToken) setPaypalClientToken(tokenData.clientToken);
       })
       .catch(() => {
         // Silently fail; user will see "not configured" message
@@ -536,6 +569,12 @@ function CheckoutContent() {
         renderedWallets.current.add(option.key);
         const button = paypal.Buttons({
           fundingSource,
+          style: {
+            layout: 'vertical',
+            shape: 'rect',
+            height: 48,
+            tagline: false,
+          },
           createOrder: createPaypalOrder,
           onApprove: async (data) => capturePaypalOrder(data.orderID),
           onError: handlePaypalError,
@@ -556,6 +595,61 @@ function CheckoutContent() {
     };
     void renderButtons();
   }, [canPay, capturePaypalOrder, cart.length, createPaypalOrder, handlePaypalError, paypalRendered, selectedRate]);
+
+  const renderCardFields = useCallback(() => {
+    const paypal = window.paypal;
+    if (!paypal?.CardFields || !selectedRate || !canPay || renderedWallets.current.has('card-fields')) return;
+
+    renderedWallets.current.add('card-fields');
+    const fields = paypal.CardFields({
+      style: {
+        input: {
+          'font-size': '16px',
+          color: '#111827',
+          'font-family': 'Arial, sans-serif',
+        },
+        '.invalid': {
+          color: '#dc2626',
+        },
+      },
+      createOrder: createPaypalOrder,
+      onApprove: async (data) => capturePaypalOrder(data.orderID),
+      onError: handlePaypalError,
+    });
+
+    if (fields.isEligible && !fields.isEligible()) {
+      renderedWallets.current.delete('card-fields');
+      return;
+    }
+
+    cardFields.current = fields;
+    void (async () => {
+      try {
+        await Promise.all([
+          Promise.resolve(fields.NameField().render('#paypal-card-name')),
+          Promise.resolve(fields.NumberField().render('#paypal-card-number')),
+          Promise.resolve(fields.ExpiryField().render('#paypal-card-expiry')),
+          Promise.resolve(fields.CVVField().render('#paypal-card-cvv')),
+        ]);
+        setCardFieldsReady(true);
+      } catch (err) {
+        cardFields.current = null;
+        setCardFieldsReady(false);
+        renderedWallets.current.delete('card-fields');
+        console.warn('PayPal card fields could not render', err);
+      }
+    })();
+  }, [canPay, capturePaypalOrder, createPaypalOrder, handlePaypalError, selectedRate]);
+
+  const submitCardFields = useCallback(async () => {
+    if (!cardFields.current) return;
+    try {
+      setStatus('loading');
+      await cardFields.current.submit();
+    } catch (err) {
+      handlePaypalError(err);
+    }
+  }, [handlePaypalError]);
 
   const renderApplePay = useCallback(() => {
     const paypal = window.paypal;
@@ -671,13 +765,16 @@ function CheckoutContent() {
   useEffect(() => {
     if (paypalLoaded && cart.length > 0 && selectedRate && canPay) {
       renderPaypalButtons();
+      renderCardFields();
       renderApplePay();
       if (googlePayLoaded) renderGooglePay();
     }
-  }, [paypalLoaded, googlePayLoaded, canPay, cart, selectedRate, renderPaypalButtons, renderApplePay, renderGooglePay]);
+  }, [paypalLoaded, googlePayLoaded, canPay, cart, selectedRate, renderPaypalButtons, renderCardFields, renderApplePay, renderGooglePay]);
 
   useEffect(() => {
     if (!paypalRendered) {
+      cardFields.current = null;
+      setCardFieldsReady(false);
       renderedWallets.current.clear();
       clearPaymentButtonContainers();
     }
@@ -711,7 +808,9 @@ function CheckoutContent() {
     <>
       {paypalClientId && (
         <Script
+          key={`${paypalClientId}-${paypalClientToken || 'wallets'}`}
           src={createPaypalSdkUrl(paypalClientId)}
+          data-client-token={paypalClientToken || undefined}
           onLoad={() => setPaypalLoaded(true)}
           onError={() => {
             setStatus('error');
@@ -1000,13 +1099,48 @@ function CheckoutContent() {
                   Complete the astrology chart details above to continue.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <div id="paypal-button-paypal" className="min-h-12" />
-                  <div id="paypal-button-card" className="min-h-12" />
-                  <div id="paypal-button-venmo" className="min-h-12" />
-                  <div id="paypal-button-paylater" className="min-h-12" />
-                  <div id="paypal-apple-pay-container" />
-                  <div id="paypal-google-pay-container" />
+                <div className="space-y-4">
+                  <div className="space-y-3">
+                    <div id="paypal-button-paypal" className="min-h-12" />
+                    <div id="paypal-button-venmo" className="min-h-12" />
+                    <div id="paypal-button-paylater" className="min-h-12" />
+                    <div id="paypal-apple-pay-container" />
+                    <div id="paypal-google-pay-container" />
+                  </div>
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <h3 className="text-sm font-semibold text-gray-900">Debit or credit card</h3>
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Name on card</label>
+                        <div id="paypal-card-name" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Card number</label>
+                        <div id="paypal-card-number" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">Expiration</label>
+                        <div id="paypal-card-expiry" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">CVV</label>
+                        <div id="paypal-card-cvv" className="min-h-12 rounded-lg border bg-white px-3 py-3" />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!cardFieldsReady || status === 'loading'}
+                      onClick={submitCardFields}
+                      className="mt-4 h-12 w-full rounded-lg bg-purple-700 px-4 text-sm font-semibold text-white hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {status === 'loading' ? 'Processing...' : 'Pay by card'}
+                    </button>
+                    {!paypalClientToken && (
+                      <p className="mt-3 text-xs text-yellow-700">
+                        Card fields require PayPal Advanced Credit and Debit Card Payments plus a valid PayPal client token.
+                      </p>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500">
                     Apple Pay, Google Pay, and Venmo appear only when PayPal marks them eligible for this browser, device, and PayPal account.
                   </p>
