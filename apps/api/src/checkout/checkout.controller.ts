@@ -16,7 +16,7 @@ import { Role } from '@pl-cms/shared';
 
 @Controller('checkout')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
-@Roles(Role.CLIENT)
+@Roles(Role.ADMIN, Role.ADVISOR, Role.EDITOR, Role.CLIENT)
 export class CheckoutController {
   constructor(private readonly checkoutService: CheckoutService) {}
 
