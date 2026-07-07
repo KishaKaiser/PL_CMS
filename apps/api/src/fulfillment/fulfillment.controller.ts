@@ -3,24 +3,43 @@ import {
   Get,
   Post,
   Patch,
+  Put,
   Body,
   Param,
   Query,
+  Req,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Roles, RolesGuard } from '../auth/roles.guard';
 import { Role } from '@pl-cms/shared';
 import { FulfillmentService } from './fulfillment.service';
+import { ShipStationCustomStoreService } from './shipstation-custom-store.service';
 import { BuyLabelDto, UpdateOrderStatusDto, UpdateShipmentStatusDto } from './fulfillment.dto';
 
 @Controller('fulfillment')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @Roles(Role.ADMIN)
 export class FulfillmentController {
-  constructor(private readonly fulfillmentService: FulfillmentService) {}
+  constructor(
+    private readonly fulfillmentService: FulfillmentService,
+    private readonly customStore: ShipStationCustomStoreService,
+  ) {}
+
+  @Get('shipstation-custom-store')
+  getShipStationCustomStoreInfo(@Req() request: Request) {
+    return this.customStore.getConnectionInfo(getBaseUrl(request));
+  }
+
+  @Put('shipstation-custom-store')
+  updateShipStationCustomStoreSettings(
+    @Body() dto: { username?: string; password?: string },
+  ) {
+    return this.customStore.upsertConnectionSettings(dto);
+  }
 
   /** List all orders (admin). Supports ?status=CONFIRMED&search=…&page=1&limit=20 */
   @Get('orders')
@@ -70,4 +89,12 @@ export class FulfillmentController {
   ) {
     return this.fulfillmentService.updateShipmentStatus(shipmentId, dto);
   }
+}
+
+function getBaseUrl(request: Request) {
+  const forwardedProto = request.header('x-forwarded-proto')?.split(',')[0]?.trim();
+  const forwardedHost = request.header('x-forwarded-host')?.split(',')[0]?.trim();
+  const protocol = forwardedProto || request.protocol || 'https';
+  const host = forwardedHost || request.header('host') || '';
+  return `${protocol}://${host}`;
 }
