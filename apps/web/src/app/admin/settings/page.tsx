@@ -641,7 +641,17 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
-            <div className="space-y-4 rounded-lg border border-gray-200 p-4">
+            <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
+              <h3 className="text-sm font-semibold text-purple-950">Shipping</h3>
+              <p className="mt-1 text-xs text-purple-800">
+                ShipStation credentials, warehouse origin, rate services, markup, custom store connection, and diagnostics now live together.
+              </p>
+              <a href="/admin/settings/shipping" className="mt-3 inline-flex rounded border border-purple-300 bg-white px-3 py-1.5 text-xs font-medium text-purple-900 hover:bg-purple-100">
+                Open Shipping
+              </a>
+            </div>
+
+            <div className="hidden">
               <div>
                 <h3 className="text-sm font-semibold text-gray-700">Shipping</h3>
                 <p className="text-xs text-gray-500">Keep carrier and fulfillment API details with store settings.</p>
