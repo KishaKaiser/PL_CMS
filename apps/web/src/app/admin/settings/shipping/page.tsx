@@ -40,6 +40,13 @@ interface TestQuoteResult {
   }>;
 }
 
+interface CustomStoreConnection {
+  endpointUrl: string;
+  usernameConfigured: boolean;
+  passwordConfigured: boolean;
+  authentication: string;
+}
+
 const emptyForm: WarehouseAddress = {
   warehouseId: '',
   fullName: '',
@@ -68,12 +75,15 @@ const defaultTestAddress = {
 export default function ShippingSettingsPage() {
   const [form, setForm] = useState<WarehouseAddress>(emptyForm);
   const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
+  const [customStore, setCustomStore] = useState<CustomStoreConnection | null>(null);
+  const [customStoreForm, setCustomStoreForm] = useState({ username: '', password: '' });
   const [testAddress, setTestAddress] = useState(defaultTestAddress);
   const [testPackage, setTestPackage] = useState({ weightOz: 16, lengthIn: 10, widthIn: 10, heightIn: 10 });
   const [testResult, setTestResult] = useState<TestQuoteResult | null>(null);
   const [copyStatus, setCopyStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingCustomStore, setSavingCustomStore] = useState(false);
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -82,13 +92,21 @@ export default function ShippingSettingsPage() {
     Promise.all([
       fetch('/api/proxy/shipping/warehouse-address'),
       fetch('/api/proxy/shipping/diagnostics'),
+      fetch('/api/proxy/fulfillment/shipstation-custom-store'),
     ])
-      .then(async ([addressRes, diagnosticsRes]) => {
+      .then(async ([addressRes, diagnosticsRes, customStoreRes]) => {
         if (addressRes.ok) {
           const data = (await addressRes.json()) as WarehouseAddress | null;
           if (data) setForm({ ...emptyForm, ...data });
         }
         if (diagnosticsRes.ok) setDiagnostics((await diagnosticsRes.json()) as Record<string, unknown>);
+        if (customStoreRes.ok) {
+          const data = (await customStoreRes.json()) as CustomStoreConnection;
+          setCustomStore({
+            ...data,
+            endpointUrl: `${window.location.origin}/api/shipstation/custom-store`,
+          });
+        }
       })
       .catch(() => undefined)
       .finally(() => setLoading(false));
@@ -114,6 +132,33 @@ export default function ShippingSettingsPage() {
       setError(err instanceof Error ? err.message : 'Error saving');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveCustomStoreSettings(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingCustomStore(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch('/api/proxy/fulfillment/shipstation-custom-store', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(customStoreForm),
+      });
+      const data = (await res.json().catch(() => ({}))) as Partial<CustomStoreConnection> & { message?: string };
+      if (!res.ok) throw new Error(data.message ?? 'Failed to save ShipStation custom store credentials.');
+      setCustomStore((current) => current ? {
+        ...current,
+        usernameConfigured: Boolean(data.usernameConfigured),
+        passwordConfigured: Boolean(data.passwordConfigured),
+      } : current);
+      setCustomStoreForm({ username: '', password: '' });
+      setSuccess('ShipStation custom store connection saved.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save ShipStation custom store connection.');
+    } finally {
+      setSavingCustomStore(false);
     }
   }
 
@@ -267,6 +312,56 @@ export default function ShippingSettingsPage() {
           Environment variables are only used as a fallback.
         </p>
       </div>
+
+      <section className="mt-6 rounded-lg border bg-white p-5 text-sm shadow-sm">
+        <h2 className="mb-3 text-lg font-semibold text-gray-900">ShipStation Custom Store Connection</h2>
+        <p className="text-gray-500">
+          Use this connection when adding PL_CMS as a Custom Store inside ShipStation.
+          ShipStation will pull paid physical orders and send tracking updates back to PL_CMS.
+        </p>
+        <div className="mt-4 rounded bg-gray-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Endpoint URL</p>
+          <code className="mt-1 block break-all text-sm text-gray-900">
+            {customStore?.endpointUrl ?? `${typeof window === 'undefined' ? '' : window.location.origin}/api/shipstation/custom-store`}
+          </code>
+        </div>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Authentication</dt>
+            <dd className="mt-1 text-gray-800">{customStore?.authentication ?? 'Basic HTTP Authentication'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Credentials</dt>
+            <dd className="mt-1 text-gray-800">
+              {customStore?.usernameConfigured && customStore.passwordConfigured ? 'Configured' : 'Not configured'}
+            </dd>
+          </div>
+        </dl>
+        <form onSubmit={saveCustomStoreSettings} className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm font-medium text-gray-700">Username
+            <input
+              value={customStoreForm.username}
+              onChange={(event) => setCustomStoreForm((current) => ({ ...current, username: event.target.value }))}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              placeholder="Choose a username for ShipStation"
+            />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">Password
+            <input
+              type="password"
+              value={customStoreForm.password}
+              onChange={(event) => setCustomStoreForm((current) => ({ ...current, password: event.target.value }))}
+              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              placeholder="Choose a strong password"
+            />
+          </label>
+          <div className="sm:col-span-2">
+            <button type="submit" disabled={savingCustomStore} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+              {savingCustomStore ? 'Saving...' : 'Save Custom Store Credentials'}
+            </button>
+          </div>
+        </form>
+      </section>
 
       {diagnostics && (
         <section className="mt-6 rounded-lg border bg-white p-5 text-sm shadow-sm">
