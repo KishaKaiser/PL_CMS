@@ -32,7 +32,7 @@ const NAV_GROUPS = [
       { href: '/admin/products', label: 'Products' },
       { href: '/admin/orders', label: 'Orders' },
       { href: '/admin/store', label: 'Store Settings' },
-      { href: '/admin/settings/shipping', label: 'Shipping Origin' },
+      { href: '/admin/settings/shipping', label: 'Shipping & ShipStation' },
       { href: '/admin/google-merchant', label: 'Google Merchant' },
     ],
   },
