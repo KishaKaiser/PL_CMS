@@ -685,6 +685,15 @@ export default function AdminSettingsPage() {
                   Set warehouse origin
                 </a>
               </div>
+              <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 text-sm text-purple-950">
+                <p className="font-medium">ShipStation custom store connection</p>
+                <p className="mt-1 text-xs text-purple-800">
+                  Create the endpoint username and password ShipStation uses to pull PL_CMS orders and send tracking updates back.
+                </p>
+                <a href="/admin/settings/shipping" className="mt-3 inline-flex rounded border border-purple-300 bg-white px-3 py-1.5 text-xs font-medium text-purple-900 hover:bg-purple-100">
+                  Open custom store connection
+                </a>
+              </div>
               <label className="block text-sm font-medium text-gray-700">
                 Provider
                 <select
