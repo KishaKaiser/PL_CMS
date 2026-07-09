@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@pl-cms/db';
 import { ConfigService } from '@nestjs/config';
+import * as http from 'node:http';
+import * as https from 'node:https';
 import { PrismaService } from '../prisma/prisma.service';
 import { AstrologyReportFormDto } from '../checkout/checkout.dto';
 
@@ -19,6 +21,12 @@ interface AstrologyApiResponse {
   reportText?: string;
   text?: string;
   fileName?: string;
+}
+
+interface AstrologyHttpResponse {
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
 }
 
 @Injectable()
@@ -194,14 +202,14 @@ async function postAstrologyRequest(settings: AstrologyApiSettings, body: Record
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), ASTROLOGY_API_TIMEOUT_MS);
     try {
-      return await fetch(endpoint, {
+      return await requestAstrologyEndpoint(endpoint, {
         method: 'POST',
-        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           ...(settings.apiKey ? { Authorization: `Bearer ${settings.apiKey}` } : {}),
         },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
     } catch (error: unknown) {
       errors.push(`${endpoint}: ${formatFetchError(error)}`);
@@ -211,6 +219,92 @@ async function postAstrologyRequest(settings: AstrologyApiSettings, body: Record
   }
 
   throw new Error(`Could not reach the astrology API. ${errors.join(' ')}`);
+}
+
+async function requestAstrologyEndpoint(
+  endpoint: string,
+  init: {
+    method: string;
+    headers: Record<string, string>;
+    body: string;
+    signal: AbortSignal;
+  },
+): Promise<AstrologyHttpResponse> {
+  if (usesLocalLinkSelfSignedTls(endpoint)) {
+    return requestLocalLinkEndpoint(endpoint, init);
+  }
+
+  return fetch(endpoint, init);
+}
+
+function usesLocalLinkSelfSignedTls(endpoint: string) {
+  try {
+    const url = new URL(endpoint);
+    return url.protocol === 'https:' && url.hostname.endsWith('.link');
+  } catch {
+    return false;
+  }
+}
+
+function requestLocalLinkEndpoint(
+  endpoint: string,
+  init: {
+    method: string;
+    headers: Record<string, string>;
+    body: string;
+    signal: AbortSignal;
+  },
+  redirectsRemaining = 3,
+): Promise<AstrologyHttpResponse> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(endpoint);
+    const transport = url.protocol === 'https:' ? https : http;
+    const request = transport.request(
+      url,
+      {
+        method: init.method,
+        headers: {
+          ...init.headers,
+          'Content-Length': Buffer.byteLength(init.body),
+        },
+        ...(url.protocol === 'https:' ? { rejectUnauthorized: false } : {}),
+      },
+      (response) => {
+        const status = response.statusCode ?? 0;
+        const location = response.headers.location;
+        if (location && [301, 302, 303, 307, 308].includes(status) && redirectsRemaining > 0) {
+          response.resume();
+          const nextUrl = new URL(location, url).toString();
+          requestLocalLinkEndpoint(nextUrl, init, redirectsRemaining - 1).then(resolve).catch(reject);
+          return;
+        }
+
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          resolve({
+            ok: status >= 200 && status < 300,
+            status,
+            json: async () => {
+              try {
+                return JSON.parse(text);
+              } catch {
+                return {};
+              }
+            },
+          });
+        });
+      },
+    );
+
+    const abort = () => request.destroy(new Error('request aborted'));
+    init.signal.addEventListener('abort', abort, { once: true });
+    request.on('error', reject);
+    request.on('close', () => init.signal.removeEventListener('abort', abort));
+    request.write(init.body);
+    request.end();
+  });
 }
 
 function normalizeEndpoint(value: string) {
