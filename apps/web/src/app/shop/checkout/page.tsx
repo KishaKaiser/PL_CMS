@@ -624,22 +624,27 @@ function CheckoutContent() {
 
   const createPaypalOrder = useCallback(async () => {
     setStatus('loading');
+    const checkoutPayload = {
+      items: cart.map((item) => ({
+        productId: item.product.id,
+        variantId: item.variantId,
+        quantity: item.quantity,
+      })),
+      ...(requiresShipping
+        ? {
+            shippingAddress,
+            shippingCarrier: selectedRate?.carrierCode,
+            shippingService: selectedRate?.serviceCode,
+            shippingAmount: shippingCost,
+          }
+        : {}),
+      couponCode: coupon?.valid ? coupon.code : undefined,
+      astrologyForms: astrologyItems.map((item) => astrologyForms[item.product.id]).filter(Boolean),
+    };
     const res = await fetch('/api/proxy/checkout/paypal-order', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        items: cart.map((item) => ({
-          productId: item.product.id,
-          variantId: item.variantId,
-          quantity: item.quantity,
-        })),
-        shippingAddress,
-        shippingCarrier: selectedRate?.carrierCode,
-        shippingService: selectedRate?.serviceCode,
-        shippingAmount: shippingCost,
-        couponCode: coupon?.valid ? coupon.code : undefined,
-        astrologyForms: astrologyItems.map((item) => astrologyForms[item.product.id]).filter(Boolean),
-      }),
+      body: JSON.stringify(checkoutPayload),
     });
     if (!res.ok) {
       const err = (await res.json().catch(() => ({}))) as { message?: string };
@@ -649,7 +654,7 @@ function CheckoutContent() {
     }
     const data = (await res.json()) as { paypalOrderId: string };
     return data.paypalOrderId;
-  }, [astrologyForms, astrologyItems, cart, coupon, selectedRate, shippingAddress, shippingCost]);
+  }, [astrologyForms, astrologyItems, cart, coupon, requiresShipping, selectedRate, shippingAddress, shippingCost]);
 
   const capturePaypalOrder = useCallback(async (paypalOrderId: string) => {
     const res = await fetch(
