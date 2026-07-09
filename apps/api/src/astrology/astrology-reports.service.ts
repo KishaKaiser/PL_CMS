@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AstrologyReportFormDto } from '../checkout/checkout.dto';
 
 const ASTROLOGY_API_SETTINGS_KEY = 'astrology_api_settings';
+const ASTROLOGY_API_TIMEOUT_MS = 45_000;
 
 interface AstrologyApiSettings {
   endpointUrl?: string;
@@ -108,18 +109,11 @@ export class AstrologyReportsService {
     });
 
     try {
-      const response = await fetch(settings.endpointUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(settings.apiKey ? { Authorization: `Bearer ${settings.apiKey}` } : {}),
-        },
-        body: JSON.stringify({
-          reportId: report.id,
-          orderId: report.order.id,
-          productName: report.product.name,
-          formData: report.formData,
-        }),
+      const response = await postAstrologyRequest(settings, {
+        reportId: report.id,
+        orderId: report.order.id,
+        productName: report.product.name,
+        formData: report.formData,
       });
 
       const payload = (await response.json().catch(() => ({}))) as AstrologyApiResponse & { message?: string };
@@ -159,8 +153,8 @@ export class AstrologyReportsService {
     const saved = await this.prisma.setting.findUnique({ where: { key: ASTROLOGY_API_SETTINGS_KEY } });
     const parsed = parseJson<AstrologyApiSettings>(saved?.value);
     return {
-      endpointUrl: parsed?.endpointUrl || this.config.get<string>('ASTROLOGY_API_ENDPOINT') || '',
-      apiKey: parsed?.apiKey || this.config.get<string>('ASTROLOGY_API_KEY') || '',
+      endpointUrl: normalizeEndpoint(parsed?.endpointUrl || this.config.get<string>('ASTROLOGY_API_ENDPOINT') || ''),
+      apiKey: parsed?.apiKey?.trim() || this.config.get<string>('ASTROLOGY_API_KEY') || '',
     };
   }
 }
@@ -190,4 +184,72 @@ function parseJson<T>(value: string | undefined): T | null {
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'astrology-report';
+}
+
+async function postAstrologyRequest(settings: AstrologyApiSettings, body: Record<string, unknown>) {
+  const endpoints = getEndpointCandidates(settings.endpointUrl ?? '');
+  const errors: string[] = [];
+
+  for (const endpoint of endpoints) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ASTROLOGY_API_TIMEOUT_MS);
+    try {
+      return await fetch(endpoint, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(settings.apiKey ? { Authorization: `Bearer ${settings.apiKey}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error: unknown) {
+      errors.push(`${endpoint}: ${formatFetchError(error)}`);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw new Error(`Could not reach the astrology API. ${errors.join(' ')}`);
+}
+
+function normalizeEndpoint(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
+
+function getEndpointCandidates(endpoint: string) {
+  const normalized = normalizeEndpoint(endpoint);
+  if (!normalized) return [];
+  const candidates = [normalized];
+
+  try {
+    const url = new URL(normalized);
+    if (url.hostname.endsWith('.link') && url.protocol === 'https:') {
+      url.protocol = 'http:';
+      candidates.push(url.toString());
+    }
+  } catch {
+    return candidates;
+  }
+
+  return Array.from(new Set(candidates));
+}
+
+function formatFetchError(error: unknown) {
+  if (error instanceof Error) {
+    const cause = (error as Error & { cause?: unknown }).cause;
+    if (cause instanceof Error) return `${error.message} (${cause.message})`;
+    if (cause && typeof cause === 'object') {
+      const detail = cause as Record<string, unknown>;
+      const code = typeof detail.code === 'string' ? detail.code : '';
+      const syscall = typeof detail.syscall === 'string' ? detail.syscall : '';
+      const hostname = typeof detail.hostname === 'string' ? detail.hostname : '';
+      const message = [code, syscall, hostname].filter(Boolean).join(' ');
+      return message ? `${error.message} (${message})` : error.message;
+    }
+    return error.name === 'AbortError' ? `request timed out after ${ASTROLOGY_API_TIMEOUT_MS / 1000} seconds` : error.message;
+  }
+  return 'fetch failed';
 }
