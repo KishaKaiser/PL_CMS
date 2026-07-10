@@ -27,6 +27,7 @@ interface AstrologyHttpResponse {
   ok: boolean;
   status: number;
   json: () => Promise<unknown>;
+  text: () => Promise<string>;
 }
 
 @Injectable()
@@ -124,9 +125,9 @@ export class AstrologyReportsService {
         formData: report.formData,
       });
 
-      const payload = (await response.json().catch(() => ({}))) as AstrologyApiResponse & { message?: string };
+      const { payload, text } = await readAstrologyResponse(response);
       if (!response.ok) {
-        throw new Error(payload.message ?? `Astrology API returned ${response.status}`);
+        throw new Error(payload.message ?? formatAstrologyApiError(response.status, text));
       }
 
       const reportUrl = payload.reportUrl ?? payload.downloadUrl ?? payload.url ?? null;
@@ -293,6 +294,7 @@ function requestLocalLinkEndpoint(
                 return {};
               }
             },
+            text: async () => text,
           });
         });
       },
@@ -346,4 +348,25 @@ function formatFetchError(error: unknown) {
     return error.name === 'AbortError' ? `request timed out after ${ASTROLOGY_API_TIMEOUT_MS / 1000} seconds` : error.message;
   }
   return 'fetch failed';
+}
+
+async function readAstrologyResponse(response: AstrologyHttpResponse) {
+  const text = await response.text().catch(() => '');
+  return {
+    text,
+    payload: parseJson<AstrologyApiResponse & { message?: string }>(text) ?? {},
+  };
+}
+
+function formatAstrologyApiError(status: number, text: string) {
+  const detail = cleanResponseText(text);
+  return detail ? `Astrology API returned ${status}: ${detail}` : `Astrology API returned ${status}`;
+}
+
+function cleanResponseText(text: string) {
+  return text
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500);
 }
