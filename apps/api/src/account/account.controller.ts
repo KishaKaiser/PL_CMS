@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Request,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -15,7 +16,8 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { mkdirSync } from 'fs';
+import { createReadStream, mkdirSync } from 'fs';
+import type { Response } from 'express';
 import {
   ALLOWED_MEDIA_MIME_TYPES,
   MAX_MEDIA_FILE_SIZE,
@@ -61,6 +63,18 @@ export class AccountController {
   @Post('downloads/:id/generate')
   generateDownload(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.astrologyReports.generateReport(id, req.user.id);
+  }
+
+  @Get('downloads/:id/file')
+  async downloadReportFile(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const file = await this.astrologyReports.getReportFile(id, req.user.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${file.fileName}"`);
+    createReadStream(file.filePath).pipe(res);
   }
 
   @Get('addresses')
