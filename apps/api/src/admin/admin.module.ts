@@ -51,6 +51,6 @@ import { DefaultContentModule } from '../bootstrap/default-content.module';
     ModulesService,
     ThemeBuilderService,
   ],
-  exports: [AuditService],
+  exports: [AuditService, PostsService],
 })
 export class AdminModule {}

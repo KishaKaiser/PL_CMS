@@ -94,6 +94,7 @@ model User {
   builderLayoutsUpdated BuilderLayout[] @relation("BuilderLayoutUpdatedBy")
   builderLayoutVersions BuilderLayoutVersion[] @relation("BuilderLayoutVersionCreatedBy")
   astrologyReports AstrologyReport[]
+  astrologyCharts  AstrologyChart[]
   builderTemplates BuilderTemplate[] @relation("BuilderTemplateCreatedBy")
   globalComponents GlobalComponent[] @relation("GlobalComponentCreatedBy")
   cmsThemes CmsTheme[] @relation("CmsThemeCreatedBy")
@@ -900,6 +901,30 @@ model AstrologyReport {
   @@index([orderId])
   @@index([productId])
   @@map("astrology_reports")
+}
+
+// Ad-hoc, admin-generated astrology charts (Chart Library) — natal previews,
+// synastry, karmic, family, transits, electional, and rectification. Not tied
+// to an order; kept separate from AstrologyReport, which is purchase-driven.
+model AstrologyChart {
+  id           String    @id @default(cuid())
+  createdById  String
+  reportType   String
+  title        String
+  inputData    Json
+  chartData    Json
+  resultData   Json?
+  aiText       String?
+  status       String    @default("READY")
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([createdById])
+  @@index([reportType])
+  @@map("astrology_charts")
 }
 
 // ──────────────────────────────────────────────

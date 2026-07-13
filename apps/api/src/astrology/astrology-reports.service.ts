@@ -1,34 +1,17 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@pl-cms/db';
 import { ConfigService } from '@nestjs/config';
-import * as http from 'node:http';
-import * as https from 'node:https';
+import type { Prisma } from '@pl-cms/db';
+import { access } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { AstrologyReportFormDto } from '../checkout/checkout.dto';
-
-const ASTROLOGY_API_SETTINGS_KEY = 'astrology_api_settings';
-const ASTROLOGY_API_TIMEOUT_MS = 45_000;
-
-interface AstrologyApiSettings {
-  endpointUrl?: string;
-  apiKey?: string;
-}
-
-interface AstrologyApiResponse {
-  reportUrl?: string;
-  downloadUrl?: string;
-  url?: string;
-  reportText?: string;
-  text?: string;
-  fileName?: string;
-}
-
-interface AstrologyHttpResponse {
-  ok: boolean;
-  status: number;
-  json: () => Promise<unknown>;
-  text: () => Promise<string>;
-}
+import { AstrologyChartsService } from './astrology-charts.service';
+import { PreviewAstrologyChartDto } from './astrology.dto';
+import { resolveBirthCoordinates } from './birth-data.util';
+import { generateChartData } from './chart-engine';
+import { OllamaClient } from './ollama-client';
+import { getOllamaSettings } from './ollama-settings.util';
+import { buildOllamaPrompt, writeChartPdf } from './report-renderer';
 
 @Injectable()
 export class AstrologyReportsService {
@@ -37,6 +20,8 @@ export class AstrologyReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly ollama: OllamaClient,
+    private readonly chartsService: AstrologyChartsService,
   ) {}
 
   async listUserDownloads(userId: string) {
@@ -48,6 +33,40 @@ export class AstrologyReportsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async previewChart(dto: PreviewAstrologyChartDto, userId: string) {
+    const name = readRequiredString(dto.name, 'name');
+    const date = readRequiredString(dto.date, 'date');
+    const time = readRequiredString(dto.time, 'time');
+    const city = readRequiredString(dto.city, 'city');
+    const country = readRequiredString(dto.country, 'country');
+    const state = readOptionalString(dto.state) ?? '';
+    const resolved = await resolveBirthCoordinates({ city, state, country, latitude: dto.latitude, longitude: dto.longitude });
+
+    const notes = readOptionalString(dto.notes);
+    const chart = generateChartData({
+      name,
+      date,
+      time,
+      location: resolved.location,
+      latitude: resolved.latitude,
+      longitude: resolved.longitude,
+      timezone: readOptionalString(dto.timezone),
+      coordinateSource: resolved.coordinateSource,
+      notes,
+    });
+
+    await this.chartsService.createChart({
+      id: chart.id,
+      createdById: userId,
+      reportType: 'natal',
+      title: chart.name,
+      inputData: dto as unknown as object,
+      chartData: chart as unknown as object,
+    });
+
+    return chart;
   }
 
   async createReportsForOrder(
@@ -101,48 +120,70 @@ export class AstrologyReportsService {
       throw new BadRequestException('The order must be paid before this report can be generated.');
     }
 
-    const settings = await this.getSettings();
-    if (!settings.endpointUrl) {
-      return this.prisma.astrologyReport.update({
-        where: { id: report.id },
-        data: {
-          status: 'PENDING',
-          errorMessage: 'Astrology API endpoint is not configured in Admin Settings.',
-        },
-      });
-    }
-
     await this.prisma.astrologyReport.update({
       where: { id: report.id },
       data: { status: 'GENERATING', errorMessage: null },
     });
 
     try {
-      const response = await postAstrologyRequest(settings, {
-        reportId: report.id,
-        orderId: report.order.id,
-        productName: report.product.name,
-        formData: report.formData,
+      const formData = parseAstrologyForm(report.formData);
+      const settings = await this.getSettings();
+      const resolved = await resolveBirthCoordinates({
+        city: formData.birthCity,
+        state: formData.birthState,
+        country: formData.birthCountry,
+        latitude: formData.birthLatitude,
+        longitude: formData.birthLongitude,
       });
 
-      const { payload, text } = await readAstrologyResponse(response);
-      if (!response.ok) {
-        throw new Error(payload.message ?? formatAstrologyApiError(response.status, text));
+      const chart = generateChartData({
+        name: formData.fullName,
+        date: formData.birthDate,
+        time: formData.birthTime,
+        location: resolved.location,
+        latitude: resolved.latitude,
+        longitude: resolved.longitude,
+        timezone: formData.timezone,
+        coordinateSource: resolved.coordinateSource,
+      });
+      const prompt = buildOllamaPrompt(chart, formData.notes);
+      const ollamaReportText = await this.ollama.generate(prompt, {
+        baseUrl: settings.ollamaBaseUrl,
+        model: settings.ollamaModel,
+      });
+      if (!ollamaReportText) {
+        throw new Error(
+          'The astrology interpretation could not be generated. Check the Ollama URL and model settings, then try generating the report again.',
+        );
+      }
+      if (!hasCompleteInterpretation(ollamaReportText)) {
+        throw new Error(
+          'The astrology interpretation was incomplete. Try generating the report again, or use a larger Ollama model/context window.',
+        );
       }
 
-      const reportUrl = payload.reportUrl ?? payload.downloadUrl ?? payload.url ?? null;
-      const reportText = payload.reportText ?? payload.text ?? null;
-      if (!reportUrl && !reportText) {
-        throw new Error('Astrology API did not return a report URL or report text.');
-      }
+      const reportText = ollamaReportText;
+      const fileName = `${slugify(report.product.name)}-${report.id}.pdf`;
+      await writeChartPdf({
+        chart,
+        reportText,
+        reportsDir: this.getReportsDir(),
+        fileName,
+      });
 
       return this.prisma.astrologyReport.update({
         where: { id: report.id },
         data: {
           status: 'READY',
-          reportUrl,
+          reportUrl: `/api/proxy/account/downloads/${report.id}/file`,
           reportText,
-          fileName: payload.fileName ?? `${slugify(report.product.name)}-${report.id}.pdf`,
+          fileName,
+          formData: {
+            ...formData,
+            birthLatitude: resolved.latitude,
+            birthLongitude: resolved.longitude,
+            geocodedLocation: resolved.coordinateSource === 'geocoded' ? resolved.location : null,
+          } as Prisma.InputJsonObject,
           errorMessage: null,
           generatedAt: new Date(),
         },
@@ -158,14 +199,45 @@ export class AstrologyReportsService {
     }
   }
 
-  private async getSettings(): Promise<AstrologyApiSettings> {
-    const saved = await this.prisma.setting.findUnique({ where: { key: ASTROLOGY_API_SETTINGS_KEY } });
-    const parsed = parseJson<AstrologyApiSettings>(saved?.value);
-    return {
-      endpointUrl: normalizeEndpoint(parsed?.endpointUrl || this.config.get<string>('ASTROLOGY_API_ENDPOINT') || ''),
-      apiKey: parsed?.apiKey?.trim() || this.config.get<string>('ASTROLOGY_API_KEY') || '',
-    };
+  async getReportFile(reportId: string, userId: string) {
+    const report = await this.prisma.astrologyReport.findFirst({
+      where: { id: reportId, userId },
+      select: { fileName: true, status: true },
+    });
+    if (!report) throw new NotFoundException('Download not found');
+    if (report.status !== 'READY' || !report.fileName) {
+      throw new NotFoundException('Report file is not ready');
+    }
+
+    const fileName = sanitizeFileName(report.fileName);
+    const filePath = join(this.getReportsDir(), fileName);
+    await access(filePath).catch(() => {
+      throw new NotFoundException('Report file not found');
+    });
+
+    return { fileName, filePath };
   }
+
+  private getReportsDir() {
+    return resolve(this.config.get<string>('ASTROLOGY_REPORTS_DIR') || 'storage/astrology-reports');
+  }
+
+  private getSettings() {
+    return getOllamaSettings(this.prisma, this.config);
+  }
+}
+
+interface ParsedAstrologyForm {
+  fullName: string;
+  birthDate: string;
+  birthTime: string;
+  birthCity: string;
+  birthState: string;
+  birthCountry: string;
+  birthLatitude?: number | null;
+  birthLongitude?: number | null;
+  timezone?: string | null;
+  notes?: string | null;
 }
 
 function cleanAstrologyForm(form: AstrologyReportFormDto) {
@@ -177,196 +249,62 @@ function cleanAstrologyForm(form: AstrologyReportFormDto) {
     birthCity: form.birthCity.trim(),
     birthState: form.birthState.trim(),
     birthCountry: form.birthCountry.trim(),
+    birthLatitude: readOptionalNumber(form.birthLatitude),
+    birthLongitude: readOptionalNumber(form.birthLongitude),
     timezone: form.timezone?.trim() || null,
     notes: form.notes?.trim() || null,
   };
 }
 
-function parseJson<T>(value: string | undefined): T | null {
-  if (!value) return null;
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return null;
+function parseAstrologyForm(value: Prisma.JsonValue): ParsedAstrologyForm {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Astrology form data is invalid.');
   }
+  const form = value as Record<string, unknown>;
+  const parsed = {
+    fullName: readRequiredString(form.fullName, 'fullName'),
+    birthDate: readRequiredString(form.birthDate, 'birthDate'),
+    birthTime: readRequiredString(form.birthTime, 'birthTime'),
+    birthCity: readRequiredString(form.birthCity, 'birthCity'),
+    birthState: readRequiredString(form.birthState, 'birthState'),
+    birthCountry: readRequiredString(form.birthCountry, 'birthCountry'),
+    birthLatitude: readOptionalNumber(form.birthLatitude),
+    birthLongitude: readOptionalNumber(form.birthLongitude),
+    timezone: readOptionalString(form.timezone),
+    notes: readOptionalString(form.notes),
+  };
+  return parsed;
+}
+
+function readRequiredString(value: unknown, field: string) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`Astrology form is missing ${field}.`);
+  }
+  return value.trim();
+}
+
+function readOptionalString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function readOptionalNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'astrology-report';
 }
 
-async function postAstrologyRequest(settings: AstrologyApiSettings, body: Record<string, unknown>) {
-  const endpoints = getEndpointCandidates(settings.endpointUrl ?? '');
-  const errors: string[] = [];
-
-  for (const endpoint of endpoints) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), ASTROLOGY_API_TIMEOUT_MS);
-    try {
-      return await requestAstrologyEndpoint(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(settings.apiKey ? { Authorization: `Bearer ${settings.apiKey}` } : {}),
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-    } catch (error: unknown) {
-      errors.push(`${endpoint}: ${formatFetchError(error)}`);
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  throw new Error(`Could not reach the astrology API. ${errors.join(' ')}`);
+function sanitizeFileName(value: string) {
+  return value.replace(/[^a-z0-9._-]/gi, '');
 }
 
-async function requestAstrologyEndpoint(
-  endpoint: string,
-  init: {
-    method: string;
-    headers: Record<string, string>;
-    body: string;
-    signal: AbortSignal;
-  },
-): Promise<AstrologyHttpResponse> {
-  if (usesLocalLinkSelfSignedTls(endpoint)) {
-    return requestLocalLinkEndpoint(endpoint, init);
-  }
-
-  return fetch(endpoint, init);
-}
-
-function usesLocalLinkSelfSignedTls(endpoint: string) {
-  try {
-    const url = new URL(endpoint);
-    return url.protocol === 'https:' && url.hostname.endsWith('.link');
-  } catch {
-    return false;
-  }
-}
-
-function requestLocalLinkEndpoint(
-  endpoint: string,
-  init: {
-    method: string;
-    headers: Record<string, string>;
-    body: string;
-    signal: AbortSignal;
-  },
-  redirectsRemaining = 3,
-): Promise<AstrologyHttpResponse> {
-  return new Promise((resolve, reject) => {
-    const url = new URL(endpoint);
-    const transport = url.protocol === 'https:' ? https : http;
-    const request = transport.request(
-      url,
-      {
-        method: init.method,
-        headers: {
-          ...init.headers,
-          'Content-Length': Buffer.byteLength(init.body),
-        },
-        ...(url.protocol === 'https:' ? { rejectUnauthorized: false } : {}),
-      },
-      (response) => {
-        const status = response.statusCode ?? 0;
-        const location = response.headers.location;
-        if (location && [301, 302, 303, 307, 308].includes(status) && redirectsRemaining > 0) {
-          response.resume();
-          const nextUrl = new URL(location, url).toString();
-          requestLocalLinkEndpoint(nextUrl, init, redirectsRemaining - 1).then(resolve).catch(reject);
-          return;
-        }
-
-        const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => chunks.push(chunk));
-        response.on('end', () => {
-          const text = Buffer.concat(chunks).toString('utf8');
-          resolve({
-            ok: status >= 200 && status < 300,
-            status,
-            json: async () => {
-              try {
-                return JSON.parse(text);
-              } catch {
-                return {};
-              }
-            },
-            text: async () => text,
-          });
-        });
-      },
-    );
-
-    const abort = () => request.destroy(new Error('request aborted'));
-    init.signal.addEventListener('abort', abort, { once: true });
-    request.on('error', reject);
-    request.on('close', () => init.signal.removeEventListener('abort', abort));
-    request.write(init.body);
-    request.end();
-  });
-}
-
-function normalizeEndpoint(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
-}
-
-function getEndpointCandidates(endpoint: string) {
-  const normalized = normalizeEndpoint(endpoint);
-  if (!normalized) return [];
-  const candidates = [normalized];
-
-  try {
-    const url = new URL(normalized);
-    if (url.hostname.endsWith('.link') && url.protocol === 'https:') {
-      url.protocol = 'http:';
-      candidates.push(url.toString());
-    }
-  } catch {
-    return candidates;
-  }
-
-  return Array.from(new Set(candidates));
-}
-
-function formatFetchError(error: unknown) {
-  if (error instanceof Error) {
-    const cause = (error as Error & { cause?: unknown }).cause;
-    if (cause instanceof Error) return `${error.message} (${cause.message})`;
-    if (cause && typeof cause === 'object') {
-      const detail = cause as Record<string, unknown>;
-      const code = typeof detail.code === 'string' ? detail.code : '';
-      const syscall = typeof detail.syscall === 'string' ? detail.syscall : '';
-      const hostname = typeof detail.hostname === 'string' ? detail.hostname : '';
-      const message = [code, syscall, hostname].filter(Boolean).join(' ');
-      return message ? `${error.message} (${message})` : error.message;
-    }
-    return error.name === 'AbortError' ? `request timed out after ${ASTROLOGY_API_TIMEOUT_MS / 1000} seconds` : error.message;
-  }
-  return 'fetch failed';
-}
-
-async function readAstrologyResponse(response: AstrologyHttpResponse) {
-  const text = await response.text().catch(() => '');
-  return {
-    text,
-    payload: parseJson<AstrologyApiResponse & { message?: string }>(text) ?? {},
-  };
-}
-
-function formatAstrologyApiError(status: number, text: string) {
-  const detail = cleanResponseText(text);
-  return detail ? `Astrology API returned ${status}: ${detail}` : `Astrology API returned ${status}`;
-}
-
-function cleanResponseText(text: string) {
-  return text
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 500);
+function hasCompleteInterpretation(value: string) {
+  const sectionMatches = value.match(/##\s*(?:1[0-3]|[1-9])\./g);
+  return new Set(sectionMatches ?? []).size >= 13;
 }
