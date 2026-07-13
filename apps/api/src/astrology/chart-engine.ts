@@ -28,7 +28,7 @@ export interface ChartData {
   latitude: number;
   longitude: number;
   timezone: string;
-  coordinateSource: 'provided' | 'fallback';
+  coordinateSource: 'provided' | 'geocoded' | 'fallback';
   planets: ChartPlanet[];
   houses: ChartHouse[];
   aspects: ChartAspect[];
@@ -84,6 +84,7 @@ export function generateChartData(input: {
   latitude?: number | null;
   longitude?: number | null;
   timezone?: string | null;
+  coordinateSource?: 'provided' | 'geocoded' | 'fallback';
 }): ChartData {
   const hasCoordinates = Number.isFinite(input.latitude) && Number.isFinite(input.longitude);
   const latitude = hasCoordinates ? Number(input.latitude) : 0;
@@ -118,7 +119,7 @@ export function generateChartData(input: {
     latitude,
     longitude,
     timezone,
-    coordinateSource: hasCoordinates ? 'provided' : 'fallback',
+    coordinateSource: input.coordinateSource || (hasCoordinates ? 'provided' : 'fallback'),
     planets,
     houses,
     aspects: calculateAspects(planets),

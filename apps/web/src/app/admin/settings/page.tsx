@@ -62,9 +62,9 @@ interface ShippingApiForm {
   markupAmount: string;
 }
 
-interface AstrologyApiForm {
-  endpointUrl: string;
-  apiKey: string;
+interface AstrologyReportForm {
+  ollamaBaseUrl: string;
+  ollamaModel: string;
 }
 
 interface SiteHomepageForm {
@@ -83,7 +83,7 @@ const SITE_POSTS_PAGE_KEY = SITE_SETTING_KEYS.SITE_POSTS_PAGE;
 const SITE_EXTENSION_POINTS_KEY = SITE_SETTING_KEYS.SITE_EXTENSION_POINTS;
 const BILLING_API_SETTINGS_KEY = 'billing_api_settings';
 const SHIPPING_API_SETTINGS_KEY = 'shipping_api_settings';
-const ASTROLOGY_API_SETTINGS_KEY = 'astrology_api_settings';
+const ASTROLOGY_REPORT_SETTINGS_KEY = 'astrology_report_settings';
 
 const defaultIdentityForm: SiteIdentityForm = {
   ...DEFAULT_SITE_IDENTITY,
@@ -112,9 +112,9 @@ const defaultShippingApiForm: ShippingApiForm = {
   markupAmount: '0',
 };
 
-const defaultAstrologyApiForm: AstrologyApiForm = {
-  endpointUrl: '',
-  apiKey: '',
+const defaultAstrologyReportForm: AstrologyReportForm = {
+  ollamaBaseUrl: 'http://localhost:11434',
+  ollamaModel: '',
 };
 
 const shipStationServiceOptions = [
@@ -199,7 +199,7 @@ export default function AdminSettingsPage() {
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [billingApiForm, setBillingApiForm] = useState<BillingApiForm>(defaultBillingApiForm);
   const [shippingApiForm, setShippingApiForm] = useState<ShippingApiForm>(defaultShippingApiForm);
-  const [astrologyApiForm, setAstrologyApiForm] = useState<AstrologyApiForm>(defaultAstrologyApiForm);
+  const [astrologyReportForm, setAstrologyReportForm] = useState<AstrologyReportForm>(defaultAstrologyReportForm);
 
   const publishedPages = useMemo(
     () => pages.filter((page) => Boolean(page.publishedAt)),
@@ -212,7 +212,7 @@ export default function AdminSettingsPage() {
     const postsPage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_POSTS_PAGE_KEY));
     const billingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, BILLING_API_SETTINGS_KEY));
     const shippingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SHIPPING_API_SETTINGS_KEY));
-    const astrologyApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, ASTROLOGY_API_SETTINGS_KEY));
+    const astrologyReport = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, ASTROLOGY_REPORT_SETTINGS_KEY));
 
     setIdentityForm({
       title: readString(identity?.title, defaultIdentityForm.title),
@@ -253,9 +253,9 @@ export default function AdminSettingsPage() {
       markupType: readOption(shippingApi?.markupType, ['fixed', 'percentage'] as const, defaultShippingApiForm.markupType),
       markupAmount: readStringOrNumber(shippingApi?.markupAmount, defaultShippingApiForm.markupAmount),
     });
-    setAstrologyApiForm({
-      endpointUrl: readString(astrologyApi?.endpointUrl, defaultAstrologyApiForm.endpointUrl),
-      apiKey: readString(astrologyApi?.apiKey, defaultAstrologyApiForm.apiKey),
+    setAstrologyReportForm({
+      ollamaBaseUrl: readString(astrologyReport?.ollamaBaseUrl, defaultAstrologyReportForm.ollamaBaseUrl),
+      ollamaModel: readString(astrologyReport?.ollamaModel, defaultAstrologyReportForm.ollamaModel),
     });
   }, []);
 
@@ -831,29 +831,29 @@ export default function AdminSettingsPage() {
             <div>
               <h3 className="text-sm font-semibold text-gray-700">Astrology Reports</h3>
               <p className="text-xs text-gray-500">
-                Connect PL_CMS checkout to the astrology report backend.
+                Generate report PDFs inside PL_CMS and optionally enrich them with Ollama.
               </p>
             </div>
             <input
-              value={astrologyApiForm.endpointUrl}
-              onChange={(event) => setAstrologyApiForm((currentForm) => ({ ...currentForm, endpointUrl: event.target.value }))}
-              placeholder="Report endpoint URL, for example http://api-astrology.link/generate-report"
+              value={astrologyReportForm.ollamaBaseUrl}
+              onChange={(event) => setAstrologyReportForm((currentForm) => ({ ...currentForm, ollamaBaseUrl: event.target.value }))}
+              placeholder="Ollama URL, for example http://localhost:11434"
               className="w-full rounded border px-3 py-2 text-sm"
             />
             <input
-              value={astrologyApiForm.apiKey}
-              onChange={(event) => setAstrologyApiForm((currentForm) => ({ ...currentForm, apiKey: event.target.value }))}
-              placeholder="API key or token (optional)"
+              value={astrologyReportForm.ollamaModel}
+              onChange={(event) => setAstrologyReportForm((currentForm) => ({ ...currentForm, ollamaModel: event.target.value }))}
+              placeholder="Ollama model name, for example llama3.1"
               className="w-full rounded border px-3 py-2 text-sm"
             />
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => void saveManagedSetting(ASTROLOGY_API_SETTINGS_KEY, astrologyApiForm)}
-                disabled={saving[ASTROLOGY_API_SETTINGS_KEY] || loading}
+                onClick={() => void saveManagedSetting(ASTROLOGY_REPORT_SETTINGS_KEY, astrologyReportForm)}
+                disabled={saving[ASTROLOGY_REPORT_SETTINGS_KEY] || loading}
                 className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                {saving[ASTROLOGY_API_SETTINGS_KEY] ? 'Saving…' : 'Save astrology API'}
+                {saving[ASTROLOGY_REPORT_SETTINGS_KEY] ? 'Saving…' : 'Save astrology reports'}
               </button>
             </div>
           </div>

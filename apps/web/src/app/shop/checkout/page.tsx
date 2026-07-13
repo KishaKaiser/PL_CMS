@@ -1481,18 +1481,24 @@ function CheckoutInput({
   onChange,
   required,
   type = 'text',
+  step,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
   type?: string;
+  step?: string;
+  placeholder?: string;
 }) {
   return (
     <label className="block text-sm font-medium text-gray-700">
       {label}{required ? ' *' : ''}
       <input
         type={type}
+        step={step}
+        placeholder={placeholder}
         value={value}
         required={required}
         onChange={(event) => onChange(event.target.value)}

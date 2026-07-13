@@ -6,6 +6,7 @@ import {
   Min,
   IsOptional,
   IsNumber,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ShippingAddressDto } from '../shipping/shipping.dto';
@@ -44,6 +45,20 @@ export class AstrologyReportFormDto {
 
   @IsString()
   birthCountry!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  birthLatitude?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  birthLongitude?: number;
 
   @IsOptional()
   @IsString()
