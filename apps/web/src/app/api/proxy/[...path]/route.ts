@@ -26,6 +26,7 @@ const ALLOWED_PATH_PREFIXES = [
   'sliders',
   'newsletter',
   'store',
+  'astrology',
   'public',
 ];
 

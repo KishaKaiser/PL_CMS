@@ -8,6 +8,10 @@ export async function writeChartPdf(options: {
   reportsDir: string;
   fileName: string;
 }) {
+  if (options.chart.coordinateSource === 'fallback') {
+    throw new Error('The birth location must resolve to valid coordinates before creating the astrology report PDF.');
+  }
+
   await mkdir(options.reportsDir, { recursive: true });
   const lines = buildPdfLines(options.chart, options.reportText);
   const pdf = createSimplePdf(lines);
@@ -16,35 +20,84 @@ export async function writeChartPdf(options: {
   return filePath;
 }
 
-export function buildFallbackReportText(chart: ChartData) {
-  const sun = chart.planets.find((planet) => planet.name === 'Sun');
-  const moon = chart.planets.find((planet) => planet.name === 'Moon');
-  const mercury = chart.planets.find((planet) => planet.name === 'Mercury');
-  const venus = chart.planets.find((planet) => planet.name === 'Venus');
-  const mars = chart.planets.find((planet) => planet.name === 'Mars');
-  const strongestAspects = chart.aspects.slice(0, 6);
-
-  return [
-    `${chart.name}'s chart centers on ${sun ? `a ${sun.sign} Sun in House ${sun.house}` : 'the solar life path'}, with emotional needs shaped by ${moon ? `a ${moon.sign} Moon in House ${moon.house}` : 'the Moon placement'}.`,
-    mercury ? `Mercury in ${mercury.sign} points to a communication style that works through ${mercury.sign} themes and House ${mercury.house} concerns.` : '',
-    venus ? `Venus in ${venus.sign} describes affection, attraction, and values through House ${venus.house}.` : '',
-    mars ? `Mars in ${mars.sign} shows how motivation and desire are expressed, especially around House ${mars.house} matters.` : '',
-    strongestAspects.length
-      ? `Key aspect patterns include ${strongestAspects.map((aspect) => `${aspect.planet1} ${aspect.type} ${aspect.planet2}`).join(', ')}.`
-      : 'No major aspects were found within the configured orbs, so house and sign placements carry extra interpretive weight.',
-    'Use this chart as a foundation for a fuller intuitive reading, with special attention to repeated signs, emphasized houses, and the relationship between the Sun, Moon, Ascendant, and Midheaven.',
-  ].filter(Boolean).join('\n\n');
-}
-
 export function buildOllamaPrompt(chart: ChartData, notes?: string | null) {
-  return [
-    'Write a professional astrology report for this natal chart.',
-    'Use a warm, practical tone. Include strengths, growth themes, emotional patterns, relationship style, and life direction.',
-    'Do not mention that you are an AI. Do not invent missing birth data.',
+  const sun = findPlanet(chart, 'Sun');
+  const moon = findPlanet(chart, 'Moon');
+  const mercury = findPlanet(chart, 'Mercury');
+  const venus = findPlanet(chart, 'Venus');
+  const mars = findPlanet(chart, 'Mars');
+  const jupiter = findPlanet(chart, 'Jupiter');
+  const saturn = findPlanet(chart, 'Saturn');
+  const uranus = findPlanet(chart, 'Uranus');
+  const neptune = findPlanet(chart, 'Neptune');
+  const pluto = findPlanet(chart, 'Pluto');
+  const risingSign = chart.houses.find((house) => house.number === 1)?.sign || 'Unknown';
+  const mcSign = chart.houses.find((house) => house.number === 10)?.sign || 'Unknown';
+  const elementCount = countElements(chart);
+  const modalityCount = countModalities(chart);
+  const aspectList = chart.aspects.length
+    ? chart.aspects.map((aspect) => `${aspect.planet1} ${aspect.type} ${aspect.planet2} (orb: ${aspect.orb.toFixed(2)} deg)`).join('\n')
+    : 'No major aspects found within the configured orbs.';
+  const chartData = [
+    `Birth Data: ${chart.name}, ${chart.date} at ${chart.time}, ${chart.location}`,
+    `Coordinates: ${chart.latitude.toFixed(4)}, ${chart.longitude.toFixed(4)} (${chart.coordinateSource})`,
+    `Ascendant: ${risingSign} ${chart.ascendant.toFixed(1)} deg | MC: ${mcSign} ${chart.midheaven.toFixed(1)} deg`,
     '',
-    ...buildChartSummary(chart),
+    `Planets: Sun ${formatPlacement(sun)}, Moon ${formatPlacement(moon)}, Mercury ${formatPlacement(mercury)}, Venus ${formatPlacement(venus)}, Mars ${formatPlacement(mars)}, Jupiter ${formatPlacement(jupiter)}, Saturn ${formatPlacement(saturn)}, Uranus ${formatPlacement(uranus)}, Neptune ${formatPlacement(neptune)}, Pluto ${formatPlacement(pluto)}`,
+    '',
+    `Elements: Fire ${elementCount.Fire}, Earth ${elementCount.Earth}, Air ${elementCount.Air}, Water ${elementCount.Water}`,
+    `Modalities: Cardinal ${modalityCount.Cardinal}, Fixed ${modalityCount.Fixed}, Mutable ${modalityCount.Mutable}`,
+    '',
+    `Major Aspects:\n${aspectList}`,
     notes ? `Client notes: ${notes}` : '',
   ].filter(Boolean).join('\n');
+
+  return [
+    'You are an expert professional astrologer writing a paid Psychic Link Charts natal report.',
+    'Generate a complete, readable report for a general audience. Do not mention that you are an AI. Do not invent missing birth data.',
+    'The report must include all 13 sections below, using the exact markdown headings shown. Each section should be 3-4 detailed paragraphs in a warm, professional tone.',
+    '',
+    chartData,
+    '',
+    '## 1. CHART OVERVIEW & DOMINANT THEMES',
+    `Analyze the overall chart energy. Discuss dominant elements (Fire ${elementCount.Fire}, Earth ${elementCount.Earth}, Air ${elementCount.Air}, Water ${elementCount.Water}) and modalities (Cardinal ${modalityCount.Cardinal}, Fixed ${modalityCount.Fixed}, Mutable ${modalityCount.Mutable}).`,
+    '',
+    '## 2. CORE IDENTITY: SUN, MOON & RISING',
+    `Sun in ${sun?.sign} House ${sun?.house}, Moon in ${moon?.sign} House ${moon?.house}, and Rising ${risingSign} at ${chart.ascendant.toFixed(1)} deg. Explain how these three create the essential nature.`,
+    '',
+    '## 3. COMMUNICATION & INTELLECT: MERCURY',
+    `Mercury in ${mercury?.sign} House ${mercury?.house}: discuss communication style, thinking patterns, learning preferences, and how they share ideas.`,
+    '',
+    '## 4. LOVE & VALUES: VENUS',
+    `Venus in ${venus?.sign} House ${venus?.house}: discuss love language, values, aesthetic preferences, pleasure, and relational harmony.`,
+    '',
+    '## 5. ACTION & DESIRE: MARS',
+    `Mars in ${mars?.sign} House ${mars?.house}: discuss drive, assertiveness, anger expression, desire, and motivation.`,
+    '',
+    '## 6. EXPANSION & WISDOM: JUPITER',
+    `Jupiter in ${jupiter?.sign} House ${jupiter?.house}: discuss growth, beliefs, optimism, luck, teaching gifts, and expansion of consciousness.`,
+    '',
+    '## 7. DISCIPLINE & LESSONS: SATURN',
+    `Saturn in ${saturn?.sign} House ${saturn?.house}: discuss responsibilities, fears, discipline, karmic patterns, limits to overcome, and mastery over time.`,
+    '',
+    '## 8. TRANSFORMATION & OUTER PLANETS',
+    `Uranus in ${uranus?.sign} House ${uranus?.house}, Neptune in ${neptune?.sign} House ${neptune?.house}, and Pluto in ${pluto?.sign} House ${pluto?.house}: discuss awakening, spirituality, imagination, shadow work, power, and transformation.`,
+    '',
+    '## 9. ASPECT PATTERNS & DYNAMICS',
+    'Analyze the major aspects and internal dynamics. Discuss tensions, harmonies, talent configurations, and how different parts of the personality interact.',
+    '',
+    '## 10. LIFE PATH & CAREER',
+    `MC in ${mcSign} at ${chart.midheaven.toFixed(1)} deg: discuss career path, public role, reputation, vocational direction, resources, and daily work.`,
+    '',
+    '## 11. RELATIONSHIPS & PARTNERSHIPS',
+    'Analyze 7th house themes, Venus-Mars dynamics, romantic partnership patterns, marriage indicators, business partnerships, gifts, and challenges.',
+    '',
+    '## 12. SOUL PURPOSE & SPIRITUAL PATH',
+    'Synthesize soul purpose, spiritual gifts, psychic abilities, past-life indicators, and areas for conscious evolution.',
+    '',
+    '## 13. PRACTICAL GUIDANCE & INTEGRATION',
+    'Provide concrete, actionable advice for shadow work, gifts to develop, life areas requiring attention, practices that support growth, and integration of the full chart.',
+  ].join('\n');
 }
 
 function buildPdfLines(chart: ChartData, reportText: string) {
@@ -59,9 +112,7 @@ function buildPdfLines(chart: ChartData, reportText: string) {
 }
 
 function buildChartSummary(chart: ChartData) {
-  const coordinateNote = chart.coordinateSource === 'fallback'
-    ? 'Coordinates could not be resolved. House placements use 0,0 and should be reviewed.'
-    : `Coordinates: ${chart.latitude.toFixed(4)}, ${chart.longitude.toFixed(4)} (${chart.coordinateSource})`;
+  const coordinateNote = `Coordinates: ${chart.latitude.toFixed(4)}, ${chart.longitude.toFixed(4)} (${chart.coordinateSource})`;
 
   return [
     `Name: ${chart.name}`,
@@ -142,4 +193,33 @@ function escapePdfText(value: string) {
 
 function formatDegree(value: number) {
   return `${value.toFixed(2)} deg`;
+}
+
+function findPlanet(chart: ChartData, name: string) {
+  return chart.planets.find((planet) => planet.name === name);
+}
+
+function formatPlacement(planet: ReturnType<typeof findPlanet>) {
+  return planet ? `${planet.sign} H${planet.house}` : 'unknown';
+}
+
+function countElements(chart: ChartData) {
+  const counts = { Fire: 0, Earth: 0, Air: 0, Water: 0 };
+  chart.planets.forEach((planet) => {
+    if (['Aries', 'Leo', 'Sagittarius'].includes(planet.sign)) counts.Fire += 1;
+    if (['Taurus', 'Virgo', 'Capricorn'].includes(planet.sign)) counts.Earth += 1;
+    if (['Gemini', 'Libra', 'Aquarius'].includes(planet.sign)) counts.Air += 1;
+    if (['Cancer', 'Scorpio', 'Pisces'].includes(planet.sign)) counts.Water += 1;
+  });
+  return counts;
+}
+
+function countModalities(chart: ChartData) {
+  const counts = { Cardinal: 0, Fixed: 0, Mutable: 0 };
+  chart.planets.forEach((planet) => {
+    if (['Aries', 'Cancer', 'Libra', 'Capricorn'].includes(planet.sign)) counts.Cardinal += 1;
+    if (['Taurus', 'Leo', 'Scorpio', 'Aquarius'].includes(planet.sign)) counts.Fixed += 1;
+    if (['Gemini', 'Virgo', 'Sagittarius', 'Pisces'].includes(planet.sign)) counts.Mutable += 1;
+  });
+  return counts;
 }
