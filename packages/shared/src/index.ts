@@ -282,3 +282,4 @@ export interface BillingSessionDto {
 }
 
 export * from './site-settings';
+export * from './astrology-types';

@@ -5,18 +5,13 @@ import { access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { AstrologyReportFormDto } from '../checkout/checkout.dto';
+import { AstrologyChartsService } from './astrology-charts.service';
 import { PreviewAstrologyChartDto } from './astrology.dto';
+import { resolveBirthCoordinates } from './birth-data.util';
 import { generateChartData } from './chart-engine';
-import { geocodeBirthLocation } from './geocoding';
 import { OllamaClient } from './ollama-client';
+import { getOllamaSettings } from './ollama-settings.util';
 import { buildOllamaPrompt, writeChartPdf } from './report-renderer';
-
-const ASTROLOGY_REPORT_SETTINGS_KEY = 'astrology_report_settings';
-
-interface AstrologyGenerationSettings {
-  ollamaBaseUrl?: string;
-  ollamaModel?: string;
-}
 
 @Injectable()
 export class AstrologyReportsService {
@@ -26,6 +21,7 @@ export class AstrologyReportsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly ollama: OllamaClient,
+    private readonly chartsService: AstrologyChartsService,
   ) {}
 
   async listUserDownloads(userId: string) {
@@ -39,44 +35,38 @@ export class AstrologyReportsService {
     });
   }
 
-  async previewChart(dto: PreviewAstrologyChartDto) {
+  async previewChart(dto: PreviewAstrologyChartDto, userId: string) {
     const name = readRequiredString(dto.name, 'name');
     const date = readRequiredString(dto.date, 'date');
     const time = readRequiredString(dto.time, 'time');
     const city = readRequiredString(dto.city, 'city');
     const country = readRequiredString(dto.country, 'country');
     const state = readOptionalString(dto.state) ?? '';
-    const providedLatitude = readOptionalNumber(dto.latitude);
-    const providedLongitude = readOptionalNumber(dto.longitude);
-    const hasProvidedCoordinates = isCoordinateInRange(providedLatitude, -90, 90)
-      && isCoordinateInRange(providedLongitude, -180, 180);
-    const geocoded = hasProvidedCoordinates
-      ? null
-      : await geocodeBirthLocation({ city, state, country });
-    const latitude = hasProvidedCoordinates ? providedLatitude : geocoded?.latitude ?? null;
-    const longitude = hasProvidedCoordinates ? providedLongitude : geocoded?.longitude ?? null;
+    const resolved = await resolveBirthCoordinates({ city, state, country, latitude: dto.latitude, longitude: dto.longitude });
 
-    if (!isCoordinateInRange(latitude, -90, 90) || !isCoordinateInRange(longitude, -180, 180)) {
-      throw new BadRequestException(
-        'The birth location could not be resolved to valid coordinates. Check the city, state, and country.',
-      );
-    }
+    const notes = readOptionalString(dto.notes);
+    const chart = generateChartData({
+      name,
+      date,
+      time,
+      location: resolved.location,
+      latitude: resolved.latitude,
+      longitude: resolved.longitude,
+      timezone: readOptionalString(dto.timezone),
+      coordinateSource: resolved.coordinateSource,
+      notes,
+    });
 
-    return {
-      ...generateChartData({
-        name,
-        date,
-        time,
-        location: geocoded?.displayName || [city, state, country].filter(Boolean).join(', '),
-        latitude,
-        longitude,
-        timezone: readOptionalString(dto.timezone),
-        coordinateSource: hasProvidedCoordinates ? 'provided' : 'geocoded',
-      }),
-      notes: readOptionalString(dto.notes),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+    await this.chartsService.createChart({
+      id: chart.id,
+      createdById: userId,
+      reportType: 'natal',
+      title: chart.name,
+      inputData: dto as unknown as object,
+      chartData: chart as unknown as object,
+    });
+
+    return chart;
   }
 
   async createReportsForOrder(
@@ -138,34 +128,23 @@ export class AstrologyReportsService {
     try {
       const formData = parseAstrologyForm(report.formData);
       const settings = await this.getSettings();
-      const providedLatitude = formData.birthLatitude;
-      const providedLongitude = formData.birthLongitude;
-      const hasProvidedCoordinates = hasBirthCoordinates(formData);
-      const geocoded = hasProvidedCoordinates
-        ? null
-        : await geocodeBirthLocation({
-          city: formData.birthCity,
-          state: formData.birthState,
-          country: formData.birthCountry,
-        });
-      const latitude = hasProvidedCoordinates ? providedLatitude : geocoded?.latitude ?? null;
-      const longitude = hasProvidedCoordinates ? providedLongitude : geocoded?.longitude ?? null;
-
-      if (!isCoordinateInRange(latitude, -90, 90) || !isCoordinateInRange(longitude, -180, 180)) {
-        throw new Error(
-          'The birth location could not be resolved to valid coordinates. Check the city, state, and country before generating the report again.',
-        );
-      }
+      const resolved = await resolveBirthCoordinates({
+        city: formData.birthCity,
+        state: formData.birthState,
+        country: formData.birthCountry,
+        latitude: formData.birthLatitude,
+        longitude: formData.birthLongitude,
+      });
 
       const chart = generateChartData({
         name: formData.fullName,
         date: formData.birthDate,
         time: formData.birthTime,
-        location: geocoded?.displayName || [formData.birthCity, formData.birthState, formData.birthCountry].filter(Boolean).join(', '),
-        latitude,
-        longitude,
+        location: resolved.location,
+        latitude: resolved.latitude,
+        longitude: resolved.longitude,
         timezone: formData.timezone,
-        coordinateSource: hasProvidedCoordinates ? 'provided' : 'geocoded',
+        coordinateSource: resolved.coordinateSource,
       });
       const prompt = buildOllamaPrompt(chart, formData.notes);
       const ollamaReportText = await this.ollama.generate(prompt, {
@@ -201,9 +180,9 @@ export class AstrologyReportsService {
           fileName,
           formData: {
             ...formData,
-            birthLatitude: latitude,
-            birthLongitude: longitude,
-            geocodedLocation: geocoded?.displayName || null,
+            birthLatitude: resolved.latitude,
+            birthLongitude: resolved.longitude,
+            geocodedLocation: resolved.coordinateSource === 'geocoded' ? resolved.location : null,
           } as Prisma.InputJsonObject,
           errorMessage: null,
           generatedAt: new Date(),
@@ -243,13 +222,8 @@ export class AstrologyReportsService {
     return resolve(this.config.get<string>('ASTROLOGY_REPORTS_DIR') || 'storage/astrology-reports');
   }
 
-  private async getSettings(): Promise<AstrologyGenerationSettings> {
-    const saved = await this.prisma.setting.findUnique({ where: { key: ASTROLOGY_REPORT_SETTINGS_KEY } });
-    const parsed = parseJson<AstrologyGenerationSettings>(saved?.value);
-    return {
-      ollamaBaseUrl: parsed?.ollamaBaseUrl?.trim() || this.config.get<string>('OLLAMA_BASE_URL') || 'http://localhost:11434',
-      ollamaModel: parsed?.ollamaModel?.trim() || this.config.get<string>('OLLAMA_MODEL') || '',
-    };
+  private getSettings() {
+    return getOllamaSettings(this.prisma, this.config);
   }
 }
 
@@ -322,29 +296,12 @@ function readOptionalNumber(value: unknown) {
   return null;
 }
 
-function hasBirthCoordinates(form: ParsedAstrologyForm) {
-  return isCoordinateInRange(form.birthLatitude, -90, 90) && isCoordinateInRange(form.birthLongitude, -180, 180);
-}
-
-function isCoordinateInRange(value: number | null | undefined, min: number, max: number) {
-  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
-}
-
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'astrology-report';
 }
 
 function sanitizeFileName(value: string) {
   return value.replace(/[^a-z0-9._-]/gi, '');
-}
-
-function parseJson<T>(value: string | undefined): T | null {
-  if (!value) return null;
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return null;
-  }
 }
 
 function hasCompleteInterpretation(value: string) {

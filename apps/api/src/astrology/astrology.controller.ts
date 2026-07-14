@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../auth/roles.guard';
@@ -12,7 +12,7 @@ export class AstrologyController {
   constructor(private readonly reportsService: AstrologyReportsService) {}
 
   @Post('charts/preview')
-  previewChart(@Body() dto: PreviewAstrologyChartDto) {
-    return this.reportsService.previewChart(dto);
+  previewChart(@Body() dto: PreviewAstrologyChartDto, @Request() req: { user: { sub: string } }) {
+    return this.reportsService.previewChart(dto, req.user.sub);
   }
 }

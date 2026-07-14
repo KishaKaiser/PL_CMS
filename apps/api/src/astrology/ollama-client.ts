@@ -15,7 +15,11 @@ export class OllamaClient {
     return Boolean(this.getModel());
   }
 
-  async generate(prompt: string, settings?: { baseUrl?: string | null; model?: string | null }): Promise<string | null> {
+  async generate(
+    prompt: string,
+    settings?: { baseUrl?: string | null; model?: string | null },
+    options?: { json?: boolean },
+  ): Promise<string | null> {
     const model = settings?.model?.trim() || this.getModel();
     if (!model) return null;
 
@@ -32,6 +36,7 @@ export class OllamaClient {
           model,
           prompt,
           stream: false,
+          ...(options?.json ? { format: 'json' } : {}),
         }),
         signal: controller.signal,
       });

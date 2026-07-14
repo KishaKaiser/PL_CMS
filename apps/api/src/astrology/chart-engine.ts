@@ -1,59 +1,9 @@
-export interface ChartPlanet {
-  name: string;
-  longitude: number;
-  sign: string;
-  degree: number;
-  house: number;
-}
-
-export interface ChartHouse {
-  number: number;
-  cusp: number;
-  sign: string;
-}
-
-export interface ChartAspect {
-  planet1: string;
-  planet2: string;
-  type: string;
-  orb: number;
-  angle: number;
-}
-
-export interface ChartData {
-  name: string;
-  date: string;
-  time: string;
-  location: string;
-  latitude: number;
-  longitude: number;
-  timezone: string;
-  coordinateSource: 'provided' | 'geocoded' | 'fallback';
-  planets: ChartPlanet[];
-  houses: ChartHouse[];
-  aspects: ChartAspect[];
-  ascendant: number;
-  midheaven: number;
-  houseSystem: string;
-}
+import { randomUUID } from 'node:crypto';
+import { ASPECT_TYPES, PLANET_SYMBOLS, ZODIAC_SIGNS, type Aspect, type ChartData, type House, type Planet } from '@pl-cms/shared';
+import { detectAspectPatterns } from './lib/aspect-patterns';
 
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
-
-const ZODIAC_SIGNS = [
-  'Aries',
-  'Taurus',
-  'Gemini',
-  'Cancer',
-  'Leo',
-  'Virgo',
-  'Libra',
-  'Scorpio',
-  'Sagittarius',
-  'Capricorn',
-  'Aquarius',
-  'Pisces',
-];
 
 const PLANETS = [
   { id: 0, name: 'Sun' },
@@ -66,15 +16,16 @@ const PLANETS = [
   { id: 7, name: 'Uranus' },
   { id: 8, name: 'Neptune' },
   { id: 9, name: 'Pluto' },
+  { id: 10, name: 'Chiron' },
 ];
 
-const ASPECTS = [
-  { angle: 0, orb: 8, name: 'Conjunction' },
-  { angle: 180, orb: 8, name: 'Opposition' },
-  { angle: 120, orb: 8, name: 'Trine' },
-  { angle: 90, orb: 7, name: 'Square' },
-  { angle: 60, orb: 6, name: 'Sextile' },
-];
+// Approximate mean orbital elements (J2000 epoch). Chiron in particular has no
+// closed-form low-order series like the major planets, so this uses the same
+// generic two-body Keplerian solver as everything else in this file with
+// roughly-estimated elements (a ~13.7 AU, e ~0.38, ~50.7yr period). Treat
+// Chiron placements as approximate, consistent with the rest of this engine's
+// admitted low-precision approach (no full VSOP87/Swiss Ephemeris here).
+const CHIRON_ELEMENTS = { l: [253.0, 710.7], p: [209.3, 30.0], e: [0.3795, 0], a: 13.7 };
 
 export function generateChartData(input: {
   name: string;
@@ -85,6 +36,7 @@ export function generateChartData(input: {
   longitude?: number | null;
   timezone?: string | null;
   coordinateSource?: 'provided' | 'geocoded' | 'fallback';
+  notes?: string | null;
 }): ChartData {
   const hasCoordinates = Number.isFinite(input.latitude) && Number.isFinite(input.longitude);
   const latitude = hasCoordinates ? Number(input.latitude) : 0;
@@ -93,17 +45,18 @@ export function generateChartData(input: {
   const dateTime = toUtcDate(input.date, input.time, timezone);
   const jd = julianDay(dateTime);
   const houseData = calculatePlacidusHouses(jd, latitude, longitude);
-  const houses = houseData.cusps.slice(1, 13).map((cusp, index) => ({
+  const houses: House[] = houseData.cusps.slice(1, 13).map((cusp, index) => ({
     number: index + 1,
     cusp: normalizeAngle(cusp),
     sign: getZodiacSign(cusp),
   }));
 
-  const planets = PLANETS.map((planet) => {
+  const planets: Planet[] = PLANETS.map((planet) => {
     const position = calculatePlanetPosition(jd, planet.id);
     const planetLongitude = normalizeAngle(position.longitude);
     return {
       name: planet.name,
+      symbol: PLANET_SYMBOLS[planet.name] ?? '',
       longitude: planetLongitude,
       sign: getZodiacSign(planetLongitude),
       degree: planetLongitude % 30,
@@ -111,7 +64,26 @@ export function generateChartData(input: {
     };
   });
 
+  const sun = planets.find((p) => p.name === 'Sun');
+  const moon = planets.find((p) => p.name === 'Moon');
+  const northNodeLongitude = normalizeAngle(125.04452 - 1934.136261 * ((jd - 2451545.0) / 36525));
+  const southNodeLongitude = normalizeAngle(northNodeLongitude + 180);
+  planets.push(buildPoint('North Node', northNodeLongitude, houses));
+  planets.push(buildPoint('South Node', southNodeLongitude, houses));
+
+  if (sun && moon) {
+    const ascendant = normalizeAngle(houseData.ascendant);
+    const sunIsAboveHorizon = calculateHouseForPlanet(sun.longitude, houses) >= 7;
+    const partOfFortuneLongitude = sunIsAboveHorizon
+      ? normalizeAngle(ascendant + sun.longitude - moon.longitude)
+      : normalizeAngle(ascendant + moon.longitude - sun.longitude);
+    planets.push(buildPoint('Part of Fortune', partOfFortuneLongitude, houses));
+  }
+
+  const aspects = calculateAspects(planets);
+
   return {
+    id: randomUUID(),
     name: input.name,
     date: input.date,
     time: input.time,
@@ -120,12 +92,28 @@ export function generateChartData(input: {
     longitude,
     timezone,
     coordinateSource: input.coordinateSource || (hasCoordinates ? 'provided' : 'fallback'),
+    notes: input.notes ?? null,
     planets,
     houses,
-    aspects: calculateAspects(planets),
+    aspects,
+    aspectPatterns: detectAspectPatterns(planets, aspects),
     ascendant: normalizeAngle(houseData.ascendant),
     midheaven: normalizeAngle(houseData.mc),
     houseSystem: 'Placidus',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+}
+
+function buildPoint(name: string, longitude: number, houses: House[]): Planet {
+  const normalized = normalizeAngle(longitude);
+  return {
+    name,
+    symbol: PLANET_SYMBOLS[name] ?? '',
+    longitude: normalized,
+    sign: getZodiacSign(normalized),
+    degree: normalized % 30,
+    house: calculateHouseForPlanet(normalized, houses),
   };
 }
 
@@ -190,6 +178,7 @@ function calculatePlanetPosition(jd: number, planet: number) {
     7: { l: [314.0550, 428.4677], p: [173.0051, 1.4863], e: [0.0472, -0.0001], a: 19.2184 },
     8: { l: [304.3487, 218.4862], p: [48.1237, 1.4262], e: [0.0086, 0.0001], a: 30.1104 },
     9: { l: [238.9290, 145.1879], p: [224.0670, 1.3971], e: [0.2488, 0.0000], a: 39.4821 },
+    10: CHIRON_ELEMENTS,
   };
 
   const data = planetData[planet];
@@ -234,10 +223,32 @@ function calculatePlacidusHouses(jd: number, lat: number, lon: number) {
   cusps[10] = mc;
   cusps[4] = normalizeAngle(cusps[10] + 180);
   cusps[7] = normalizeAngle(cusps[1] + 180);
+
+  // Trisect each quadrant arc (between the angular cusps) for the
+  // intermediate cusps, instead of spacing them evenly by 30deg from the MC —
+  // the angular cusps are not evenly spaced from each other except at the
+  // equator, so the quadrant arcs must be measured between the REAL angular
+  // cusps (asc/ic/desc/mc), not the flat 30deg placeholder values above.
+  const ascToIc = normalizeAngle(cusps[4] - cusps[1]);
+  cusps[2] = normalizeAngle(cusps[1] + ascToIc / 3);
+  cusps[3] = normalizeAngle(cusps[1] + (2 * ascToIc) / 3);
+
+  const icToDesc = normalizeAngle(cusps[7] - cusps[4]);
+  cusps[5] = normalizeAngle(cusps[4] + icToDesc / 3);
+  cusps[6] = normalizeAngle(cusps[4] + (2 * icToDesc) / 3);
+
+  const descToMc = normalizeAngle(cusps[10] - cusps[7]);
+  cusps[8] = normalizeAngle(cusps[7] + descToMc / 3);
+  cusps[9] = normalizeAngle(cusps[7] + (2 * descToMc) / 3);
+
+  const mcToAsc = normalizeAngle(cusps[1] - cusps[10]);
+  cusps[11] = normalizeAngle(cusps[10] + mcToAsc / 3);
+  cusps[12] = normalizeAngle(cusps[10] + (2 * mcToAsc) / 3);
+
   return { cusps, ascendant: asc, mc };
 }
 
-function calculateHouseForPlanet(planetLong: number, houses: ChartHouse[]) {
+function calculateHouseForPlanet(planetLong: number, houses: House[]) {
   for (let i = 0; i < houses.length; i += 1) {
     const current = houses[i];
     const next = houses[(i + 1) % 12];
@@ -250,16 +261,23 @@ function calculateHouseForPlanet(planetLong: number, houses: ChartHouse[]) {
   return 1;
 }
 
-function calculateAspects(planets: ChartPlanet[]) {
-  const aspects: ChartAspect[] = [];
+function calculateAspects(planets: Planet[]): Aspect[] {
+  const aspects: Aspect[] = [];
   for (let i = 0; i < planets.length; i += 1) {
     for (let j = i + 1; j < planets.length; j += 1) {
       let angle = Math.abs(planets[i].longitude - planets[j].longitude);
       if (angle > 180) angle = 360 - angle;
-      for (const aspect of ASPECTS) {
-        const orb = Math.abs(angle - aspect.angle);
-        if (orb <= aspect.orb) {
-          aspects.push({ planet1: planets[i].name, planet2: planets[j].name, type: aspect.name, angle: aspect.angle, orb });
+      for (const aspectType of Object.values(ASPECT_TYPES)) {
+        const orb = Math.abs(angle - aspectType.angle);
+        if (orb <= aspectType.orb) {
+          aspects.push({
+            planet1: planets[i].name,
+            planet2: planets[j].name,
+            type: aspectType.name,
+            angle: aspectType.angle,
+            orb,
+            color: aspectType.color,
+          });
         }
       }
     }

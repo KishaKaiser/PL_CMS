@@ -1,48 +1,24 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import type { ChartData } from '@pl-cms/shared';
+import { ChartWheel } from '../../../components/astrology/chart-wheel';
 
-type ChartPlanet = {
-  name: string;
-  longitude: number;
-  sign: string;
-  degree: number;
-  house: number;
-};
-
-type ChartHouse = {
-  number: number;
-  cusp: number;
-  sign: string;
-};
-
-type ChartAspect = {
-  planet1: string;
-  planet2: string;
-  type: string;
-  orb: number;
-  angle: number;
-};
-
-type ChartData = {
+type ChartSummary = {
   id: string;
-  name: string;
-  date: string;
-  time: string;
-  location: string;
-  latitude: number;
-  longitude: number;
-  timezone: string;
-  coordinateSource: 'provided' | 'geocoded' | 'fallback';
-  notes?: string | null;
-  planets: ChartPlanet[];
-  houses: ChartHouse[];
-  aspects: ChartAspect[];
-  ascendant: number;
-  midheaven: number;
-  houseSystem: string;
-  createdAt: number;
-  updatedAt: number;
+  reportType: string;
+  title: string;
+  status: string;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ChartRecord = {
+  id: string;
+  reportType: string;
+  title: string;
+  chartData: ChartData;
 };
 
 type ChartFormData = {
@@ -58,8 +34,6 @@ type ChartFormData = {
   notes: string;
 };
 
-const STORAGE_KEY = 'pl_cms_astrology_charts';
-
 const emptyForm: ChartFormData = {
   name: '',
   date: '',
@@ -73,40 +47,55 @@ const emptyForm: ChartFormData = {
   notes: '',
 };
 
-const planetOrder = ['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'];
+const planetOrder = ['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto', 'Chiron', 'North Node', 'South Node', 'Part of Fortune'];
 
 export default function AdminAstrologyPage() {
-  const [charts, setCharts] = useState<ChartData[]>([]);
+  const [charts, setCharts] = useState<ChartSummary[]>([]);
+  const [selectedChart, setSelectedChart] = useState<ChartData | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<ChartFormData>(emptyForm);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  async function refreshList() {
+    setListLoading(true);
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) setCharts(JSON.parse(saved) as ChartData[]);
-    } catch {
-      setError('Saved charts could not be loaded in this browser.');
+      const res = await fetch('/api/proxy/astrology/charts');
+      if (!res.ok) throw new Error('Chart library could not be loaded.');
+      const data = (await res.json()) as ChartSummary[];
+      setCharts(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Chart library could not be loaded.');
+    } finally {
+      setListLoading(false);
     }
+  }
+
+  useEffect(() => {
+    refreshList();
   }, []);
 
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(charts));
-  }, [charts]);
-
-  const selectedChart = charts.find((chart) => chart.id === selectedId) ?? charts[0] ?? null;
   const filteredCharts = useMemo(() => {
     const needle = search.trim().toLowerCase();
     if (!needle) return charts;
-    return charts.filter((chart) => {
-      return chart.name.toLowerCase().includes(needle)
-        || chart.location.toLowerCase().includes(needle)
-        || chart.date.includes(needle);
-    });
+    return charts.filter((chart) => chart.title.toLowerCase().includes(needle) || chart.reportType.toLowerCase().includes(needle));
   }, [charts, search]);
+
+  async function loadChart(id: string) {
+    setError('');
+    try {
+      const res = await fetch(`/api/proxy/astrology/charts/${id}`);
+      if (!res.ok) throw new Error('Chart could not be loaded.');
+      const data = (await res.json()) as ChartRecord;
+      setSelectedChart(data.chartData);
+      setSelectedId(data.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Chart could not be loaded.');
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -138,11 +127,12 @@ export default function AdminAstrologyPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? 'Chart could not be generated.');
 
-      const chart = normalizeChart(data as ChartData);
-      setCharts((current) => [chart, ...current.filter((item) => item.id !== chart.id)]);
+      const chart = data as ChartData;
+      setSelectedChart(chart);
       setSelectedId(chart.id);
       setForm(emptyForm);
       setMessage('Chart saved to the astrology library.');
+      await refreshList();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Chart could not be generated.');
     } finally {
@@ -150,11 +140,19 @@ export default function AdminAstrologyPage() {
     }
   }
 
-  function deleteChart(id: string) {
-    const chart = charts.find((item) => item.id === id);
-    if (!chart || !window.confirm(`Delete chart "${chart.name}"?`)) return;
-    setCharts((current) => current.filter((item) => item.id !== id));
-    if (selectedId === id) setSelectedId(null);
+  async function deleteChart(id: string, title: string) {
+    if (!window.confirm(`Delete chart "${title}"?`)) return;
+    try {
+      const res = await fetch(`/api/proxy/astrology/charts/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Chart could not be deleted.');
+      if (selectedId === id) {
+        setSelectedChart(null);
+        setSelectedId(null);
+      }
+      await refreshList();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Chart could not be deleted.');
+    }
   }
 
   return (
@@ -241,25 +239,40 @@ export default function AdminAstrologyPage() {
             <section className="rounded border border-gray-200 bg-white">
               <div className="flex flex-col gap-3 border-b border-gray-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
                 <h2 className="text-lg font-semibold text-gray-950">Saved Charts</h2>
-                <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2 text-sm md:w-72" placeholder="Search by name, date, or location" />
+                <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2 text-sm md:w-72" placeholder="Search by name or report type" />
               </div>
-              {filteredCharts.length === 0 ? (
+              {listLoading ? (
+                <p className="p-8 text-center text-sm text-gray-500">Loading...</p>
+              ) : filteredCharts.length === 0 ? (
                 <p className="p-8 text-center text-sm text-gray-500">{charts.length === 0 ? 'No charts saved yet.' : 'No charts match this search.'}</p>
               ) : (
                 <div className="grid gap-3 p-5 lg:grid-cols-2">
                   {filteredCharts.map((chart) => (
-                    <button key={chart.id} type="button" onClick={() => setSelectedId(chart.id)} className={`rounded border p-4 text-left transition ${selectedChart?.id === chart.id ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                    <button
+                      key={chart.id}
+                      type="button"
+                      onClick={() => loadChart(chart.id)}
+                      className={`rounded border p-4 text-left transition ${selectedId === chart.id ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="font-semibold text-gray-950">{chart.name}</h3>
-                          <p className="mt-1 text-sm text-gray-500">{chart.location}</p>
+                          <h3 className="font-semibold text-gray-950">{chart.title}</h3>
+                          <p className="mt-1 text-sm text-gray-500">{chart.reportType}</p>
                         </div>
-                        <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">{chart.planets.length} planets</span>
+                        <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">{chart.status}</span>
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-600">
-                        <span>{chart.date}</span>
-                        <span>{chart.time}</span>
-                        <span>{chart.houseSystem}</span>
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
+                        <span>{new Date(chart.createdAt).toLocaleDateString()}</span>
+                        <span
+                          role="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteChart(chart.id, chart.title);
+                          }}
+                          className="rounded px-2 py-1 font-medium text-red-700 hover:bg-red-50"
+                        >
+                          Delete
+                        </span>
                       </div>
                     </button>
                   ))}
@@ -274,9 +287,16 @@ export default function AdminAstrologyPage() {
                     <h2 className="text-xl font-semibold text-gray-950">{selectedChart.name}</h2>
                     <p className="mt-1 text-sm text-gray-500">{selectedChart.location}</p>
                   </div>
-                  <button onClick={() => deleteChart(selectedChart.id)} className="rounded border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50">
-                    Delete
-                  </button>
+                  {selectedId && (
+                    <a
+                      href={`/api/proxy/astrology/charts/${selectedId}/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Export PDF
+                    </a>
+                  )}
                 </div>
                 <ChartDetail chart={selectedChart} />
               </section>
@@ -298,6 +318,10 @@ function ChartDetail({ chart }: { chart: ChartData }) {
         <Metric label="Time" value={`${chart.time} UTC${chart.timezone}`} />
         <Metric label="Ascendant" value={formatPlacement(chart.ascendant)} />
         <Metric label="Midheaven" value={formatPlacement(chart.midheaven)} />
+      </div>
+
+      <div className="flex justify-center rounded border border-gray-100 bg-gray-950 p-4">
+        <ChartWheel chart={chart} size={480} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
@@ -342,6 +366,21 @@ function ChartDetail({ chart }: { chart: ChartData }) {
               {chart.aspects.length === 0 && <p className="text-sm text-gray-500">No major aspects found.</p>}
             </div>
           </div>
+
+          {chart.aspectPatterns.length > 0 && (
+            <div>
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-gray-500">Aspect Patterns</h3>
+              <div className="space-y-2">
+                {chart.aspectPatterns.map((pattern, index) => (
+                  <div key={`${pattern.type}-${index}`} className="rounded border border-gray-200 px-3 py-2 text-sm">
+                    <span className="font-semibold text-gray-950">{pattern.type}</span>
+                    <span className="ml-2 text-gray-600">{pattern.planets.join(', ')}</span>
+                    <p className="mt-1 text-xs text-gray-500">{pattern.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <aside className="space-y-4">
@@ -397,23 +436,9 @@ function setFormValue(
   setForm((current) => ({ ...current, [key]: value }));
 }
 
-function normalizeChart(chart: ChartData): ChartData {
-  const now = Date.now();
-  return {
-    ...chart,
-    id: chart.id || `${slugify(chart.name)}-${now}`,
-    createdAt: chart.createdAt || now,
-    updatedAt: now,
-  };
-}
-
 function formatPlacement(longitude: number) {
   const signs = ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'];
   const normalized = ((longitude % 360) + 360) % 360;
   const sign = signs[Math.floor(normalized / 30)] ?? 'Aries';
   return `${(normalized % 30).toFixed(2)} ${sign}`;
-}
-
-function slugify(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'chart';
 }
