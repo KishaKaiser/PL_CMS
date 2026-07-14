@@ -14,7 +14,7 @@ import {
   SynastryChartDto,
   TransitDto,
 } from './astrology.dto';
-import { resolveBirthCoordinates } from './birth-data.util';
+import { resolveBirthCoordinates, resolveBirthTimezone } from './birth-data.util';
 import { generateChartData } from './chart-engine';
 import { type EventType, findOptimalTiming } from './lib/electional-calc';
 import { generateFamilyAnalysis } from './lib/family-compatibility';
@@ -221,6 +221,7 @@ export class AstrologyChartsService {
   }
 
   async createElectionalChart(userId: string, dto: ElectionalDto) {
+    const timezone = dto.timezone?.trim() || resolveBirthTimezone(dto.latitude, dto.longitude, dto.startDate);
     const analysis = await findOptimalTiming({
       eventType: dto.eventType as EventType,
       startDate: dto.startDate,
@@ -228,7 +229,7 @@ export class AstrologyChartsService {
       location: dto.location,
       latitude: dto.latitude,
       longitude: dto.longitude,
-      timezone: dto.timezone,
+      timezone,
       avoidRetrograde: dto.avoidRetrograde,
     });
 
@@ -247,8 +248,10 @@ export class AstrologyChartsService {
       city: dto.city,
       state: dto.state,
       country: dto.country,
+      date: dto.birthDate,
       latitude: dto.latitude,
       longitude: dto.longitude,
+      timezoneOverride: dto.timezone,
     });
     const settings = await getOllamaSettings(this.prisma, this.config);
     const events = dto.events.map((event, index) => ({
@@ -263,7 +266,7 @@ export class AstrologyChartsService {
       resolved.location,
       resolved.latitude,
       resolved.longitude,
-      dto.timezone || '+00:00',
+      resolved.timezone,
       events,
       (prompt) => this.ollama.generate(prompt, { baseUrl: settings.ollamaBaseUrl, model: settings.ollamaModel }, { json: true }),
     );
@@ -283,8 +286,11 @@ export class AstrologyChartsService {
       city: birthData.city,
       state: birthData.state,
       country: birthData.country,
+      date: birthData.date,
+      time: birthData.time,
       latitude: birthData.latitude,
       longitude: birthData.longitude,
+      timezoneOverride: birthData.timezone,
     });
 
     return generateChartData({
@@ -294,7 +300,7 @@ export class AstrologyChartsService {
       location: resolved.location,
       latitude: resolved.latitude,
       longitude: resolved.longitude,
-      timezone: birthData.timezone,
+      timezone: resolved.timezone,
       coordinateSource: resolved.coordinateSource,
       notes: birthData.notes,
     });

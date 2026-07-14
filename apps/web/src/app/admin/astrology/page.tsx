@@ -28,9 +28,6 @@ type ChartFormData = {
   city: string;
   state: string;
   country: string;
-  timezone: string;
-  latitude: string;
-  longitude: string;
   notes: string;
 };
 
@@ -41,11 +38,13 @@ const emptyForm: ChartFormData = {
   city: '',
   state: '',
   country: 'United States',
-  timezone: '-05:00',
-  latitude: '',
-  longitude: '',
   notes: '',
 };
+
+const EVENT_TYPES = ['marriage', 'child', 'career', 'relocation', 'accident', 'loss', 'education', 'financial', 'health', 'spiritual'];
+
+type LifeEventForm = { type: string; date: string; description: string };
+type TimeSuggestion = { time: string; score: number; reasoning: string };
 
 const planetOrder = ['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto', 'Chiron', 'North Node', 'South Node', 'Part of Fortune'];
 
@@ -59,6 +58,54 @@ export default function AdminAstrologyPage() {
   const [listLoading, setListLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [timeUnknown, setTimeUnknown] = useState(false);
+  const [lifeEvents, setLifeEvents] = useState<LifeEventForm[]>([{ type: 'career', date: '', description: '' }]);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestions, setSuggestions] = useState<TimeSuggestion[] | null>(null);
+
+  function updateLifeEvent(index: number, patch: Partial<LifeEventForm>) {
+    setLifeEvents((current) => current.map((event, i) => (i === index ? { ...event, ...patch } : event)));
+  }
+
+  function addLifeEvent() {
+    setLifeEvents((current) => [...current, { type: 'career', date: '', description: '' }]);
+  }
+
+  function removeLifeEvent(index: number) {
+    setLifeEvents((current) => current.filter((_, i) => i !== index));
+  }
+
+  async function handleSuggestTimes() {
+    setSuggesting(true);
+    setError('');
+    setSuggestions(null);
+    try {
+      const res = await fetch('/api/proxy/astrology/charts/rectification', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          birthDate: form.date,
+          city: form.city.trim(),
+          state: form.state.trim(),
+          country: form.country.trim(),
+          events: lifeEvents.filter((event) => event.date),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? 'Birth time could not be estimated.');
+      setSuggestions(data.resultData as TimeSuggestion[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Birth time could not be estimated.');
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  function applySuggestedTime(time: string) {
+    setForm((current) => ({ ...current, time }));
+    setTimeUnknown(false);
+    setSuggestions(null);
+  }
 
   async function refreshList() {
     setListLoading(true);
@@ -104,20 +151,15 @@ export default function AdminAstrologyPage() {
     setMessage('');
 
     try {
-      const payload: Record<string, string | number> = {
+      const payload: Record<string, string> = {
         name: form.name.trim(),
         date: form.date,
         time: form.time,
         city: form.city.trim(),
         state: form.state.trim(),
         country: form.country.trim(),
-        timezone: form.timezone.trim(),
         notes: form.notes.trim(),
       };
-      if (form.latitude.trim() && form.longitude.trim()) {
-        payload.latitude = Number(form.latitude);
-        payload.longitude = Number(form.longitude);
-      }
 
       const res = await fetch('/api/proxy/astrology/charts/preview', {
         method: 'POST',
@@ -131,6 +173,9 @@ export default function AdminAstrologyPage() {
       setSelectedChart(chart);
       setSelectedId(chart.id);
       setForm(emptyForm);
+      setTimeUnknown(false);
+      setLifeEvents([{ type: 'career', date: '', description: '' }]);
+      setSuggestions(null);
       setMessage('Chart saved to the astrology library.');
       await refreshList();
     } catch (err) {
@@ -194,9 +239,27 @@ export default function AdminAstrologyPage() {
                 </label>
                 <label className="block text-sm font-medium text-gray-700">
                   Birth Time
-                  <input required type="time" value={form.time} onChange={(event) => setFormValue('time', event.target.value, setForm)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+                  <input
+                    required={!timeUnknown}
+                    disabled={timeUnknown}
+                    type="time"
+                    value={form.time}
+                    onChange={(event) => setFormValue('time', event.target.value, setForm)}
+                    className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
+                  />
                 </label>
               </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={timeUnknown}
+                  onChange={(event) => {
+                    setTimeUnknown(event.target.checked);
+                    if (event.target.checked) setFormValue('time', '', setForm);
+                  }}
+                />
+                I don&apos;t know the exact birth time
+              </label>
               <label className="block text-sm font-medium text-gray-700">
                 Birth City
                 <input required value={form.city} onChange={(event) => setFormValue('city', event.target.value, setForm)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" placeholder="New York" />
@@ -211,26 +274,59 @@ export default function AdminAstrologyPage() {
                   <input required value={form.country} onChange={(event) => setFormValue('country', event.target.value, setForm)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
                 </label>
               </div>
-              <label className="block text-sm font-medium text-gray-700">
-                Timezone
-                <input value={form.timezone} onChange={(event) => setFormValue('timezone', event.target.value, setForm)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" placeholder="-05:00" />
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-sm font-medium text-gray-700">
-                  Latitude
-                  <input type="number" step="any" value={form.latitude} onChange={(event) => setFormValue('latitude', event.target.value, setForm)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" placeholder="optional" />
-                </label>
-                <label className="block text-sm font-medium text-gray-700">
-                  Longitude
-                  <input type="number" step="any" value={form.longitude} onChange={(event) => setFormValue('longitude', event.target.value, setForm)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" placeholder="optional" />
-                </label>
-              </div>
+              <p className="text-xs text-gray-500">Coordinates and timezone (including historical DST) are calculated automatically from the birth city, state, and date.</p>
+
+              {timeUnknown && (
+                <div className="space-y-3 rounded border border-indigo-200 bg-indigo-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-950">Add life events to estimate the time</h3>
+                    <button type="button" onClick={addLifeEvent} className="text-sm font-medium text-indigo-600 hover:underline">+ Add event</button>
+                  </div>
+                  {lifeEvents.map((lifeEvent, index) => (
+                    <div key={index} className="grid grid-cols-[130px_140px_1fr_auto] gap-2">
+                      <select value={lifeEvent.type} onChange={(event) => updateLifeEvent(index, { type: event.target.value })} className="rounded border border-gray-300 px-2 py-2 text-xs">
+                        {EVENT_TYPES.map((type) => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                      <input type="date" value={lifeEvent.date} onChange={(event) => updateLifeEvent(index, { date: event.target.value })} className="rounded border border-gray-300 px-2 py-2 text-xs" />
+                      <input value={lifeEvent.description} onChange={(event) => updateLifeEvent(index, { description: event.target.value })} placeholder="Description (optional)" className="rounded border border-gray-300 px-2 py-2 text-xs" />
+                      <button type="button" onClick={() => removeLifeEvent(index)} className="rounded px-2 text-xs text-red-700 hover:bg-red-100">Remove</button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={suggesting || !form.date || !form.city.trim() || !form.country.trim()}
+                    onClick={handleSuggestTimes}
+                    className="w-full rounded border border-indigo-300 bg-white px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:text-gray-400"
+                  >
+                    {suggesting ? 'Estimating...' : 'Suggest Birth Times'}
+                  </button>
+                  {suggestions && (
+                    <div className="space-y-2">
+                      {suggestions.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => applySuggestedTime(suggestion.time)}
+                          className="block w-full rounded border border-gray-200 bg-white p-2 text-left text-xs hover:border-indigo-400"
+                        >
+                          <span className="font-semibold text-gray-950">{suggestion.time}</span>
+                          <span className="ml-2 text-gray-500">confidence {suggestion.score}%</span>
+                          <p className="mt-1 text-gray-600">{suggestion.reasoning}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <label className="block text-sm font-medium text-gray-700">
                 Notes
                 <textarea value={form.notes} rows={4} onChange={(event) => setFormValue('notes', event.target.value, setForm)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
               </label>
-              <button disabled={loading} className="w-full rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-400">
-                {loading ? 'Generating...' : 'Generate Chart'}
+              <button disabled={loading || timeUnknown} className="w-full rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-400">
+                {loading ? 'Generating...' : timeUnknown ? 'Select a birth time to continue' : 'Generate Chart'}
               </button>
             </form>
           </section>

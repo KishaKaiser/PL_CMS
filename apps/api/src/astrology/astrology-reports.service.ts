@@ -42,7 +42,16 @@ export class AstrologyReportsService {
     const city = readRequiredString(dto.city, 'city');
     const country = readRequiredString(dto.country, 'country');
     const state = readOptionalString(dto.state) ?? '';
-    const resolved = await resolveBirthCoordinates({ city, state, country, latitude: dto.latitude, longitude: dto.longitude });
+    const resolved = await resolveBirthCoordinates({
+      city,
+      state,
+      country,
+      date,
+      time,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      timezoneOverride: dto.timezone,
+    });
 
     const notes = readOptionalString(dto.notes);
     const chart = generateChartData({
@@ -52,7 +61,7 @@ export class AstrologyReportsService {
       location: resolved.location,
       latitude: resolved.latitude,
       longitude: resolved.longitude,
-      timezone: readOptionalString(dto.timezone),
+      timezone: resolved.timezone,
       coordinateSource: resolved.coordinateSource,
       notes,
     });
@@ -132,8 +141,11 @@ export class AstrologyReportsService {
         city: formData.birthCity,
         state: formData.birthState,
         country: formData.birthCountry,
+        date: formData.birthDate,
+        time: formData.birthTime,
         latitude: formData.birthLatitude,
         longitude: formData.birthLongitude,
+        timezoneOverride: formData.timezone,
       });
 
       const chart = generateChartData({
@@ -143,7 +155,7 @@ export class AstrologyReportsService {
         location: resolved.location,
         latitude: resolved.latitude,
         longitude: resolved.longitude,
-        timezone: formData.timezone,
+        timezone: resolved.timezone,
         coordinateSource: resolved.coordinateSource,
       });
       const prompt = buildOllamaPrompt(chart, formData.notes);
@@ -182,6 +194,7 @@ export class AstrologyReportsService {
             ...formData,
             birthLatitude: resolved.latitude,
             birthLongitude: resolved.longitude,
+            timezone: resolved.timezone,
             geocodedLocation: resolved.coordinateSource === 'geocoded' ? resolved.location : null,
           } as Prisma.InputJsonObject,
           errorMessage: null,

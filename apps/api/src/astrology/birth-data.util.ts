@@ -1,4 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
+import { calculateDST } from './lib/dst-calculator';
+import { findTimezoneByCoordinates, getTimezoneOffset } from './lib/timezone-db';
 import { geocodeBirthLocation } from './geocoding';
 
 export function isCoordinateInRange(value: number | null | undefined, min: number, max: number) {
@@ -19,19 +21,40 @@ export interface ResolvedBirthLocation {
   longitude: number;
   location: string;
   coordinateSource: 'provided' | 'geocoded';
+  timezone: string;
+}
+
+/**
+ * Looks up the historically-correct UTC offset (accounting for DST rules that
+ * were in effect on the given date) for a coordinate pair, mirroring what the
+ * original astrology app resolved automatically from its location search.
+ */
+export function resolveBirthTimezone(latitude: number, longitude: number, date: string, time?: string | null): string {
+  const timezoneId = findTimezoneByCoordinates(latitude, longitude);
+  const [year, month, day] = date.split('-').map(Number);
+  if (!year || !month || !day) return getTimezoneOffset(timezoneId);
+
+  const [hour, minute] = (time || '12:00').split(':').map(Number);
+  const localDate = new Date(year, month - 1, day, Number.isFinite(hour) ? hour : 12, Number.isFinite(minute) ? minute : 0, 0);
+  return calculateDST(localDate, timezoneId).effectiveOffset;
 }
 
 /**
  * Shared by every astrology report type: use provided coordinates if valid,
- * otherwise geocode from city/state/country. Throws if neither resolves to a
- * usable lat/lon.
+ * otherwise geocode from city/state/country; the UTC offset is then always
+ * calculated automatically from those coordinates and the birth date (an
+ * explicit override is honored only if one is supplied — the admin/checkout
+ * forms no longer collect one). Throws if coordinates can't be resolved.
  */
 export async function resolveBirthCoordinates(input: {
   city: string;
   state?: string | null;
   country: string;
+  date: string;
+  time?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  timezoneOverride?: string | null;
 }): Promise<ResolvedBirthLocation> {
   const city = input.city.trim();
   const state = input.state?.trim() || '';
@@ -50,10 +73,14 @@ export async function resolveBirthCoordinates(input: {
     );
   }
 
+  const timezone = input.timezoneOverride?.trim()
+    || resolveBirthTimezone(latitude as number, longitude as number, input.date, input.time);
+
   return {
     latitude: latitude as number,
     longitude: longitude as number,
     location: geocoded?.displayName || [city, state, country].filter(Boolean).join(', '),
     coordinateSource: hasProvidedCoordinates ? 'provided' : 'geocoded',
+    timezone,
   };
 }

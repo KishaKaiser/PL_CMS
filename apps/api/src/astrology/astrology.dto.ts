@@ -154,8 +154,9 @@ export class ElectionalDto {
   @Max(180)
   longitude!: number;
 
+  @IsOptional()
   @IsString()
-  timezone!: string;
+  timezone?: string;
 
   @IsOptional()
   @IsBoolean()

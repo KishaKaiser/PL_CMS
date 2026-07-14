@@ -22,7 +22,7 @@ export default function ElectionalPage() {
   const [location, setLocation] = useState('');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
-  const [timezone, setTimezone] = useState('-05:00');
+  const [timezone, setTimezone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<ElectionalResult | null>(null);
@@ -101,8 +101,8 @@ export default function ElectionalPage() {
               <input required type="number" step="any" value={longitude} onChange={(e) => setLongitude(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
             </label>
             <label className="block text-sm font-medium text-gray-700">
-              Timezone
-              <input value={timezone} onChange={(e) => setTimezone(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" placeholder="-05:00" />
+              Timezone (optional — calculated automatically if left blank)
+              <input value={timezone} onChange={(e) => setTimezone(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" placeholder="auto" />
             </label>
           </div>
           <button disabled={loading} className="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-400">
