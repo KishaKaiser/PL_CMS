@@ -5,6 +5,12 @@ import type { ChartData, Planet } from '@pl-cms/shared';
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
 
+/** The natal interpretation prompt (see buildOllamaPrompt) asks for exactly 13 numbered sections; treat anything short of that as a failed/truncated generation. */
+export function hasCompleteInterpretation(value: string) {
+  const sectionMatches = value.match(/##\s*(?:1[0-3]|[1-9])\./g);
+  return new Set(sectionMatches ?? []).size >= 13;
+}
+
 export async function writeChartPdf(options: {
   chart: ChartData;
   chart2?: ChartData;

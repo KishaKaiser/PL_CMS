@@ -26,7 +26,7 @@ import { generateSynastryData } from './lib/synastry-calc';
 import { calculateTransitsForDate } from './lib/transits';
 import { OllamaClient } from './ollama-client';
 import { getOllamaSettings } from './ollama-settings.util';
-import { buildResultSummaryLines, writeChartPdf } from './report-renderer';
+import { buildOllamaPrompt, buildResultSummaryLines, hasCompleteInterpretation, writeChartPdf } from './report-renderer';
 
 @Injectable()
 export class AstrologyChartsService {
@@ -124,6 +124,41 @@ export class AstrologyChartsService {
     });
 
     return { fileName, filePath };
+  }
+
+  /**
+   * Generates (or regenerates) the AI-written natal interpretation for a
+   * Chart Library entry, using the exact same Ollama prompt as the paid
+   * checkout report flow. Only the free preview text was missing this step —
+   * this lets an admin get the full interpretation without a purchase.
+   */
+  async generateInterpretation(id: string) {
+    const record = await this.getChart(id);
+    if (record.reportType !== 'natal') {
+      throw new BadRequestException('AI interpretation is only available for natal charts.');
+    }
+
+    const chart = record.chartData as unknown as ChartData;
+    const inputData = record.inputData as unknown as { notes?: string | null } | null;
+    const settings = await getOllamaSettings(this.prisma, this.config);
+    const prompt = buildOllamaPrompt(chart, inputData?.notes ?? null);
+    const text = await this.ollama.generate(prompt, { baseUrl: settings.ollamaBaseUrl, model: settings.ollamaModel });
+
+    if (!text) {
+      throw new BadRequestException(
+        'The astrology interpretation could not be generated. Check the Ollama URL and model settings, then try again.',
+      );
+    }
+    if (!hasCompleteInterpretation(text)) {
+      throw new BadRequestException(
+        'The astrology interpretation was incomplete. Try again, or use a larger Ollama model/context window.',
+      );
+    }
+
+    return this.prisma.astrologyChart.update({
+      where: { id },
+      data: { aiText: text },
+    });
   }
 
   async createSynastryChart(userId: string, dto: SynastryChartDto) {

@@ -11,7 +11,7 @@ import { resolveBirthCoordinates } from './birth-data.util';
 import { generateChartData } from './chart-engine';
 import { OllamaClient } from './ollama-client';
 import { getOllamaSettings } from './ollama-settings.util';
-import { buildOllamaPrompt, writeChartPdf } from './report-renderer';
+import { buildOllamaPrompt, hasCompleteInterpretation, writeChartPdf } from './report-renderer';
 
 @Injectable()
 export class AstrologyReportsService {
@@ -315,9 +315,4 @@ function slugify(value: string) {
 
 function sanitizeFileName(value: string) {
   return value.replace(/[^a-z0-9._-]/gi, '');
-}
-
-function hasCompleteInterpretation(value: string) {
-  const sectionMatches = value.match(/##\s*(?:1[0-3]|[1-9])\./g);
-  return new Set(sectionMatches ?? []).size >= 13;
 }

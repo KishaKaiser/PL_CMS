@@ -46,6 +46,11 @@ export class AstrologyChartsController {
     createReadStream(file.filePath).pipe(res);
   }
 
+  @Post(':id/interpretation')
+  generateInterpretation(@Param('id') id: string) {
+    return this.chartsService.generateInterpretation(id);
+  }
+
   @Post('synastry')
   createSynastry(@Body() dto: SynastryChartDto, @Request() req: AuthedRequest) {
     return this.chartsService.createSynastryChart(req.user.id, dto);
