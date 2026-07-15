@@ -11,7 +11,7 @@ import { resolveBirthCoordinates } from './birth-data.util';
 import { generateChartData } from './chart-engine';
 import { OllamaClient } from './ollama-client';
 import { getOllamaSettings } from './ollama-settings.util';
-import { buildOllamaPrompt, writeChartPdf } from './report-renderer';
+import { buildOllamaPrompt, hasCompleteInterpretation, writeChartPdf } from './report-renderer';
 
 @Injectable()
 export class AstrologyReportsService {
@@ -23,6 +23,14 @@ export class AstrologyReportsService {
     private readonly ollama: OllamaClient,
     private readonly chartsService: AstrologyChartsService,
   ) {}
+
+  async testOllamaConnection(overrides?: { ollamaBaseUrl?: string; ollamaModel?: string }) {
+    const settings = await this.getSettings();
+    return this.ollama.testConnection({
+      baseUrl: overrides?.ollamaBaseUrl?.trim() || settings.ollamaBaseUrl,
+      model: overrides?.ollamaModel?.trim() || settings.ollamaModel,
+    });
+  }
 
   async listUserDownloads(userId: string) {
     return this.prisma.astrologyReport.findMany({
@@ -315,9 +323,4 @@ function slugify(value: string) {
 
 function sanitizeFileName(value: string) {
   return value.replace(/[^a-z0-9._-]/gi, '');
-}
-
-function hasCompleteInterpretation(value: string) {
-  const sectionMatches = value.match(/##\s*(?:1[0-3]|[1-9])\./g);
-  return new Set(sectionMatches ?? []).size >= 13;
 }

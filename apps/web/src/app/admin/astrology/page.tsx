@@ -19,6 +19,7 @@ type ChartRecord = {
   reportType: string;
   title: string;
   chartData: ChartData;
+  aiText: string | null;
 };
 
 type ChartFormData = {
@@ -62,6 +63,8 @@ export default function AdminAstrologyPage() {
   const [lifeEvents, setLifeEvents] = useState<LifeEventForm[]>([{ type: 'career', date: '', description: '' }]);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<TimeSuggestion[] | null>(null);
+  const [aiText, setAiText] = useState<string | null>(null);
+  const [interpretationLoading, setInterpretationLoading] = useState(false);
 
   function updateLifeEvent(index: number, patch: Partial<LifeEventForm>) {
     setLifeEvents((current) => current.map((event, i) => (i === index ? { ...event, ...patch } : event)));
@@ -139,8 +142,25 @@ export default function AdminAstrologyPage() {
       const data = (await res.json()) as ChartRecord;
       setSelectedChart(data.chartData);
       setSelectedId(data.id);
+      setAiText(data.aiText);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Chart could not be loaded.');
+    }
+  }
+
+  async function handleGenerateInterpretation() {
+    if (!selectedId) return;
+    setInterpretationLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/proxy/astrology/charts/${selectedId}/interpretation`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? 'The AI interpretation could not be generated.');
+      setAiText((data as ChartRecord).aiText);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The AI interpretation could not be generated.');
+    } finally {
+      setInterpretationLoading(false);
     }
   }
 
@@ -172,6 +192,7 @@ export default function AdminAstrologyPage() {
       const chart = data as ChartData;
       setSelectedChart(chart);
       setSelectedId(chart.id);
+      setAiText(null);
       setForm(emptyForm);
       setTimeUnknown(false);
       setLifeEvents([{ type: 'career', date: '', description: '' }]);
@@ -193,6 +214,7 @@ export default function AdminAstrologyPage() {
       if (selectedId === id) {
         setSelectedChart(null);
         setSelectedId(null);
+        setAiText(null);
       }
       await refreshList();
     } catch (err) {
@@ -384,17 +406,27 @@ export default function AdminAstrologyPage() {
                     <p className="mt-1 text-sm text-gray-500">{selectedChart.location}</p>
                   </div>
                   {selectedId && (
-                    <a
-                      href={`/api/proxy/astrology/charts/${selectedId}/pdf`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Export PDF
-                    </a>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleGenerateInterpretation}
+                        disabled={interpretationLoading}
+                        className="rounded border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:text-gray-400"
+                      >
+                        {interpretationLoading ? 'Generating...' : aiText ? 'Regenerate AI Interpretation' : 'Generate AI Interpretation'}
+                      </button>
+                      <a
+                        href={`/api/proxy/astrology/charts/${selectedId}/pdf`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Export PDF
+                      </a>
+                    </div>
                   )}
                 </div>
-                <ChartDetail chart={selectedChart} />
+                <ChartDetail chart={selectedChart} aiText={aiText} />
               </section>
             )}
           </div>
@@ -404,7 +436,7 @@ export default function AdminAstrologyPage() {
   );
 }
 
-function ChartDetail({ chart }: { chart: ChartData }) {
+function ChartDetail({ chart, aiText }: { chart: ChartData; aiText: string | null }) {
   const orderedPlanets = [...chart.planets].sort((a, b) => planetOrder.indexOf(a.name) - planetOrder.indexOf(b.name));
 
   return (
@@ -419,6 +451,15 @@ function ChartDetail({ chart }: { chart: ChartData }) {
       <div className="flex justify-center rounded border border-gray-100 bg-gray-950 p-4">
         <ChartWheel chart={chart} size={480} />
       </div>
+
+      {aiText && (
+        <div>
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-gray-500">AI Interpretation</h3>
+          <div className="max-h-96 overflow-y-auto whitespace-pre-line rounded border border-indigo-200 bg-indigo-50 p-4 text-sm text-gray-800">
+            {aiText}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-6">
