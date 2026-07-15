@@ -12,7 +12,7 @@ export class AstrologyController {
   constructor(private readonly reportsService: AstrologyReportsService) {}
 
   @Post('charts/preview')
-  previewChart(@Body() dto: PreviewAstrologyChartDto, @Request() req: { user: { sub: string } }) {
-    return this.reportsService.previewChart(dto, req.user.sub);
+  previewChart(@Body() dto: PreviewAstrologyChartDto, @Request() req: { user: { id: string } }) {
+    return this.reportsService.previewChart(dto, req.user.id);
   }
 }

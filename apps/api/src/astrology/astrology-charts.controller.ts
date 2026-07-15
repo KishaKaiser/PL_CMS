@@ -15,7 +15,7 @@ import {
   TransitDto,
 } from './astrology.dto';
 
-type AuthedRequest = { user: { sub: string } };
+type AuthedRequest = { user: { id: string } };
 
 @Controller('astrology/charts')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -48,36 +48,36 @@ export class AstrologyChartsController {
 
   @Post('synastry')
   createSynastry(@Body() dto: SynastryChartDto, @Request() req: AuthedRequest) {
-    return this.chartsService.createSynastryChart(req.user.sub, dto);
+    return this.chartsService.createSynastryChart(req.user.id, dto);
   }
 
   @Post('karmic')
   createKarmic(@Body() dto: KarmicChartDto, @Request() req: AuthedRequest) {
-    return this.chartsService.createKarmicChart(req.user.sub, dto);
+    return this.chartsService.createKarmicChart(req.user.id, dto);
   }
 
   @Post('karmic-debt')
   createKarmicDebt(@Body() dto: KarmicDebtDto, @Request() req: AuthedRequest) {
-    return this.chartsService.createKarmicDebtChart(req.user.sub, dto);
+    return this.chartsService.createKarmicDebtChart(req.user.id, dto);
   }
 
   @Post('family')
   createFamily(@Body() dto: FamilyChartDto, @Request() req: AuthedRequest) {
-    return this.chartsService.createFamilyChart(req.user.sub, dto);
+    return this.chartsService.createFamilyChart(req.user.id, dto);
   }
 
   @Post('transits')
   createTransits(@Body() dto: TransitDto, @Request() req: AuthedRequest) {
-    return this.chartsService.createTransitChart(req.user.sub, dto);
+    return this.chartsService.createTransitChart(req.user.id, dto);
   }
 
   @Post('electional')
   createElectional(@Body() dto: ElectionalDto, @Request() req: AuthedRequest) {
-    return this.chartsService.createElectionalChart(req.user.sub, dto);
+    return this.chartsService.createElectionalChart(req.user.id, dto);
   }
 
   @Post('rectification')
   createRectification(@Body() dto: RectificationDto, @Request() req: AuthedRequest) {
-    return this.chartsService.createRectificationChart(req.user.sub, dto);
+    return this.chartsService.createRectificationChart(req.user.id, dto);
   }
 }
