@@ -5,9 +5,6 @@ export type BirthDataFormState = {
   city: string;
   state: string;
   country: string;
-  timezone: string;
-  latitude: string;
-  longitude: string;
   notes: string;
 };
 
@@ -18,27 +15,22 @@ export const emptyBirthData: BirthDataFormState = {
   city: '',
   state: '',
   country: 'United States',
-  timezone: '-05:00',
-  latitude: '',
-  longitude: '',
   notes: '',
 };
 
-export function toBirthDataPayload(form: BirthDataFormState): Record<string, string | number> {
-  const payload: Record<string, string | number> = {
+// Coordinates and timezone (including historical DST) are always resolved
+// automatically server-side from city/state/country and the birth date — the
+// form never collects them.
+export function toBirthDataPayload(form: BirthDataFormState): Record<string, string> {
+  const payload: Record<string, string> = {
     name: form.name.trim(),
     date: form.date,
     time: form.time,
     city: form.city.trim(),
     state: form.state.trim(),
     country: form.country.trim(),
-    timezone: form.timezone.trim(),
   };
   if (form.notes.trim()) payload.notes = form.notes.trim();
-  if (form.latitude.trim() && form.longitude.trim()) {
-    payload.latitude = Number(form.latitude);
-    payload.longitude = Number(form.longitude);
-  }
   return payload;
 }
 
@@ -86,20 +78,7 @@ export function BirthDataFields({
           <input required value={value.country} onChange={(e) => set('country', e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
         </label>
       </div>
-      <label className="block text-sm font-medium text-gray-700">
-        Timezone
-        <input value={value.timezone} onChange={(e) => set('timezone', e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" placeholder="-05:00" />
-      </label>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block text-sm font-medium text-gray-700">
-          Latitude
-          <input type="number" step="any" value={value.latitude} onChange={(e) => set('latitude', e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" placeholder="optional" />
-        </label>
-        <label className="block text-sm font-medium text-gray-700">
-          Longitude
-          <input type="number" step="any" value={value.longitude} onChange={(e) => set('longitude', e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" placeholder="optional" />
-        </label>
-      </div>
+      <p className="text-xs text-gray-500">Coordinates and timezone are calculated automatically from the birth location and date.</p>
     </fieldset>
   );
 }

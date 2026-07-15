@@ -183,7 +183,6 @@ interface AstrologyForm {
   birthCity: string;
   birthState: string;
   birthCountry: string;
-  timezone: string;
   notes: string;
 }
 
@@ -1087,9 +1086,9 @@ function CheckoutContent() {
                         <CheckoutInput label="Birth city" value={value.birthCity} required onChange={(birthCity) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthCity })} />
                         <CheckoutInput label="Birth state / province" value={value.birthState} required onChange={(birthState) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthState })} />
                         <CheckoutInput label="Birth country" value={value.birthCountry} required onChange={(birthCountry) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthCountry })} />
-                        <CheckoutInput label="Timezone" value={value.timezone} onChange={(timezone) => updateAstrologyForm(setAstrologyForms, item.product.id, { timezone })} />
                         <CheckoutInput label="Notes" value={value.notes} onChange={(notes) => updateAstrologyForm(setAstrologyForms, item.product.id, { notes })} />
                       </div>
+                      <p className="mt-3 text-xs text-gray-500">Coordinates and timezone (including historical daylight saving time) are calculated automatically from the birth city, state, and date.</p>
                     </div>
                   );
                 })}
@@ -1445,7 +1444,6 @@ function createEmptyAstrologyForm(productId: string): AstrologyForm {
     birthCity: '',
     birthState: '',
     birthCountry: 'United States',
-    timezone: '',
     notes: '',
   };
 }
