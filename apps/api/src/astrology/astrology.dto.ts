@@ -56,6 +56,16 @@ export class BirthDataDto {
 
 export class PreviewAstrologyChartDto extends BirthDataDto {}
 
+export class TestOllamaConnectionDto {
+  @IsOptional()
+  @IsString()
+  ollamaBaseUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  ollamaModel?: string;
+}
+
 export class SynastryChartDto {
   @ValidateNested()
   @Type(() => BirthDataDto)

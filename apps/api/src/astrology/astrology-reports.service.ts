@@ -24,6 +24,14 @@ export class AstrologyReportsService {
     private readonly chartsService: AstrologyChartsService,
   ) {}
 
+  async testOllamaConnection(overrides?: { ollamaBaseUrl?: string; ollamaModel?: string }) {
+    const settings = await this.getSettings();
+    return this.ollama.testConnection({
+      baseUrl: overrides?.ollamaBaseUrl?.trim() || settings.ollamaBaseUrl,
+      model: overrides?.ollamaModel?.trim() || settings.ollamaModel,
+    });
+  }
+
   async listUserDownloads(userId: string) {
     return this.prisma.astrologyReport.findMany({
       where: { userId },

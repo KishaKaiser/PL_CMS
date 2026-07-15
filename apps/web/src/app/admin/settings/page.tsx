@@ -190,6 +190,8 @@ export default function AdminSettingsPage() {
   const [error, setError] = useState('');
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const [ollamaTesting, setOllamaTesting] = useState(false);
+  const [ollamaTestResult, setOllamaTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
   const [adding, setAdding] = useState(false);
@@ -361,6 +363,27 @@ export default function AdminSettingsPage() {
       setError(err instanceof Error ? err.message : 'Error saving setting');
     } finally {
       setSaving((currentSaving) => ({ ...currentSaving, [key]: false }));
+    }
+  }
+
+  async function handleTestOllama() {
+    setOllamaTesting(true);
+    setOllamaTestResult(null);
+    try {
+      const res = await fetch('/api/proxy/astrology/ollama/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ollamaBaseUrl: astrologyReportForm.ollamaBaseUrl,
+          ollamaModel: astrologyReportForm.ollamaModel,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+      setOllamaTestResult({ ok: Boolean(data.ok), message: data.message ?? (res.ok ? 'Connected.' : 'Test failed.') });
+    } catch (err) {
+      setOllamaTestResult({ ok: false, message: err instanceof Error ? err.message : 'Test failed.' });
+    } finally {
+      setOllamaTesting(false);
     }
   }
 
@@ -846,7 +869,20 @@ export default function AdminSettingsPage() {
               placeholder="Ollama model name, for example llama3.1"
               className="w-full rounded border px-3 py-2 text-sm"
             />
-            <div className="flex justify-end">
+            {ollamaTestResult && (
+              <div className={`rounded border px-3 py-2 text-xs ${ollamaTestResult.ok ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+                {ollamaTestResult.message}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => void handleTestOllama()}
+                disabled={ollamaTesting || loading}
+                className="rounded border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {ollamaTesting ? 'Testing…' : 'Test connection'}
+              </button>
               <button
                 type="button"
                 onClick={() => void saveManagedSetting(ASTROLOGY_REPORT_SETTINGS_KEY, astrologyReportForm)}
