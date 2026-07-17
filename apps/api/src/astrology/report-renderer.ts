@@ -38,68 +38,6 @@ export async function writeChartPdf(options: {
   return filePath;
 }
 
-/** Turns a report's stored resultData (Prisma Json, loosely typed) into readable PDF lines per report type. */
-export function buildResultSummaryLines(reportType: string, resultData: unknown): string[] {
-  const data = resultData as Record<string, any>;
-  if (!data) return [];
-
-  switch (reportType) {
-    case 'synastry':
-      return [
-        `Relationship type: ${data.relationshipType}`,
-        `Overall compatibility: ${data.overallScore}%`,
-        '',
-        'Compatibility Scores',
-        ...data.compatibilityScores.map((s: any) => `${s.category}: ${s.score} — ${s.description}`),
-        '',
-        'Soulmate Analysis',
-        `${data.soulmate.connectionType} (twin flame ${data.soulmate.twinFlameScore}%, soulmate ${data.soulmate.soulmateScore}%)`,
-        data.soulmate.summary,
-      ];
-    case 'karmic':
-      return [
-        `Overall karmic score: ${data.overallKarmicScore}% — ${data.relationshipType}`,
-        '',
-        'Karmic Connections',
-        ...data.connections.map((c: any) => `${c.theme} (${c.strength}%): ${c.lessonToLearn}`),
-      ];
-    case 'karmic_debt':
-      return [
-        `Total karmic debt score: ${data.totalDebtScore}/100`,
-        '',
-        'Astrological Debts',
-        ...data.astrologicalDebts.map((d: any) => `${d.indicator} (${d.severity}): ${d.lifeChallenge}`),
-      ];
-    case 'family':
-      return [
-        `Overall family compatibility: ${data.overallScore}% (${data.relationshipType})`,
-        '',
-        'Compatibility Scores',
-        ...data.compatibilityScores.map((s: any) => `${s.category}: ${s.score} — ${s.description}`),
-      ];
-    case 'transit':
-      return [
-        'Current Transit Positions',
-        ...data.planets.map((p: any) => `${p.name}: ${p.degree.toFixed(2)} ${p.sign}, House ${p.house}`),
-        '',
-        'Transit Aspects',
-        ...data.aspects.map((a: any) => `Transit ${a.transitPlanet} ${a.type} Natal ${a.natalPlanet} (orb ${a.orb.toFixed(2)})`),
-      ];
-    case 'electional':
-      return [
-        'Top Candidate Times',
-        ...data.results.slice(0, 10).map((r: any) => `${r.date} ${r.time} — score ${r.score}: ${r.recommendation}`),
-      ];
-    case 'rectification':
-      return [
-        'Candidate Birth Times',
-        ...(Array.isArray(data) ? data : []).map((r: any) => `${r.time} — confidence ${r.score}%: ${r.reasoning}`),
-      ];
-    default:
-      return [];
-  }
-}
-
 export function buildOllamaPrompt(chart: ChartData, notes?: string | null) {
   const sun = findPlanet(chart, 'Sun');
   const moon = findPlanet(chart, 'Moon');
