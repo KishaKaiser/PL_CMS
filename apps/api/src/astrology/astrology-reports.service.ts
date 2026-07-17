@@ -205,10 +205,17 @@ export class AstrologyReportsService {
   }
 }
 
+export interface ParsedLifeEvent {
+  description: string;
+  date: string;
+}
+
 export interface ParsedAstrologyForm {
   fullName: string;
   birthDate: string;
   birthTime: string;
+  timeUnknown: boolean;
+  lifeEvents: ParsedLifeEvent[];
   birthCity: string;
   birthState: string;
   birthCountry: string;
@@ -218,12 +225,31 @@ export interface ParsedAstrologyForm {
   notes?: string | null;
 }
 
+const REQUIRED_LIFE_EVENT_COUNT = 3;
+
 function cleanAstrologyForm(form: AstrologyReportFormDto) {
+  const timeUnknown = Boolean(form.timeUnknown);
+
+  if (timeUnknown) {
+    const events = (form.lifeEvents ?? []).filter((event) => event.description?.trim() && event.date?.trim());
+    if (events.length < REQUIRED_LIFE_EVENT_COUNT) {
+      throw new BadRequestException(
+        `Please provide ${REQUIRED_LIFE_EVENT_COUNT} significant life events (with dates) when the birth time is unknown.`,
+      );
+    }
+  } else if (!form.birthTime?.trim()) {
+    throw new BadRequestException('Birth time is required unless "I don\'t know my birth time" is selected.');
+  }
+
   return {
     productId: form.productId,
     fullName: form.fullName.trim(),
     birthDate: form.birthDate,
-    birthTime: form.birthTime,
+    birthTime: timeUnknown ? '' : (form.birthTime ?? '').trim(),
+    timeUnknown,
+    lifeEvents: timeUnknown
+      ? form.lifeEvents!.map((event) => ({ description: event.description.trim(), date: event.date.trim() }))
+      : [],
     birthCity: form.birthCity.trim(),
     birthState: form.birthState.trim(),
     birthCountry: form.birthCountry.trim(),
@@ -239,10 +265,13 @@ function parseAstrologyForm(value: Prisma.JsonValue): ParsedAstrologyForm {
     throw new Error('Astrology form data is invalid.');
   }
   const form = value as Record<string, unknown>;
-  const parsed = {
+  const timeUnknown = form.timeUnknown === true;
+  const parsed: ParsedAstrologyForm = {
     fullName: readRequiredString(form.fullName, 'fullName'),
     birthDate: readRequiredString(form.birthDate, 'birthDate'),
-    birthTime: readRequiredString(form.birthTime, 'birthTime'),
+    birthTime: readOptionalString(form.birthTime) ?? '',
+    timeUnknown,
+    lifeEvents: parseLifeEvents(form.lifeEvents),
     birthCity: readRequiredString(form.birthCity, 'birthCity'),
     birthState: readRequiredString(form.birthState, 'birthState'),
     birthCountry: readRequiredString(form.birthCountry, 'birthCountry'),
@@ -252,6 +281,17 @@ function parseAstrologyForm(value: Prisma.JsonValue): ParsedAstrologyForm {
     notes: readOptionalString(form.notes),
   };
   return parsed;
+}
+
+function parseLifeEvents(value: unknown): ParsedLifeEvent[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
+    .map((entry) => ({
+      description: readOptionalString(entry.description) ?? '',
+      date: readOptionalString(entry.date) ?? '',
+    }))
+    .filter((event) => event.description && event.date);
 }
 
 function readRequiredString(value: unknown, field: string) {

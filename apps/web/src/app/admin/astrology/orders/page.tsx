@@ -6,6 +6,8 @@ type ReportFormData = {
   fullName: string;
   birthDate: string;
   birthTime: string;
+  timeUnknown?: boolean;
+  lifeEvents?: Array<{ description: string; date: string }>;
   birthCity: string;
   birthState: string;
   birthCountry: string;
@@ -176,18 +178,34 @@ export default function AstrologyOrdersPage() {
                 </div>
 
                 {typeof report.formData === 'object' && report.formData?.fullName ? (
-                  <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-                    <Field label="Name" value={report.formData.fullName} />
-                    <Field label="Birth Date" value={report.formData.birthDate} />
-                    <Field label="Birth Time" value={report.formData.birthTime} />
-                    <Field
-                      label="Birthplace"
-                      value={[report.formData.birthCity, report.formData.birthState, report.formData.birthCountry]
-                        .filter(Boolean)
-                        .join(', ')}
-                    />
-                    {report.formData.notes && <Field label="Notes" value={report.formData.notes} />}
-                  </dl>
+                  <>
+                    <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                      <Field label="Name" value={report.formData.fullName} />
+                      <Field label="Birth Date" value={report.formData.birthDate} />
+                      {!report.formData.timeUnknown && <Field label="Birth Time" value={report.formData.birthTime} />}
+                      <Field
+                        label="Birthplace"
+                        value={[report.formData.birthCity, report.formData.birthState, report.formData.birthCountry]
+                          .filter(Boolean)
+                          .join(', ')}
+                      />
+                      {report.formData.notes && <Field label="Notes" value={report.formData.notes} />}
+                    </dl>
+                    {report.formData.timeUnknown && (report.formData.lifeEvents?.length ?? 0) > 0 && (
+                      <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                          Exact birth time unknown — significant life events provided
+                        </p>
+                        <ul className="mt-2 space-y-1 text-sm text-gray-800">
+                          {report.formData.lifeEvents!.map((event, index) => (
+                            <li key={index}>
+                              <span className="font-medium">{event.date}</span> — {event.description}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <p className="mt-4 text-sm text-amber-700">Birth data could not be read for this report.</p>
                 )}

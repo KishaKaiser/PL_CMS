@@ -32,10 +32,21 @@ export class AstrologyBlogService {
     private readonly ollama: OllamaClient,
   ) {}
 
-  async generateBlogPost(transitType: string, additionalContext?: string): Promise<GeneratedBlogPost> {
-    const transitInfo = TRANSIT_TYPES.find((t) => t.value === transitType);
-    const label = transitInfo?.label || transitType;
-    const description = transitInfo?.description || 'astrological transit';
+  async generateBlogPost(options: { transitType?: string; customTopic?: string; additionalContext?: string }): Promise<GeneratedBlogPost> {
+    const { transitType, customTopic, additionalContext } = options;
+
+    let label: string;
+    let description: string;
+    if (transitType) {
+      const transitInfo = TRANSIT_TYPES.find((t) => t.value === transitType);
+      label = transitInfo?.label || transitType;
+      description = transitInfo?.description || 'astrological transit';
+    } else if (customTopic?.trim()) {
+      label = customTopic.trim();
+      description = 'a custom astrology topic requested by the site admin';
+    } else {
+      throw new Error('Choose a transit type or enter a custom topic to generate a blog post.');
+    }
 
     const prompt = `You are an expert astrologer writing an engaging blog post for a general audience interested in astrology.
 

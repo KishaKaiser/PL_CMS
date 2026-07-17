@@ -7,14 +7,6 @@ const TABS = [
   { href: '/admin/astrology/orders', label: 'Orders' },
   { href: '/admin/astrology', label: 'Chart Library' },
   { href: '/admin/astrology/horoscopes', label: 'Horoscopes' },
-  { href: '/admin/astrology/synastry', label: 'Synastry' },
-  { href: '/admin/astrology/karmic', label: 'Karmic Relationship' },
-  { href: '/admin/astrology/karmic-debt', label: 'Karmic Debt' },
-  { href: '/admin/astrology/family', label: 'Family' },
-  { href: '/admin/astrology/transits', label: 'Transits' },
-  { href: '/admin/astrology/electional', label: 'Electional' },
-  { href: '/admin/astrology/rectification', label: 'Rectification' },
-  { href: '/admin/astrology/blog', label: 'Blog Generator' },
 ];
 
 export default function AstrologyLayout({ children }: { children: React.ReactNode }) {

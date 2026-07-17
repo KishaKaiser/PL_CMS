@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { AdminModule } from '../admin/admin.module';
 import { AstrologyController } from './astrology.controller';
 import { AstrologyBlogController } from './astrology-blog.controller';
 import { AstrologyBlogService } from './astrology-blog.service';
@@ -12,7 +11,6 @@ import { HoroscopeService } from './horoscope.service';
 import { OllamaClient } from './ollama-client';
 
 @Module({
-  imports: [AdminModule],
   controllers: [
     AstrologyController,
     AstrologyChartsController,
