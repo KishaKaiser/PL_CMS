@@ -175,15 +175,28 @@ interface FreeShippingSettings {
   label: string;
 }
 
+interface AstrologyLifeEvent {
+  description: string;
+  date: string;
+}
+
 interface AstrologyForm {
   productId: string;
   fullName: string;
   birthDate: string;
   birthTime: string;
+  timeUnknown: boolean;
+  lifeEvents: AstrologyLifeEvent[];
   birthCity: string;
   birthState: string;
   birthCountry: string;
   notes: string;
+}
+
+const LIFE_EVENT_COUNT = 3;
+
+function createEmptyLifeEvents(): AstrologyLifeEvent[] {
+  return Array.from({ length: LIFE_EVENT_COUNT }, () => ({ description: '', date: '' }));
 }
 
 interface EcommerceSettings {
@@ -1082,12 +1095,54 @@ function CheckoutContent() {
                       <div className="grid gap-4 md:grid-cols-2">
                         <CheckoutInput label="Full name" value={value.fullName} required onChange={(fullName) => updateAstrologyForm(setAstrologyForms, item.product.id, { fullName })} />
                         <CheckoutInput label="Birth date" type="date" value={value.birthDate} required onChange={(birthDate) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthDate })} />
-                        <CheckoutInput label="Birth time" type="time" value={value.birthTime} required onChange={(birthTime) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthTime })} />
+                        {!value.timeUnknown && (
+                          <CheckoutInput label="Birth time" type="time" value={value.birthTime} required onChange={(birthTime) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthTime })} />
+                        )}
                         <CheckoutInput label="Birth city" value={value.birthCity} required onChange={(birthCity) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthCity })} />
                         <CheckoutInput label="Birth state / province" value={value.birthState} required onChange={(birthState) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthState })} />
                         <CheckoutInput label="Birth country" value={value.birthCountry} required onChange={(birthCountry) => updateAstrologyForm(setAstrologyForms, item.product.id, { birthCountry })} />
                         <CheckoutInput label="Notes" value={value.notes} onChange={(notes) => updateAstrologyForm(setAstrologyForms, item.product.id, { notes })} />
                       </div>
+
+                      <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={value.timeUnknown}
+                          onChange={(e) =>
+                            updateAstrologyForm(setAstrologyForms, item.product.id, {
+                              timeUnknown: e.target.checked,
+                              birthTime: e.target.checked ? '' : value.birthTime,
+                            })
+                          }
+                        />
+                        I don&apos;t know my exact time of birth
+                      </label>
+
+                      {value.timeUnknown && (
+                        <div className="mt-3 space-y-3 rounded-lg border border-purple-200 bg-white p-3">
+                          <p className="text-xs text-gray-600">
+                            Please share {LIFE_EVENT_COUNT} significant life events (with dates) instead — these help us work out your chart without an exact birth time.
+                          </p>
+                          {value.lifeEvents.map((lifeEvent, index) => (
+                            <div key={index} className="grid gap-2 sm:grid-cols-[1fr_180px]">
+                              <CheckoutInput
+                                label={`Event ${index + 1} description`}
+                                value={lifeEvent.description}
+                                required
+                                placeholder="e.g. Married, moved to a new city, started a new job"
+                                onChange={(description) => updateAstrologyLifeEvent(setAstrologyForms, item.product.id, index, { description })}
+                              />
+                              <CheckoutInput
+                                label={`Event ${index + 1} date`}
+                                type="date"
+                                value={lifeEvent.date}
+                                required
+                                onChange={(date) => updateAstrologyLifeEvent(setAstrologyForms, item.product.id, index, { date })}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <p className="mt-3 text-xs text-gray-500">Coordinates and timezone (including historical daylight saving time) are calculated automatically from the birth city, state, and date.</p>
                     </div>
                   );
@@ -1441,6 +1496,8 @@ function createEmptyAstrologyForm(productId: string): AstrologyForm {
     fullName: '',
     birthDate: '',
     birthTime: '',
+    timeUnknown: false,
+    lifeEvents: createEmptyLifeEvents(),
     birthCity: '',
     birthState: '',
     birthCountry: 'United States',
@@ -1462,15 +1519,28 @@ function updateAstrologyForm(
   }));
 }
 
+function updateAstrologyLifeEvent(
+  setForms: Dispatch<SetStateAction<Record<string, AstrologyForm>>>,
+  productId: string,
+  index: number,
+  patch: Partial<AstrologyLifeEvent>,
+) {
+  setForms((current) => {
+    const form = current[productId] ?? createEmptyAstrologyForm(productId);
+    const lifeEvents = form.lifeEvents.map((event, i) => (i === index ? { ...event, ...patch } : event));
+    return { ...current, [productId]: { ...form, lifeEvents } };
+  });
+}
+
 function isAstrologyFormComplete(form: AstrologyForm | undefined) {
-  return Boolean(
-    form?.fullName.trim() &&
-      form.birthDate &&
-      form.birthTime &&
-      form.birthCity.trim() &&
-      form.birthState.trim() &&
-      form.birthCountry.trim(),
+  if (!form) return false;
+  const baseComplete = Boolean(
+    form.fullName.trim() && form.birthDate && form.birthCity.trim() && form.birthState.trim() && form.birthCountry.trim(),
   );
+  if (!baseComplete) return false;
+  return form.timeUnknown
+    ? form.lifeEvents.every((event) => event.description.trim() && event.date)
+    : Boolean(form.birthTime);
 }
 
 function CheckoutInput({

@@ -3,6 +3,7 @@ import {
   ValidateNested,
   IsString,
   IsInt,
+  IsBoolean,
   Min,
   IsOptional,
   IsNumber,
@@ -24,6 +25,14 @@ export class CheckoutItemDto {
   quantity!: number;
 }
 
+export class LifeEventFormDto {
+  @IsString()
+  description!: string;
+
+  @IsString()
+  date!: string;
+}
+
 export class AstrologyReportFormDto {
   @IsString()
   productId!: string;
@@ -34,8 +43,20 @@ export class AstrologyReportFormDto {
   @IsString()
   birthDate!: string;
 
+  /** Required unless timeUnknown is set, in which case lifeEvents is used instead. */
+  @IsOptional()
   @IsString()
-  birthTime!: string;
+  birthTime?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  timeUnknown?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LifeEventFormDto)
+  lifeEvents?: LifeEventFormDto[];
 
   @IsString()
   birthCity!: string;
