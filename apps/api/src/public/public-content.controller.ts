@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { HoroscopePeriodDto } from '../astrology/horoscope.dto';
 import { PublicContentService } from './public-content.service';
 import {
   CreatePostCommentDto,
@@ -16,6 +17,11 @@ export class PublicContentController {
   @Get('site-config')
   getSiteConfig() {
     return this.publicContentService.getSiteConfig();
+  }
+
+  @Get('horoscopes')
+  getHoroscopes(@Query() query: HoroscopePeriodDto) {
+    return this.publicContentService.findCurrentHoroscopes(query.year, query.month);
   }
 
   @Get('pages')

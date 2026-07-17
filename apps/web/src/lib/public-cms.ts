@@ -221,6 +221,25 @@ export async function getPublicSiteConfig(): Promise<PublicSiteConfig> {
   return fetchCmsJson('/public/site-config', DEFAULT_PUBLIC_SITE_CONFIG);
 }
 
+export interface PublicHoroscope {
+  sign: string;
+  year: number;
+  month: number;
+  overview: string;
+  career: string;
+  money: string;
+  love: string;
+  generatedAt: string;
+}
+
+export async function getHoroscopes(year?: number, month?: number): Promise<Array<PublicHoroscope | null>> {
+  const params = new URLSearchParams();
+  if (year) params.set('year', String(year));
+  if (month) params.set('month', String(month));
+  const path = `/public/horoscopes${params.size > 0 ? `?${params.toString()}` : ''}`;
+  return fetchCmsJson(path, []);
+}
+
 export async function getPublishedPage(slug: string): Promise<PublicPage | null> {
   const path = `/public/pages/${encodeURIComponent(slug)}`;
   return fetchCmsJson(path, null);

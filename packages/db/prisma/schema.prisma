@@ -927,6 +927,27 @@ model AstrologyChart {
   @@map("astrology_charts")
 }
 
+// General (non-natal) horoscope content — one row per zodiac sign per
+// calendar month, generated automatically. Not tied to a user; this is
+// public site content shown on the /horoscopes page.
+model Horoscope {
+  id          String   @id @default(cuid())
+  sign        String
+  year        Int
+  month       Int
+  overview    String
+  career      String
+  money       String
+  love        String
+  generatedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([sign, year, month])
+  @@index([year, month])
+  @@map("horoscopes")
+}
+
 // ──────────────────────────────────────────────
 // E-commerce – Payments
 // ──────────────────────────────────────────────

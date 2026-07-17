@@ -20,6 +20,7 @@ import {
   type SiteThemeSettings,
 } from '@pl-cms/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { HoroscopeService } from '../astrology/horoscope.service';
 import type { CreatePostCommentDto } from './public-content.dto';
 
 type PostQuery = {
@@ -103,10 +104,18 @@ export class PublicContentService {
   private readonly logger = new Logger(PublicContentService.name);
   private readonly siteConfigTransformers: Array<(config: PublicSiteConfig) => PublicSiteConfig> = [];
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly horoscopeService: HoroscopeService,
+  ) {}
 
   registerSiteConfigTransformer(transformer: (config: PublicSiteConfig) => PublicSiteConfig) {
     this.siteConfigTransformers.push(transformer);
+  }
+
+  async findCurrentHoroscopes(year?: number, month?: number) {
+    const now = new Date();
+    return this.horoscopeService.listForMonth(year ?? now.getFullYear(), month ?? now.getMonth() + 1);
   }
 
   async getSiteConfig() {
