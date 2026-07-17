@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@pl-cms/db';
+import type { Express } from 'express';
 import { access } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { AstrologyReportFormDto } from '../checkout/checkout.dto';
 import { AstrologyChartsService } from './astrology-charts.service';
@@ -11,12 +12,10 @@ import { resolveBirthCoordinates } from './birth-data.util';
 import { generateChartData } from './chart-engine';
 import { OllamaClient } from './ollama-client';
 import { getOllamaSettings } from './ollama-settings.util';
-import { buildOllamaPrompt, hasCompleteInterpretation, writeChartPdf } from './report-renderer';
+import { getAstrologyReportsDir, sanitizeReportFileName } from './report-storage.util';
 
 @Injectable()
 export class AstrologyReportsService {
-  private readonly logger = new Logger(AstrologyReportsService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -114,110 +113,72 @@ export class AstrologyReportsService {
     }
   }
 
-  async generateReadyReports(orderId: string, userId: string) {
-    const reports = await this.prisma.astrologyReport.findMany({
-      where: { orderId, userId, status: { in: ['AWAITING_PAYMENT', 'PENDING', 'FAILED'] } },
-      include: { product: { select: { name: true } }, order: { select: { id: true } } },
+  /** Marks paid reports as awaiting manual fulfillment by an admin (chart run + PDF upload). */
+  async markReportsAwaitingFulfillment(orderId: string, userId: string) {
+    await this.prisma.astrologyReport.updateMany({
+      where: { orderId, userId, status: { in: ['AWAITING_PAYMENT', 'FAILED'] } },
+      data: { status: 'PENDING', errorMessage: null },
     });
-
-    for (const report of reports) {
-      await this.generateReport(report.id, userId).catch((error: unknown) => {
-        this.logger.warn(`Astrology report ${report.id} generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      });
-    }
   }
 
-  async generateReport(reportId: string, userId: string) {
-    const report = await this.prisma.astrologyReport.findFirst({
-      where: { id: reportId, userId },
-      include: { product: { select: { name: true } }, order: { select: { id: true, status: true } } },
-    });
-    if (!report) throw new NotFoundException('Download not found');
-    if (!['CONFIRMED', 'PROCESSING', 'COMPLETED'].includes(report.order.status)) {
-      throw new BadRequestException('The order must be paid before this report can be generated.');
-    }
-
-    await this.prisma.astrologyReport.update({
-      where: { id: report.id },
-      data: { status: 'GENERATING', errorMessage: null },
+  async listAllReports(status?: string) {
+    const reports = await this.prisma.astrologyReport.findMany({
+      where: status ? { status } : undefined,
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        product: { select: { id: true, name: true } },
+        order: { select: { id: true, status: true, createdAt: true } },
+      },
+      orderBy: { submittedAt: 'asc' },
     });
 
-    try {
-      const formData = parseAstrologyForm(report.formData);
-      const settings = await this.getSettings();
-      const resolved = await resolveBirthCoordinates({
-        city: formData.birthCity,
-        state: formData.birthState,
-        country: formData.birthCountry,
-        date: formData.birthDate,
-        time: formData.birthTime,
-        latitude: formData.birthLatitude,
-        longitude: formData.birthLongitude,
-        timezoneOverride: formData.timezone,
-      });
-
-      const chart = generateChartData({
-        name: formData.fullName,
-        date: formData.birthDate,
-        time: formData.birthTime,
-        location: resolved.location,
-        latitude: resolved.latitude,
-        longitude: resolved.longitude,
-        timezone: resolved.timezone,
-        coordinateSource: resolved.coordinateSource,
-      });
-      const prompt = buildOllamaPrompt(chart, formData.notes);
-      const ollamaReportText = await this.ollama.generate(prompt, {
-        baseUrl: settings.ollamaBaseUrl,
-        model: settings.ollamaModel,
-      });
-      if (!ollamaReportText) {
-        throw new Error(
-          'The astrology interpretation could not be generated. Check the Ollama URL and model settings, then try generating the report again.',
-        );
+    return reports.map((report) => {
+      try {
+        return { ...report, formData: parseAstrologyForm(report.formData) };
+      } catch {
+        return report;
       }
-      if (!hasCompleteInterpretation(ollamaReportText)) {
-        throw new Error(
-          'The astrology interpretation was incomplete. Try generating the report again, or use a larger Ollama model/context window.',
-        );
-      }
+    });
+  }
 
-      const reportText = ollamaReportText;
-      const fileName = `${slugify(report.product.name)}-${report.id}.pdf`;
-      await writeChartPdf({
-        chart,
-        reportText,
-        reportsDir: this.getReportsDir(),
+  async getReportForAdmin(id: string) {
+    const report = await this.prisma.astrologyReport.findUnique({
+      where: { id },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        product: { select: { id: true, name: true } },
+        order: { select: { id: true, status: true, createdAt: true } },
+      },
+    });
+    if (!report) throw new NotFoundException('Report not found');
+    return { ...report, formData: parseAstrologyForm(report.formData) };
+  }
+
+  async uploadReportFile(id: string, file: Express.Multer.File | undefined) {
+    if (!file) throw new BadRequestException('A PDF file is required.');
+    const report = await this.prisma.astrologyReport.findUnique({ where: { id }, select: { id: true } });
+    if (!report) throw new NotFoundException('Report not found');
+
+    const fileName = sanitizeReportFileName(file.filename);
+    return this.prisma.astrologyReport.update({
+      where: { id },
+      data: {
+        status: 'READY',
+        reportUrl: `/api/proxy/account/downloads/${id}/file`,
         fileName,
-      });
+        errorMessage: null,
+        generatedAt: new Date(),
+      },
+    });
+  }
 
-      return this.prisma.astrologyReport.update({
-        where: { id: report.id },
-        data: {
-          status: 'READY',
-          reportUrl: `/api/proxy/account/downloads/${report.id}/file`,
-          reportText,
-          fileName,
-          formData: {
-            ...formData,
-            birthLatitude: resolved.latitude,
-            birthLongitude: resolved.longitude,
-            timezone: resolved.timezone,
-            geocodedLocation: resolved.coordinateSource === 'geocoded' ? resolved.location : null,
-          } as Prisma.InputJsonObject,
-          errorMessage: null,
-          generatedAt: new Date(),
-        },
-      });
-    } catch (error: unknown) {
-      return this.prisma.astrologyReport.update({
-        where: { id: report.id },
-        data: {
-          status: 'FAILED',
-          errorMessage: error instanceof Error ? error.message : 'Astrology report generation failed.',
-        },
-      });
-    }
+  async markReportFailed(id: string, message: string) {
+    const report = await this.prisma.astrologyReport.findUnique({ where: { id }, select: { id: true } });
+    if (!report) throw new NotFoundException('Report not found');
+    return this.prisma.astrologyReport.update({
+      where: { id },
+      data: { status: 'FAILED', errorMessage: message },
+    });
   }
 
   async getReportFile(reportId: string, userId: string) {
@@ -230,8 +191,8 @@ export class AstrologyReportsService {
       throw new NotFoundException('Report file is not ready');
     }
 
-    const fileName = sanitizeFileName(report.fileName);
-    const filePath = join(this.getReportsDir(), fileName);
+    const fileName = sanitizeReportFileName(report.fileName);
+    const filePath = join(getAstrologyReportsDir(), fileName);
     await access(filePath).catch(() => {
       throw new NotFoundException('Report file not found');
     });
@@ -239,16 +200,12 @@ export class AstrologyReportsService {
     return { fileName, filePath };
   }
 
-  private getReportsDir() {
-    return resolve(this.config.get<string>('ASTROLOGY_REPORTS_DIR') || 'storage/astrology-reports');
-  }
-
   private getSettings() {
     return getOllamaSettings(this.prisma, this.config);
   }
 }
 
-interface ParsedAstrologyForm {
+export interface ParsedAstrologyForm {
   fullName: string;
   birthDate: string;
   birthTime: string;
@@ -317,10 +274,3 @@ function readOptionalNumber(value: unknown) {
   return null;
 }
 
-function slugify(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'astrology-report';
-}
-
-function sanitizeFileName(value: string) {
-  return value.replace(/[^a-z0-9._-]/gi, '');
-}

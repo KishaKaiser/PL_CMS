@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const TABS = [
+  { href: '/admin/astrology/orders', label: 'Orders' },
   { href: '/admin/astrology', label: 'Chart Library' },
   { href: '/admin/astrology/synastry', label: 'Synastry' },
   { href: '/admin/astrology/karmic', label: 'Karmic Relationship' },
