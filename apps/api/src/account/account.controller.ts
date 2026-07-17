@@ -60,11 +60,6 @@ export class AccountController {
     return this.astrologyReports.listUserDownloads(req.user.id);
   }
 
-  @Post('downloads/:id/generate')
-  generateDownload(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.astrologyReports.generateReport(id, req.user.id);
-  }
-
   @Get('downloads/:id/file')
   async downloadReportFile(
     @Request() req: AuthenticatedRequest,

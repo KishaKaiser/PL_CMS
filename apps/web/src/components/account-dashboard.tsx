@@ -304,17 +304,6 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     );
   }
 
-  async function handleGenerateDownload(downloadId: string) {
-    await saveAction(`download-${downloadId}`, async () => {
-      const res = await fetch(`/api/proxy/account/downloads/${downloadId}/generate`, { method: 'POST' });
-      if (!res.ok) {
-        const responseBody = (await res.json().catch(() => null)) as { message?: string } | null;
-        throw new Error(responseBody?.message ?? 'Report generation failed');
-      }
-      setSuccess('Astrology report request submitted.');
-    });
-  }
-
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
     window.location.href = '/';
@@ -537,23 +526,8 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                           >
                             Open Download
                           </a>
-                        ) : download.reportText ? (
-                          <a
-                            href={`data:text/plain;charset=utf-8,${encodeURIComponent(download.reportText)}`}
-                            download={download.fileName ?? 'astrology-report.txt'}
-                            className="rounded-lg bg-purple-700 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-800"
-                          >
-                            Download Report
-                          </a>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => void handleGenerateDownload(download.id)}
-                            disabled={saving === `download-${download.id}`}
-                            className="rounded-lg border border-purple-500 px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-50"
-                          >
-                            {saving === `download-${download.id}` ? 'Sending...' : 'Generate Report'}
-                          </button>
+                          <span className="text-sm text-gray-500">Your report is being prepared. It will appear here when ready.</span>
                         )}
                       </div>
                     </div>

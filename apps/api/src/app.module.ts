@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { InstallModule } from './install/install.module';
 import { WebSocketGatewayModule } from './websocket/websocket.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ProductsModule } from './products/products.module';
 import { CheckoutModule } from './checkout/checkout.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -27,6 +28,7 @@ import { AstrologyModule } from './astrology/astrology.module';
 @Module({
   imports: [
     ConfigModule,
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       {
         ttl: 60_000,

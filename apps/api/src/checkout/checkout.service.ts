@@ -406,7 +406,7 @@ export class CheckoutService {
 
     await this.decrementInventory(order.id);
     const minutesCredited = await this.creditMinutesIfNeeded(order.id, payment.id);
-    await this.astrologyReports.generateReadyReports(order.id, userId);
+    await this.astrologyReports.markReportsAwaitingFulfillment(order.id, userId);
 
     return {
       success: true,
