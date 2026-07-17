@@ -7,7 +7,6 @@ const TABS = [
   { href: '/admin/astrology/orders', label: 'Orders' },
   { href: '/admin/astrology', label: 'Chart Library' },
   { href: '/admin/astrology/horoscopes', label: 'Horoscopes' },
-  { href: '/admin/astrology/blog', label: 'Blog Generator' },
 ];
 
 export default function AstrologyLayout({ children }: { children: React.ReactNode }) {

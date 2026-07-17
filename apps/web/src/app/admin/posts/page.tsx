@@ -83,6 +83,34 @@ const FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
 const SCHEDULE_MIN_LEAD_MS = 60_000;
 const AUTOSAVE_DELAY_MS = 30_000;
 
+const TRANSIT_TYPES = [
+  { value: 'mercury-retrograde', label: 'Mercury Retrograde' },
+  { value: 'venus-retrograde', label: 'Venus Retrograde' },
+  { value: 'mars-retrograde', label: 'Mars Retrograde' },
+  { value: 'jupiter-transit', label: 'Jupiter Transit' },
+  { value: 'saturn-transit', label: 'Saturn Transit' },
+  { value: 'uranus-transit', label: 'Uranus Transit' },
+  { value: 'neptune-transit', label: 'Neptune Transit' },
+  { value: 'pluto-transit', label: 'Pluto Transit' },
+  { value: 'solar-eclipse', label: 'Solar Eclipse' },
+  { value: 'lunar-eclipse', label: 'Lunar Eclipse' },
+  { value: 'new-moon', label: 'New Moon' },
+  { value: 'full-moon', label: 'Full Moon' },
+];
+
+function paragraphsToHtml(text: string) {
+  return text
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`)
+    .join('');
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 const emptyForm: PostForm = {
   slug: '',
   title: '',
@@ -319,6 +347,13 @@ export default function AdminPostsPage() {
   const [autosaveState, setAutosaveState] = useState<AutosaveState>('idle');
   const [revisionRefreshKey, setRevisionRefreshKey] = useState(0);
   const suppressAutosaveRef = useRef(true);
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [aiMode, setAiMode] = useState<'transit' | 'custom'>('transit');
+  const [aiTransitType, setAiTransitType] = useState(TRANSIT_TYPES[0]?.value ?? '');
+  const [aiCustomTopic, setAiCustomTopic] = useState('');
+  const [aiAdditionalContext, setAiAdditionalContext] = useState('');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState('');
 
   const fetchData = useCallback(async (nextStatus: StatusFilter) => {
     setLoading(true);
@@ -650,10 +685,46 @@ export default function AdminPostsPage() {
     setShowRevisions(false);
     setAutosaveState('idle');
     setShowEditor(false);
+    setShowAiPanel(false);
+    setAiMode('transit');
+    setAiCustomTopic('');
+    setAiAdditionalContext('');
+    setAiError('');
   }
 
   function toggleSelection(ids: string[], id: string) {
     return ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id];
+  }
+
+  async function handleAiGenerate() {
+    setAiGenerating(true);
+    setAiError('');
+    try {
+      const res = await fetch('/api/proxy/astrology/blog/generate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          transitType: aiMode === 'transit' ? aiTransitType : undefined,
+          customTopic: aiMode === 'custom' ? aiCustomTopic.trim() : undefined,
+          additionalContext: aiAdditionalContext.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? 'The blog post could not be generated.');
+
+      const generated = data as { title: string; content: string };
+      updateForm((currentForm) => ({
+        ...currentForm,
+        title: generated.title,
+        slug: slugTouched ? currentForm.slug : slugify(generated.title),
+        content: paragraphsToHtml(generated.content),
+      }));
+      setShowAiPanel(false);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'The blog post could not be generated.');
+    } finally {
+      setAiGenerating(false);
+    }
   }
 
   function insertMediaIntoContent(asset: MediaAsset) {
@@ -757,6 +828,79 @@ export default function AdminPostsPage() {
 
         <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-5">
+            {!editingId && (
+              <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+                {showAiPanel ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-gray-950">Generate with AI</h3>
+                      <button type="button" onClick={() => setShowAiPanel(false)} className="text-xs font-medium text-gray-500 hover:underline">
+                        Cancel
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAiMode('transit')}
+                        className={`rounded px-3 py-1.5 text-xs font-medium ${aiMode === 'transit' ? 'bg-indigo-600 text-white' : 'border border-gray-300 bg-white text-gray-700'}`}
+                      >
+                        Transit content
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAiMode('custom')}
+                        className={`rounded px-3 py-1.5 text-xs font-medium ${aiMode === 'custom' ? 'bg-indigo-600 text-white' : 'border border-gray-300 bg-white text-gray-700'}`}
+                      >
+                        Custom topic
+                      </button>
+                    </div>
+                    {aiMode === 'transit' ? (
+                      <select
+                        value={aiTransitType}
+                        onChange={(event) => setAiTransitType(event.target.value)}
+                        className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                      >
+                        {TRANSIT_TYPES.map((transit) => (
+                          <option key={transit.value} value={transit.value}>{transit.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        value={aiCustomTopic}
+                        onChange={(event) => setAiCustomTopic(event.target.value)}
+                        placeholder="e.g. How the full moon in Scorpio affects each sign"
+                        className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                      />
+                    )}
+                    <textarea
+                      value={aiAdditionalContext}
+                      onChange={(event) => setAiAdditionalContext(event.target.value)}
+                      placeholder="Additional details for the AI (optional)"
+                      rows={2}
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    {aiError && <p className="text-xs text-red-600">{aiError}</p>}
+                    <button
+                      type="button"
+                      onClick={() => void handleAiGenerate()}
+                      disabled={aiGenerating || (aiMode === 'custom' && !aiCustomTopic.trim())}
+                      className="w-full rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                    >
+                      {aiGenerating ? 'Generating...' : 'Generate Title & Content'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAiPanel(true)}
+                    className="text-sm font-medium text-indigo-700 hover:underline"
+                  >
+                    Create AI generated content
+                  </button>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700">Title *</label>
               <input
