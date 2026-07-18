@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { OllamaClient } from './ollama-client';
@@ -45,7 +45,7 @@ export class AstrologyBlogService {
       label = customTopic.trim();
       description = 'a custom astrology topic requested by the site admin';
     } else {
-      throw new Error('Choose a transit type or enter a custom topic to generate a blog post.');
+      throw new BadRequestException('Choose a transit type or enter a custom topic to generate a blog post.');
     }
 
     const prompt = `You are an expert astrologer writing an engaging blog post for a general audience interested in astrology.
@@ -83,12 +83,12 @@ Ensure all quotes and special characters in the JSON are properly escaped. Do no
     );
 
     if (!response) {
-      throw new Error('The blog post could not be generated. Check the Ollama URL and model settings, then try again.');
+      throw new BadRequestException('The blog post could not be generated. Check the Ollama URL and model settings, then try again.');
     }
 
     const parsed = parseBlogResponse(response);
     if (!parsed.title || !parsed.content || parsed.content.length < 100) {
-      throw new Error('The generated blog post was incomplete. Try generating it again.');
+      throw new BadRequestException('The generated blog post was incomplete. Try generating it again.');
     }
 
     return parsed;
@@ -100,9 +100,11 @@ function parseBlogResponse(response: string): GeneratedBlogPost {
     return JSON.parse(response) as GeneratedBlogPost;
   } catch {
     const match = response.match(/\{[\s\S]*"title"[\s\S]*"content"[\s\S]*\}/);
-    if (match) {
-      return JSON.parse(match[0]) as GeneratedBlogPost;
+    try {
+      if (match) return JSON.parse(match[0]) as GeneratedBlogPost;
+    } catch {
+      // fall through to the error below
     }
-    throw new Error('Could not parse the blog post response. The response may be incomplete or incorrectly formatted.');
+    throw new BadRequestException('Could not parse the blog post response. The response may be incomplete or incorrectly formatted.');
   }
 }

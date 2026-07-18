@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { ZODIAC_SIGNS, type ZodiacSign } from '@pl-cms/shared';
@@ -46,7 +46,7 @@ export class HoroscopeService {
     );
 
     if (!response) {
-      throw new Error('The horoscope could not be generated. Check the Ollama URL and model settings, then try again.');
+      throw new BadRequestException('The horoscope could not be generated. Check the Ollama URL and model settings, then try again.');
     }
 
     const parsed = parseHoroscopeResponse(response);
@@ -110,7 +110,7 @@ Ensure all quotes and special characters in the JSON are properly escaped. Do no
 function parseHoroscopeResponse(response: string): GeneratedHoroscope {
   const parsed = tryParse(response);
   if (!parsed.overview || !parsed.career || !parsed.money || !parsed.love) {
-    throw new Error('The generated horoscope was incomplete. Try generating it again.');
+    throw new BadRequestException('The generated horoscope was incomplete. Try generating it again.');
   }
   return parsed;
 }
@@ -120,9 +120,11 @@ function tryParse(response: string): GeneratedHoroscope {
     return JSON.parse(response) as GeneratedHoroscope;
   } catch {
     const match = response.match(/\{[\s\S]*"overview"[\s\S]*"career"[\s\S]*"money"[\s\S]*"love"[\s\S]*\}/);
-    if (match) {
-      return JSON.parse(match[0]) as GeneratedHoroscope;
+    try {
+      if (match) return JSON.parse(match[0]) as GeneratedHoroscope;
+    } catch {
+      // fall through to the error below
     }
-    throw new Error('Could not parse the horoscope response. The response may be incomplete or incorrectly formatted.');
+    throw new BadRequestException('Could not parse the horoscope response. The response may be incomplete or incorrectly formatted.');
   }
 }
