@@ -69,20 +69,14 @@ Write in an accessible, warm tone that balances astrological knowledge with prac
 
 IMPORTANT: Keep the content concise (around 500-800 words total) to ensure complete generation.
 
-Return ONLY a valid JSON object with this EXACT structure (no additional text before or after):
-{
-  "title": "An engaging, SEO-friendly blog post title (one line)",
-  "content": "The complete blog post content. Write 4-6 paragraphs. Separate paragraphs with TWO newline characters. Keep total length under 800 words."
-}
+Respond in EXACTLY this format, with no other text before or after:
 
-Ensure all quotes and special characters in the JSON are properly escaped. Do not include any text outside the JSON object.`;
+TITLE: <an engaging, SEO-friendly blog post title, one line>
+CONTENT:
+<the complete blog post content, written as 4-6 paragraphs separated by blank lines>`;
 
     const settings = await getOllamaSettings(this.prisma, this.config);
-    const response = await this.ollama.generate(
-      prompt,
-      { baseUrl: settings.ollamaBaseUrl, model: settings.ollamaModel },
-      { json: true },
-    );
+    const response = await this.ollama.generate(prompt, { baseUrl: settings.ollamaBaseUrl, model: settings.ollamaModel });
 
     if (!response) {
       throw new BadRequestException('The blog post could not be generated. Check the Ollama URL and model settings, then try again.');
@@ -108,15 +102,15 @@ Ensure all quotes and special characters in the JSON are properly escaped. Do no
 }
 
 function parseBlogResponse(response: string): GeneratedBlogPost {
-  try {
-    return JSON.parse(response) as GeneratedBlogPost;
-  } catch {
-    const match = response.match(/\{[\s\S]*"title"[\s\S]*"content"[\s\S]*\}/);
-    try {
-      if (match) return JSON.parse(match[0]) as GeneratedBlogPost;
-    } catch {
-      // fall through to the error below
-    }
+  const titleMatch = response.match(/TITLE:\s*(.+)/i);
+  const contentMatch = response.match(/CONTENT:\s*([\s\S]+)/i);
+
+  const title = titleMatch?.[1]?.trim() ?? '';
+  const content = contentMatch?.[1]?.trim() ?? '';
+
+  if (!title || !content) {
     throw new BadRequestException('Could not parse the blog post response. The response may be incomplete or incorrectly formatted.');
   }
+
+  return { title, content };
 }

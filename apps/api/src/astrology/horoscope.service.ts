@@ -39,11 +39,7 @@ export class HoroscopeService {
   async generateForSign(sign: ZodiacSign, year: number, month: number) {
     const prompt = buildHoroscopePrompt(sign, year, month);
     const settings = await getOllamaSettings(this.prisma, this.config);
-    const response = await this.ollama.generate(
-      prompt,
-      { baseUrl: settings.ollamaBaseUrl, model: settings.ollamaModel },
-      { json: true },
-    );
+    const response = await this.ollama.generate(prompt, { baseUrl: settings.ollamaBaseUrl, model: settings.ollamaModel });
 
     if (!response) {
       throw new BadRequestException('The horoscope could not be generated. Check the Ollama URL and model settings, then try again.');
@@ -102,35 +98,31 @@ Write a warm, insightful monthly horoscope with four parts:
 
 Keep each section concise and practical, written directly to the reader ("you").
 
-Return ONLY a valid JSON object with this EXACT structure (no additional text before or after):
-{
-  "overview": "The general monthly overview.",
-  "career": "Career and money guidance.",
-  "money": "Financial guidance, distinct from the career text.",
-  "love": "Love and relationships guidance."
-}
+Respond in EXACTLY this format, with no other text before or after:
 
-Ensure all quotes and special characters in the JSON are properly escaped. Do not include any text outside the JSON object.`;
+OVERVIEW: <the general monthly overview>
+CAREER: <career and money guidance>
+MONEY: <financial guidance, distinct from the career text>
+LOVE: <love and relationships guidance>`;
 }
 
 function parseHoroscopeResponse(response: string): GeneratedHoroscope {
-  const parsed = tryParse(response);
+  const parsed: GeneratedHoroscope = {
+    overview: extractField(response, 'OVERVIEW', 'CAREER'),
+    career: extractField(response, 'CAREER', 'MONEY'),
+    money: extractField(response, 'MONEY', 'LOVE'),
+    love: extractField(response, 'LOVE', null),
+  };
+
   if (!parsed.overview || !parsed.career || !parsed.money || !parsed.love) {
     throw new BadRequestException('The generated horoscope was incomplete. Try generating it again.');
   }
   return parsed;
 }
 
-function tryParse(response: string): GeneratedHoroscope {
-  try {
-    return JSON.parse(response) as GeneratedHoroscope;
-  } catch {
-    const match = response.match(/\{[\s\S]*"overview"[\s\S]*"career"[\s\S]*"money"[\s\S]*"love"[\s\S]*\}/);
-    try {
-      if (match) return JSON.parse(match[0]) as GeneratedHoroscope;
-    } catch {
-      // fall through to the error below
-    }
-    throw new BadRequestException('Could not parse the horoscope response. The response may be incomplete or incorrectly formatted.');
-  }
+function extractField(response: string, label: string, nextLabel: string | null): string {
+  const pattern = nextLabel
+    ? new RegExp(`${label}:\\s*([\\s\\S]*?)\\s*${nextLabel}:`, 'i')
+    : new RegExp(`${label}:\\s*([\\s\\S]*)`, 'i');
+  return response.match(pattern)?.[1]?.trim() ?? '';
 }
