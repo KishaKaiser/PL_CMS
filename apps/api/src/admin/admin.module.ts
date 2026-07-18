@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AdminAdvisorsController } from './admin-advisors/advisors.controller';
+import { AdminAdvisorsService } from './admin-advisors/advisors.service';
 import { DashboardController } from './admin-dashboard/dashboard.controller';
 import { DashboardService } from './admin-dashboard/dashboard.service';
 import { MediaController } from './admin-media/media.controller';
@@ -37,6 +39,7 @@ import { DefaultContentModule } from '../bootstrap/default-content.module';
     MediaController,
     ModulesController,
     ThemeBuilderController,
+    AdminAdvisorsController,
   ],
   providers: [
     DashboardService,
@@ -50,6 +53,7 @@ import { DefaultContentModule } from '../bootstrap/default-content.module';
     MediaService,
     ModulesService,
     ThemeBuilderService,
+    AdminAdvisorsService,
   ],
   exports: [AuditService, PostsService],
 })

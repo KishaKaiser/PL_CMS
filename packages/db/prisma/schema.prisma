@@ -121,6 +121,13 @@ model AdvisorProfile {
   profileImageUrl String?
   ratePerMinute Decimal  @default(0)
   isOnline      Boolean  @default(false)
+  // Plain internal extension on the Grandstream UCM6301 (e.g. "1001"), dialed
+  // through the Twilio SIP trunk to bridge a call to this advisor.
+  sipExtension  String?
+  // Whether the queue auto-dialer should call through this advisor's
+  // callback queue. Kept separate from isOnline: an advisor can be online
+  // for direct/scheduled calls without the queue auto-dialer running.
+  queueCallingEnabled Boolean @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -129,6 +136,7 @@ model AdvisorProfile {
   callQueues          CallQueue[]
   callSessionsAsAdvisor CallSession[]        @relation("AdvisorSessions")
   payoutMethods       AdvisorPayoutMethod[]
+  appointments        Appointment[]          @relation("AdvisorAppointments")
 
   @@map("advisor_profiles")
 }
@@ -142,12 +150,17 @@ model ClientProfile {
   userId         String   @unique
   displayName    String
   balanceMinutes Int      @default(0)
+  // Dollar-balance wallet, in cents. Replaces balanceMinutes for call
+  // billing (Phase 2) — kept alongside it here so this migration doesn't
+  // break the still-live balanceMinutes-based billing path.
+  balanceCents   Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   user                    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   callSessionsAsClient    CallSession[] @relation("ClientSessions")
   queueAssignments        QueueAssignment[]
+  appointments            Appointment[] @relation("ClientAppointments")
 
   @@map("client_profiles")
 }
@@ -187,6 +200,7 @@ model CallSession {
   advisor AdvisorProfile @relation("AdvisorSessions", fields: [advisorId], references: [id])
   client  ClientProfile  @relation("ClientSessions", fields: [clientId], references: [id])
   walletTransactions WalletTransaction[]
+  appointment Appointment?
 
   @@map("call_sessions")
 }
@@ -209,17 +223,48 @@ model CallQueue {
 }
 
 model QueueAssignment {
-  id        String   @id @default(cuid())
-  queueId   String
-  clientId  String
-  position  Int
-  joinedAt  DateTime @default(now())
-  status    String   @default("WAITING") // WAITING | CALLED | CANCELLED
+  id             String   @id @default(cuid())
+  queueId        String
+  clientId       String
+  position       Int
+  joinedAt       DateTime @default(now())
+  // How long the client chose to wait before giving up.
+  maxWaitMinutes Int      @default(30)
+  // Computed at join time as joinedAt + maxWaitMinutes; a sweep expires any
+  // still-WAITING assignment past this time.
+  expiresAt      DateTime
+  status         String   @default("WAITING") // WAITING | CALLED | CANCELLED | EXPIRED
 
   queue  CallQueue     @relation(fields: [queueId], references: [id], onDelete: Cascade)
   client ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
+  @@index([queueId, status])
   @@map("queue_assignments")
+}
+
+// ──────────────────────────────────────────────
+// Scheduled Appointments
+// ──────────────────────────────────────────────
+
+model Appointment {
+  id            String   @id @default(cuid())
+  advisorId     String
+  clientId      String
+  scheduledAt   DateTime
+  // PENDING | ACCEPTED | DECLINED | COMPLETED | MISSED | CANCELLED
+  status        String   @default("PENDING")
+  // Set once the scheduled call actually connects.
+  callSessionId String?  @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  advisor     AdvisorProfile @relation("AdvisorAppointments", fields: [advisorId], references: [id], onDelete: Cascade)
+  client      ClientProfile  @relation("ClientAppointments", fields: [clientId], references: [id], onDelete: Cascade)
+  callSession CallSession?   @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
+
+  @@index([advisorId, status])
+  @@index([clientId, status])
+  @@map("appointments")
 }
 
 // ──────────────────────────────────────────────

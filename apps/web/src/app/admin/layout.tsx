@@ -41,6 +41,7 @@ const NAV_GROUPS = [
     label: 'People',
     items: [
       { href: '/admin/users', label: 'Users' },
+      { href: '/admin/advisors', label: 'Advisors' },
       { href: '/admin/messages', label: 'Messages' },
     ],
   },
