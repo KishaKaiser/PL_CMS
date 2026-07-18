@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { OllamaClient } from './ollama-client';
@@ -26,6 +26,8 @@ export interface GeneratedBlogPost {
 
 @Injectable()
 export class AstrologyBlogService {
+  private readonly logger = new Logger(AstrologyBlogService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -86,8 +88,18 @@ Ensure all quotes and special characters in the JSON are properly escaped. Do no
       throw new BadRequestException('The blog post could not be generated. Check the Ollama URL and model settings, then try again.');
     }
 
-    const parsed = parseBlogResponse(response);
+    let parsed: GeneratedBlogPost;
+    try {
+      parsed = parseBlogResponse(response);
+    } catch (error) {
+      this.logger.warn(`Unparseable blog response (${response.length} chars): ${response.slice(0, 2000)}`);
+      throw error;
+    }
+
     if (!parsed.title || !parsed.content || parsed.content.length < 100) {
+      this.logger.warn(
+        `Incomplete blog response — title: ${JSON.stringify(parsed.title)}, content length: ${parsed.content?.length ?? 0}. Raw: ${response.slice(0, 2000)}`,
+      );
       throw new BadRequestException('The generated blog post was incomplete. Try generating it again.');
     }
 

@@ -49,7 +49,13 @@ export class HoroscopeService {
       throw new BadRequestException('The horoscope could not be generated. Check the Ollama URL and model settings, then try again.');
     }
 
-    const parsed = parseHoroscopeResponse(response);
+    let parsed: GeneratedHoroscope;
+    try {
+      parsed = parseHoroscopeResponse(response);
+    } catch (error) {
+      this.logger.warn(`Bad horoscope response for ${sign} (${response.length} chars): ${response.slice(0, 2000)}`);
+      throw error;
+    }
 
     return this.prisma.horoscope.upsert({
       where: { sign_year_month: { sign, year, month } },
