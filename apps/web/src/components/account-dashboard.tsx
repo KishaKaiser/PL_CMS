@@ -259,6 +259,14 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     });
   }
 
+  async function handleToggleOnline() {
+    const nextIsOnline = !advisorForm.isOnline;
+    await saveAction('advisor-online', async () => {
+      await postJson('advisor-profile', { ...advisorForm, ratePerMinute: Number(advisorForm.ratePerMinute), isOnline: nextIsOnline }, 'PATCH');
+      setSuccess(nextIsOnline ? 'You are now online for calls.' : 'You are now offline.');
+    });
+  }
+
   async function handlePayoutSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await saveAction('payout', async () => {
@@ -416,7 +424,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
         <TopCard className="items-center text-center">
           <IconBubble icon="fa-solid fa-phone" />
           <h2 className="text-2xl font-bold text-gray-950">Call Availability</h2>
-          <ToggleSwitch enabled={advisorForm.isOnline} />
+          <ToggleSwitch enabled={advisorForm.isOnline} onChange={() => void handleToggleOnline()} disabled={saving === 'advisor-online'} />
           <p className={advisorForm.isOnline ? 'font-semibold text-green-600' : 'font-semibold text-gray-500'}>
             {advisorForm.isOnline ? 'On' : 'Off'} <span className="ml-1 inline-block h-2.5 w-2.5 rounded-full bg-current" />
           </p>
@@ -692,11 +700,26 @@ function IconBubble({ icon, small = false }: { icon: string; small?: boolean }) 
   );
 }
 
-function ToggleSwitch({ enabled }: { enabled: boolean }) {
+function ToggleSwitch({
+  enabled,
+  onChange,
+  disabled,
+}: {
+  enabled: boolean;
+  onChange?: () => void;
+  disabled?: boolean;
+}) {
   return (
-    <span className={`relative inline-flex h-16 w-32 items-center rounded-full p-2 ${enabled ? 'bg-purple-700' : 'bg-gray-300'}`}>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      onClick={onChange}
+      disabled={disabled || !onChange}
+      className={`relative inline-flex h-16 w-32 items-center rounded-full p-2 transition disabled:cursor-not-allowed disabled:opacity-60 ${enabled ? 'bg-purple-700' : 'bg-gray-300'}`}
+    >
       <span className={`h-12 w-12 rounded-full bg-white shadow transition ${enabled ? 'translate-x-16' : 'translate-x-0'}`} />
-    </span>
+    </button>
   );
 }
 

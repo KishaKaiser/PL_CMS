@@ -44,6 +44,11 @@ interface AstrologyReportForm {
   ollamaModel: string;
 }
 
+interface TelephonyForm {
+  sipTrunkDomain: string;
+  dialInNumber: string;
+}
+
 interface SiteHomepageForm {
   mode: 'landing' | 'latest_posts' | 'page';
   pageSlug: string;
@@ -59,9 +64,15 @@ const SITE_HOMEPAGE_KEY = SITE_SETTING_KEYS.SITE_HOMEPAGE;
 const SITE_POSTS_PAGE_KEY = SITE_SETTING_KEYS.SITE_POSTS_PAGE;
 const SITE_EXTENSION_POINTS_KEY = SITE_SETTING_KEYS.SITE_EXTENSION_POINTS;
 const ASTROLOGY_REPORT_SETTINGS_KEY = 'astrology_report_settings';
+const TELEPHONY_SETTINGS_KEY = 'telephony_settings';
 
 const defaultIdentityForm: SiteIdentityForm = {
   ...DEFAULT_SITE_IDENTITY,
+};
+
+const defaultTelephonyForm: TelephonyForm = {
+  sipTrunkDomain: '',
+  dialInNumber: '',
 };
 
 const defaultAstrologyReportForm: AstrologyReportForm = {
@@ -112,6 +123,7 @@ export default function AdminSettingsPage() {
   const [postsPageForm, setPostsPageForm] = useState<SitePostsPageForm>(defaultPostsPageForm);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [astrologyReportForm, setAstrologyReportForm] = useState<AstrologyReportForm>(defaultAstrologyReportForm);
+  const [telephonyForm, setTelephonyForm] = useState<TelephonyForm>(defaultTelephonyForm);
 
   const publishedPages = useMemo(
     () => pages.filter((page) => Boolean(page.publishedAt)),
@@ -123,6 +135,7 @@ export default function AdminSettingsPage() {
     const homepage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_HOMEPAGE_KEY));
     const postsPage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_POSTS_PAGE_KEY));
     const astrologyReport = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, ASTROLOGY_REPORT_SETTINGS_KEY));
+    const telephony = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, TELEPHONY_SETTINGS_KEY));
 
     setIdentityForm({
       title: readString(identity?.title, defaultIdentityForm.title),
@@ -145,6 +158,10 @@ export default function AdminSettingsPage() {
     setAstrologyReportForm({
       ollamaBaseUrl: readString(astrologyReport?.ollamaBaseUrl, defaultAstrologyReportForm.ollamaBaseUrl),
       ollamaModel: readString(astrologyReport?.ollamaModel, defaultAstrologyReportForm.ollamaModel),
+    });
+    setTelephonyForm({
+      sipTrunkDomain: readString(telephony?.sipTrunkDomain, defaultTelephonyForm.sipTrunkDomain),
+      dialInNumber: readString(telephony?.dialInNumber, defaultTelephonyForm.dialInNumber),
     });
   }, []);
 
@@ -529,6 +546,46 @@ export default function AdminSettingsPage() {
                 className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
                 {saving[ASTROLOGY_REPORT_SETTINGS_KEY] ? 'Saving…' : 'Save Ollama settings'}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-xl border bg-white p-6 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">Telephony</h2>
+            <p className="text-sm text-gray-500">
+              SIP trunk and dial-in number used to bridge calls between clients and advisor extensions on the Grandstream UCM6301. Twilio account credentials stay in server environment variables, not here.
+            </p>
+          </div>
+
+          <div className="max-w-xl space-y-4">
+            <label className="block text-sm font-medium text-gray-700">
+              SIP trunk domain
+              <input
+                value={telephonyForm.sipTrunkDomain}
+                onChange={(event) => setTelephonyForm((current) => ({ ...current, sipTrunkDomain: event.target.value }))}
+                placeholder="e.g. your-trunk.pstn.twilio.com"
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block text-sm font-medium text-gray-700">
+              Dial-in number
+              <input
+                value={telephonyForm.dialInNumber}
+                onChange={(event) => setTelephonyForm((current) => ({ ...current, dialInNumber: event.target.value }))}
+                placeholder="e.g. +18005551234"
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              />
+            </label>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => void saveManagedSetting(TELEPHONY_SETTINGS_KEY, telephonyForm)}
+                disabled={saving[TELEPHONY_SETTINGS_KEY] || loading}
+                className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {saving[TELEPHONY_SETTINGS_KEY] ? 'Saving…' : 'Save Telephony'}
               </button>
             </div>
           </div>
