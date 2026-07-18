@@ -39,29 +39,6 @@ interface SiteIdentityForm {
   footerText: string;
 }
 
-interface BillingApiForm {
-  provider: 'manual' | 'paypal' | 'stripe';
-  environment: 'sandbox' | 'live';
-  paypalClientId: string;
-  paypalClientSecret: string;
-  stripePublishableKey: string;
-  stripeSecretKey: string;
-  webhookSecret: string;
-}
-
-interface ShippingApiForm {
-  provider: 'manual' | 'shipstation' | 'shippo' | 'easypost';
-  apiKey: string;
-  apiSecret: string;
-  accountId: string;
-  originPostalCode: string;
-  originCountry: string;
-  enabledCarrierCodes: string[];
-  allowedServiceCodes: string[];
-  markupType: 'fixed' | 'percentage';
-  markupAmount: string;
-}
-
 interface AstrologyReportForm {
   ollamaBaseUrl: string;
   ollamaModel: string;
@@ -81,63 +58,16 @@ const SITE_IDENTITY_KEY = SITE_SETTING_KEYS.SITE_IDENTITY;
 const SITE_HOMEPAGE_KEY = SITE_SETTING_KEYS.SITE_HOMEPAGE;
 const SITE_POSTS_PAGE_KEY = SITE_SETTING_KEYS.SITE_POSTS_PAGE;
 const SITE_EXTENSION_POINTS_KEY = SITE_SETTING_KEYS.SITE_EXTENSION_POINTS;
-const BILLING_API_SETTINGS_KEY = 'billing_api_settings';
-const SHIPPING_API_SETTINGS_KEY = 'shipping_api_settings';
 const ASTROLOGY_REPORT_SETTINGS_KEY = 'astrology_report_settings';
 
 const defaultIdentityForm: SiteIdentityForm = {
   ...DEFAULT_SITE_IDENTITY,
 };
 
-const defaultBillingApiForm: BillingApiForm = {
-  provider: 'manual',
-  environment: 'sandbox',
-  paypalClientId: '',
-  paypalClientSecret: '',
-  stripePublishableKey: '',
-  stripeSecretKey: '',
-  webhookSecret: '',
-};
-
-const defaultShippingApiForm: ShippingApiForm = {
-  provider: 'manual',
-  apiKey: '',
-  apiSecret: '',
-  accountId: '',
-  originPostalCode: '',
-  originCountry: 'US',
-  enabledCarrierCodes: ['usps'],
-  allowedServiceCodes: [],
-  markupType: 'fixed',
-  markupAmount: '0',
-};
-
 const defaultAstrologyReportForm: AstrologyReportForm = {
   ollamaBaseUrl: 'http://localhost:11434',
   ollamaModel: '',
 };
-
-const shipStationServiceOptions = [
-  ['usps_first_class_mail', 'USPS - First Class Mail'],
-  ['usps_ground_advantage', 'USPS - Ground Advantage'],
-  ['usps_parcel_select_ground', 'USPS - Parcel Select Ground Package'],
-  ['usps_priority_mail', 'USPS - Priority Mail (All)'],
-  ['usps_priority_mail_package_only', 'USPS - Priority Mail Package'],
-  ['usps_priority_mail_flat_rate_only', 'USPS - Priority Mail Flat Rate Only'],
-  ['usps_priority_mail_express', 'USPS - Priority Mail Express'],
-  ['ups_ground', 'UPS - Ground'],
-  ['ups_ground_saver', 'UPS - Ground Saver'],
-  ['ups_2nd_day_air', 'UPS - 2nd Day Air'],
-  ['ups_next_day_air', 'UPS - Next Day Air'],
-  ['ups_3_day_select', 'UPS - 3 Day Select'],
-] as const;
-
-const preferredCheckoutServiceCodes = [
-  'usps_priority_mail_package_only',
-  'usps_parcel_select_ground',
-  'ups_ground',
-  'ups_2nd_day_air',
-];
 
 const defaultHomepageForm: SiteHomepageForm = {
   ...DEFAULT_HOMEPAGE_SETTINGS,
@@ -161,24 +91,6 @@ function readString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
 }
 
-function readStringOrNumber(value: unknown, fallback = '') {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  return fallback;
-}
-
-function readOption<T extends string>(value: unknown, options: readonly T[], fallback: T) {
-  return typeof value === 'string' && options.includes(value as T) ? (value as T) : fallback;
-}
-
-function readStringArray(value: unknown, fallback: string[]) {
-  if (!Array.isArray(value)) return fallback;
-  const strings = value
-    .filter((item): item is string => typeof item === 'string')
-    .map((item) => item === 'stamps_com' ? 'usps' : item === 'globalpost' ? 'global_post' : item);
-  return strings.length > 0 ? strings : fallback;
-}
-
 function findSetting(settings: Setting[], key: string) {
   return settings.find((setting) => setting.key === key)?.value;
 }
@@ -199,8 +111,6 @@ export default function AdminSettingsPage() {
   const [homepageForm, setHomepageForm] = useState<SiteHomepageForm>(defaultHomepageForm);
   const [postsPageForm, setPostsPageForm] = useState<SitePostsPageForm>(defaultPostsPageForm);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
-  const [billingApiForm, setBillingApiForm] = useState<BillingApiForm>(defaultBillingApiForm);
-  const [shippingApiForm, setShippingApiForm] = useState<ShippingApiForm>(defaultShippingApiForm);
   const [astrologyReportForm, setAstrologyReportForm] = useState<AstrologyReportForm>(defaultAstrologyReportForm);
 
   const publishedPages = useMemo(
@@ -212,8 +122,6 @@ export default function AdminSettingsPage() {
     const identity = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_IDENTITY_KEY));
     const homepage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_HOMEPAGE_KEY));
     const postsPage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_POSTS_PAGE_KEY));
-    const billingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, BILLING_API_SETTINGS_KEY));
-    const shippingApi = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SHIPPING_API_SETTINGS_KEY));
     const astrologyReport = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, ASTROLOGY_REPORT_SETTINGS_KEY));
 
     setIdentityForm({
@@ -233,27 +141,6 @@ export default function AdminSettingsPage() {
     setPostsPageForm({
       type: postsPage?.type === 'page' ? 'page' : defaultPostsPageForm.type,
       pageSlug: readString(postsPage?.pageSlug, defaultPostsPageForm.pageSlug),
-    });
-    setBillingApiForm({
-      provider: readOption(billingApi?.provider, ['manual', 'paypal', 'stripe'] as const, defaultBillingApiForm.provider),
-      environment: readOption(billingApi?.environment, ['sandbox', 'live'] as const, defaultBillingApiForm.environment),
-      paypalClientId: readString(billingApi?.paypalClientId, defaultBillingApiForm.paypalClientId),
-      paypalClientSecret: readString(billingApi?.paypalClientSecret, defaultBillingApiForm.paypalClientSecret),
-      stripePublishableKey: readString(billingApi?.stripePublishableKey, defaultBillingApiForm.stripePublishableKey),
-      stripeSecretKey: readString(billingApi?.stripeSecretKey, defaultBillingApiForm.stripeSecretKey),
-      webhookSecret: readString(billingApi?.webhookSecret, defaultBillingApiForm.webhookSecret),
-    });
-    setShippingApiForm({
-      provider: readOption(shippingApi?.provider, ['manual', 'shipstation', 'shippo', 'easypost'] as const, defaultShippingApiForm.provider),
-      apiKey: readString(shippingApi?.apiKey, defaultShippingApiForm.apiKey),
-      apiSecret: readString(shippingApi?.apiSecret, defaultShippingApiForm.apiSecret),
-      accountId: readString(shippingApi?.accountId, defaultShippingApiForm.accountId),
-      originPostalCode: readString(shippingApi?.originPostalCode, defaultShippingApiForm.originPostalCode),
-      originCountry: readString(shippingApi?.originCountry, defaultShippingApiForm.originCountry),
-      enabledCarrierCodes: readStringArray(shippingApi?.enabledCarrierCodes, defaultShippingApiForm.enabledCarrierCodes),
-      allowedServiceCodes: readStringArray(shippingApi?.allowedServiceCodes, defaultShippingApiForm.allowedServiceCodes),
-      markupType: readOption(shippingApi?.markupType, ['fixed', 'percentage'] as const, defaultShippingApiForm.markupType),
-      markupAmount: readStringOrNumber(shippingApi?.markupAmount, defaultShippingApiForm.markupAmount),
     });
     setAstrologyReportForm({
       ollamaBaseUrl: readString(astrologyReport?.ollamaBaseUrl, defaultAstrologyReportForm.ollamaBaseUrl),
@@ -602,261 +489,13 @@ export default function AdminSettingsPage() {
 
         <section className="rounded-xl border bg-white p-6 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-lg font-semibold">API settings</h2>
-            <p className="text-sm text-gray-500">Store billing and shipping provider credentials used by checkout and fulfillment features.</p>
+            <h2 className="text-lg font-semibold">Ollama settings</h2>
+            <p className="text-sm text-gray-500">
+              Connect Ollama to generate AI content for astrology reports, blog posts, and horoscopes.
+            </p>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="space-y-4 rounded-lg border border-gray-200 p-4">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700">Billing</h3>
-                <p className="text-xs text-gray-500">Choose a payment provider and keep its credentials together.</p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Provider
-                  <select
-                    value={billingApiForm.provider}
-                    onChange={(event) =>
-                      setBillingApiForm((currentForm) => ({
-                        ...currentForm,
-                        provider: event.target.value as BillingApiForm['provider'],
-                      }))
-                    }
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                  >
-                    <option value="manual">Manual</option>
-                    <option value="paypal">PayPal</option>
-                    <option value="stripe">Stripe</option>
-                  </select>
-                </label>
-                <label className="block text-sm font-medium text-gray-700">
-                  Environment
-                  <select
-                    value={billingApiForm.environment}
-                    onChange={(event) =>
-                      setBillingApiForm((currentForm) => ({
-                        ...currentForm,
-                        environment: event.target.value as BillingApiForm['environment'],
-                      }))
-                    }
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                  >
-                    <option value="sandbox">Sandbox</option>
-                    <option value="live">Live</option>
-                  </select>
-                </label>
-              </div>
-              <input value={billingApiForm.paypalClientId} onChange={(event) => setBillingApiForm((currentForm) => ({ ...currentForm, paypalClientId: event.target.value }))} placeholder="PayPal client ID" className="w-full rounded border px-3 py-2 text-sm" />
-              <input value={billingApiForm.paypalClientSecret} onChange={(event) => setBillingApiForm((currentForm) => ({ ...currentForm, paypalClientSecret: event.target.value }))} placeholder="PayPal client secret" className="w-full rounded border px-3 py-2 text-sm" />
-              <input value={billingApiForm.stripePublishableKey} onChange={(event) => setBillingApiForm((currentForm) => ({ ...currentForm, stripePublishableKey: event.target.value }))} placeholder="Stripe publishable key" className="w-full rounded border px-3 py-2 text-sm" />
-              <input value={billingApiForm.stripeSecretKey} onChange={(event) => setBillingApiForm((currentForm) => ({ ...currentForm, stripeSecretKey: event.target.value }))} placeholder="Stripe secret key" className="w-full rounded border px-3 py-2 text-sm" />
-              <input value={billingApiForm.webhookSecret} onChange={(event) => setBillingApiForm((currentForm) => ({ ...currentForm, webhookSecret: event.target.value }))} placeholder="Webhook secret" className="w-full rounded border px-3 py-2 text-sm" />
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => void saveManagedSetting(BILLING_API_SETTINGS_KEY, billingApiForm)}
-                  disabled={saving[BILLING_API_SETTINGS_KEY] || loading}
-                  className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {saving[BILLING_API_SETTINGS_KEY] ? 'Saving…' : 'Save billing API'}
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
-              <h3 className="text-sm font-semibold text-purple-950">Shipping</h3>
-              <p className="mt-1 text-xs text-purple-800">
-                ShipStation credentials, warehouse origin, rate services, markup, custom store connection, and diagnostics now live together.
-              </p>
-              <a href="/admin/settings/shipping" className="mt-3 inline-flex rounded border border-purple-300 bg-white px-3 py-1.5 text-xs font-medium text-purple-900 hover:bg-purple-100">
-                Open Shipping
-              </a>
-            </div>
-
-            <div className="hidden">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700">Shipping</h3>
-                <p className="text-xs text-gray-500">Keep carrier and fulfillment API details with store settings.</p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShippingApiForm((currentForm) => ({
-                      ...currentForm,
-                      provider: 'shipstation',
-                      enabledCarrierCodes: ['usps', 'ups'],
-                      allowedServiceCodes: [],
-                      markupType: 'fixed',
-                      markupAmount: '0',
-                    }))
-                  }
-                  className="mt-3 rounded border border-purple-200 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-50"
-                >
-                  Use PLShipping defaults
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShippingApiForm((currentForm) => ({
-                      ...currentForm,
-                      provider: 'shipstation',
-                      enabledCarrierCodes: ['usps', 'ups'],
-                      allowedServiceCodes: preferredCheckoutServiceCodes,
-                    }))
-                  }
-                  className="ml-2 mt-3 rounded border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-800 hover:bg-purple-100"
-                >
-                  Use preferred checkout services
-                </button>
-              </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                <p className="font-medium">Warehouse origin address</p>
-                <p className="mt-1 text-xs text-amber-800">
-                  ShipStation live rates need a ship-from warehouse origin address before checkout can quote paid shipping.
-                </p>
-                <a href="/admin/settings/shipping" className="mt-3 inline-flex rounded border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">
-                  Set warehouse origin
-                </a>
-              </div>
-              <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 text-sm text-purple-950">
-                <p className="font-medium">ShipStation custom store connection</p>
-                <p className="mt-1 text-xs text-purple-800">
-                  Create the endpoint username and password ShipStation uses to pull PL_CMS orders and send tracking updates back.
-                </p>
-                <a href="/admin/settings/shipping" className="mt-3 inline-flex rounded border border-purple-300 bg-white px-3 py-1.5 text-xs font-medium text-purple-900 hover:bg-purple-100">
-                  Open custom store connection
-                </a>
-              </div>
-              <label className="block text-sm font-medium text-gray-700">
-                Provider
-                <select
-                  value={shippingApiForm.provider}
-                  onChange={(event) =>
-                    setShippingApiForm((currentForm) => ({
-                      ...currentForm,
-                      provider: event.target.value as ShippingApiForm['provider'],
-                    }))
-                  }
-                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                >
-                  <option value="manual">Manual</option>
-                  <option value="shipstation">ShipStation</option>
-                  <option value="shippo">Shippo</option>
-                  <option value="easypost">EasyPost</option>
-                </select>
-              </label>
-              <input value={shippingApiForm.apiKey} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, apiKey: event.target.value }))} placeholder="API key" className="w-full rounded border px-3 py-2 text-sm" />
-              <input value={shippingApiForm.apiSecret} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, apiSecret: event.target.value }))} placeholder="API secret" className="w-full rounded border px-3 py-2 text-sm" />
-              <input value={shippingApiForm.accountId} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, accountId: event.target.value }))} placeholder="Account ID" className="w-full rounded border px-3 py-2 text-sm" />
-              <div className="grid gap-4 md:grid-cols-2">
-                <input value={shippingApiForm.originPostalCode} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, originPostalCode: event.target.value }))} placeholder="Origin ZIP/postal code" className="w-full rounded border px-3 py-2 text-sm" />
-                <input value={shippingApiForm.originCountry} onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, originCountry: event.target.value }))} placeholder="Origin country" className="w-full rounded border px-3 py-2 text-sm" />
-              </div>
-              <div className="rounded-lg border bg-gray-50 p-3">
-                <p className="text-sm font-medium text-gray-700">ShipStation carriers to quote</p>
-                <p className="mt-1 text-xs text-gray-500">Enable only carriers active in your ShipStation account. USPS is the safest default.</p>
-                <div className="mt-3 grid gap-2 md:grid-cols-2">
-                  {[
-                    ['usps', 'USPS'],
-                    ['ups', 'UPS'],
-                    ['fedex', 'FedEx'],
-                    ['global_post', 'GlobalPost'],
-                  ].map(([code, label]) => (
-                    <label key={code} className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={shippingApiForm.enabledCarrierCodes.includes(code)}
-                        onChange={(event) =>
-                          setShippingApiForm((currentForm) => ({
-                            ...currentForm,
-                            enabledCarrierCodes: event.target.checked
-                              ? Array.from(new Set([...currentForm.enabledCarrierCodes, code]))
-                              : currentForm.enabledCarrierCodes.filter((carrierCode) => carrierCode !== code),
-                          }))
-                        }
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-lg border bg-gray-50 p-3">
-                <p className="text-sm font-medium text-gray-700">Allowed ShipStation services</p>
-                <p className="mt-1 text-xs text-gray-500">Leave all unchecked to show every returned service for the enabled carriers.</p>
-                <div className="mt-3 grid gap-2 md:grid-cols-2">
-                  {shipStationServiceOptions.map(([code, label]) => (
-                    <label key={code} className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={shippingApiForm.allowedServiceCodes.includes(code)}
-                        onChange={(event) =>
-                          setShippingApiForm((currentForm) => ({
-                            ...currentForm,
-                            allowedServiceCodes: event.target.checked
-                              ? Array.from(new Set([...currentForm.allowedServiceCodes, code]))
-                              : currentForm.allowedServiceCodes.filter((serviceCode) => serviceCode !== code),
-                          }))
-                        }
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-lg border bg-gray-50 p-3">
-                <p className="text-sm font-medium text-gray-700">Shipping rate markup</p>
-                <p className="mt-1 text-xs text-gray-500">Add a fixed dollar amount or percentage to live ShipStation rates.</p>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Markup type
-                    <select
-                      value={shippingApiForm.markupType}
-                      onChange={(event) =>
-                        setShippingApiForm((currentForm) => ({
-                          ...currentForm,
-                          markupType: event.target.value as ShippingApiForm['markupType'],
-                        }))
-                      }
-                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                    >
-                      <option value="fixed">Fixed amount</option>
-                      <option value="percentage">Percentage</option>
-                    </select>
-                  </label>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Markup amount
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={shippingApiForm.markupAmount}
-                      onChange={(event) => setShippingApiForm((currentForm) => ({ ...currentForm, markupAmount: event.target.value }))}
-                      placeholder={shippingApiForm.markupType === 'percentage' ? '10' : '2.50'}
-                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                    />
-                  </label>
-                </div>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => void saveManagedSetting(SHIPPING_API_SETTINGS_KEY, shippingApiForm)}
-                  disabled={saving[SHIPPING_API_SETTINGS_KEY] || loading}
-                  className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {saving[SHIPPING_API_SETTINGS_KEY] ? 'Saving…' : 'Save shipping API'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 space-y-4 rounded-lg border border-gray-200 p-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700">Astrology Reports</h3>
-              <p className="text-xs text-gray-500">
-                Generate report PDFs inside PL_CMS and optionally enrich them with Ollama.
-              </p>
-            </div>
+          <div className="max-w-xl space-y-4">
             <input
               value={astrologyReportForm.ollamaBaseUrl}
               onChange={(event) => setAstrologyReportForm((currentForm) => ({ ...currentForm, ollamaBaseUrl: event.target.value }))}
@@ -889,7 +528,7 @@ export default function AdminSettingsPage() {
                 disabled={saving[ASTROLOGY_REPORT_SETTINGS_KEY] || loading}
                 className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                {saving[ASTROLOGY_REPORT_SETTINGS_KEY] ? 'Saving…' : 'Save astrology reports'}
+                {saving[ASTROLOGY_REPORT_SETTINGS_KEY] ? 'Saving…' : 'Save Ollama settings'}
               </button>
             </div>
           </div>

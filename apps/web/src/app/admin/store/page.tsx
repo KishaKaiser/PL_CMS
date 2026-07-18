@@ -2,6 +2,50 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+interface Setting {
+  key: string;
+  value: string;
+}
+
+interface BillingApiForm {
+  provider: 'manual' | 'paypal' | 'stripe';
+  environment: 'sandbox' | 'live';
+  paypalClientId: string;
+  paypalClientSecret: string;
+  stripePublishableKey: string;
+  stripeSecretKey: string;
+  webhookSecret: string;
+}
+
+const BILLING_API_SETTINGS_KEY = 'billing_api_settings';
+
+const defaultBillingApiForm: BillingApiForm = {
+  provider: 'manual',
+  environment: 'sandbox',
+  paypalClientId: '',
+  paypalClientSecret: '',
+  stripePublishableKey: '',
+  stripeSecretKey: '',
+  webhookSecret: '',
+};
+
+function parseJsonValue<T>(value: string | undefined): T | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+function readString(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function readOption<T extends string>(value: unknown, options: readonly T[], fallback: T) {
+  return typeof value === 'string' && options.includes(value as T) ? (value as T) : fallback;
+}
+
 interface Coupon {
   id: string;
   code: string;
@@ -87,6 +131,8 @@ export default function AdminStorePage() {
   const [ecommerce, setEcommerce] = useState<EcommerceSettings>(defaultEcommerceSettings);
   const [carts, setCarts] = useState<Array<{ id: string; email?: string; subtotal: number; status: string; createdAt: string; recoverAfter: string }>>([]);
   const [emails, setEmails] = useState<StoreEmailTemplate[]>([]);
+  const [billingApiForm, setBillingApiForm] = useState<BillingApiForm>(defaultBillingApiForm);
+  const [savingBillingApi, setSavingBillingApi] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -95,13 +141,14 @@ export default function AdminStorePage() {
     setLoading(true);
     setError('');
     try {
-      const [ecommerceRes, couponsRes, freeRes, recoveryRes, cartsRes, emailsRes] = await Promise.all([
+      const [ecommerceRes, couponsRes, freeRes, recoveryRes, cartsRes, emailsRes, billingApiRes] = await Promise.all([
         fetch('/api/proxy/store/admin/ecommerce'),
         fetch('/api/proxy/store/admin/coupons'),
         fetch('/api/proxy/store/admin/free-shipping'),
         fetch('/api/proxy/store/admin/cart-recovery'),
         fetch('/api/proxy/store/admin/cart-recovery/carts'),
         fetch('/api/proxy/store/admin/emails'),
+        fetch(`/api/proxy/settings/${BILLING_API_SETTINGS_KEY}`),
       ]);
       if (!ecommerceRes.ok || !couponsRes.ok || !freeRes.ok || !recoveryRes.ok || !cartsRes.ok || !emailsRes.ok) throw new Error('Could not load store settings.');
       setEcommerce({ ...defaultEcommerceSettings, ...((await ecommerceRes.json()) as Partial<EcommerceSettings>) });
@@ -110,12 +157,47 @@ export default function AdminStorePage() {
       setCartRecovery((await recoveryRes.json()) as CartRecoverySettings);
       setCarts((await cartsRes.json()) as Array<{ id: string; email?: string; subtotal: number; status: string; createdAt: string; recoverAfter: string }>);
       setEmails((await emailsRes.json()) as StoreEmailTemplate[]);
+      if (billingApiRes.ok) {
+        const setting = (await billingApiRes.json().catch(() => null)) as Setting | null;
+        const billingApi = parseJsonValue<Record<string, unknown>>(setting?.value);
+        setBillingApiForm({
+          provider: readOption(billingApi?.provider, ['manual', 'paypal', 'stripe'] as const, defaultBillingApiForm.provider),
+          environment: readOption(billingApi?.environment, ['sandbox', 'live'] as const, defaultBillingApiForm.environment),
+          paypalClientId: readString(billingApi?.paypalClientId, defaultBillingApiForm.paypalClientId),
+          paypalClientSecret: readString(billingApi?.paypalClientSecret, defaultBillingApiForm.paypalClientSecret),
+          stripePublishableKey: readString(billingApi?.stripePublishableKey, defaultBillingApiForm.stripePublishableKey),
+          stripeSecretKey: readString(billingApi?.stripeSecretKey, defaultBillingApiForm.stripeSecretKey),
+          webhookSecret: readString(billingApi?.webhookSecret, defaultBillingApiForm.webhookSecret),
+        });
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not load store settings.');
     } finally {
       setLoading(false);
     }
   }, []);
+
+  async function saveBillingApi() {
+    setSavingBillingApi(true);
+    setMessage('');
+    setError('');
+    try {
+      const res = await fetch(`/api/proxy/settings/${BILLING_API_SETTINGS_KEY}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: JSON.stringify(billingApiForm) }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? 'Failed to save billing settings.');
+      }
+      setMessage('Billing settings saved.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save billing settings.');
+    } finally {
+      setSavingBillingApi(false);
+    }
+  }
 
   useEffect(() => {
     void fetchStore();
@@ -203,6 +285,50 @@ export default function AdminStorePage() {
             </div>
             <div className="mt-5 flex justify-end">
               <button type="button" onClick={() => void save('/api/proxy/store/admin/ecommerce', ecommerce, 'Ecommerce settings saved.', 'PUT')} className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700">Save Ecommerce Settings</button>
+            </div>
+          </section>
+
+          <section className="rounded-xl border bg-white p-6 shadow-sm">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">Billing</h2>
+              <p className="text-sm text-gray-500">Choose a payment provider and keep its credentials together.</p>
+            </div>
+            <div className="max-w-2xl space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Provider
+                  <select
+                    value={billingApiForm.provider}
+                    onChange={(event) => setBillingApiForm((current) => ({ ...current, provider: event.target.value as BillingApiForm['provider'] }))}
+                    className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  >
+                    <option value="manual">Manual</option>
+                    <option value="paypal">PayPal</option>
+                    <option value="stripe">Stripe</option>
+                  </select>
+                </label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Environment
+                  <select
+                    value={billingApiForm.environment}
+                    onChange={(event) => setBillingApiForm((current) => ({ ...current, environment: event.target.value as BillingApiForm['environment'] }))}
+                    className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  >
+                    <option value="sandbox">Sandbox</option>
+                    <option value="live">Live</option>
+                  </select>
+                </label>
+              </div>
+              <input value={billingApiForm.paypalClientId} onChange={(event) => setBillingApiForm((current) => ({ ...current, paypalClientId: event.target.value }))} placeholder="PayPal client ID" className="w-full rounded border px-3 py-2 text-sm" />
+              <input value={billingApiForm.paypalClientSecret} onChange={(event) => setBillingApiForm((current) => ({ ...current, paypalClientSecret: event.target.value }))} placeholder="PayPal client secret" className="w-full rounded border px-3 py-2 text-sm" />
+              <input value={billingApiForm.stripePublishableKey} onChange={(event) => setBillingApiForm((current) => ({ ...current, stripePublishableKey: event.target.value }))} placeholder="Stripe publishable key" className="w-full rounded border px-3 py-2 text-sm" />
+              <input value={billingApiForm.stripeSecretKey} onChange={(event) => setBillingApiForm((current) => ({ ...current, stripeSecretKey: event.target.value }))} placeholder="Stripe secret key" className="w-full rounded border px-3 py-2 text-sm" />
+              <input value={billingApiForm.webhookSecret} onChange={(event) => setBillingApiForm((current) => ({ ...current, webhookSecret: event.target.value }))} placeholder="Webhook secret" className="w-full rounded border px-3 py-2 text-sm" />
+              <div className="flex justify-end">
+                <button type="button" onClick={() => void saveBillingApi()} disabled={savingBillingApi} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                  {savingBillingApi ? 'Saving…' : 'Save Billing'}
+                </button>
+              </div>
             </div>
           </section>
 
