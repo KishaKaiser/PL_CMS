@@ -69,11 +69,7 @@ Write in an accessible, warm tone that balances astrological knowledge with prac
 
 IMPORTANT: Keep the content concise (around 500-800 words total) to ensure complete generation.
 
-Respond in EXACTLY this format, with no other text before or after:
-
-TITLE: <an engaging, SEO-friendly blog post title, one line>
-CONTENT:
-<the complete blog post content, written as 4-6 paragraphs separated by blank lines>`;
+Start your response with the title as plain text on the first line — no quotes, no markdown formatting, no asterisks. Leave a blank line, then write the blog post content as 4-6 paragraphs.`;
 
     const settings = await getOllamaSettings(this.prisma, this.config);
     const response = await this.ollama.generate(prompt, { baseUrl: settings.ollamaBaseUrl, model: settings.ollamaModel });
@@ -101,16 +97,30 @@ CONTENT:
   }
 }
 
+/**
+ * The model often ignores exact-format instructions and just writes a
+ * natural post: a title (sometimes wrapped in quotes/markdown bold, or
+ * prefixed with a heading marker) on the first line, a blank line, then
+ * the body. Treat that as the primary shape rather than requiring labels.
+ */
 function parseBlogResponse(response: string): GeneratedBlogPost {
-  const titleMatch = response.match(/TITLE:\s*(.+)/i);
-  const contentMatch = response.match(/CONTENT:\s*([\s\S]+)/i);
-
-  const title = titleMatch?.[1]?.trim() ?? '';
-  const content = contentMatch?.[1]?.trim() ?? '';
+  const lines = response.trim().split('\n');
+  const title = lines[0] ? cleanTitleLine(lines[0]) : '';
+  const content = lines.slice(1).join('\n').trim();
 
   if (!title || !content) {
     throw new BadRequestException('Could not parse the blog post response. The response may be incomplete or incorrectly formatted.');
   }
 
   return { title, content };
+}
+
+function cleanTitleLine(line: string): string {
+  let title = line.trim().replace(/^#+\s*/, '');
+  let stripped = title;
+  do {
+    title = stripped;
+    stripped = title.replace(/^\*\*(.+)\*\*$/, '$1').replace(/^["'](.+)["']$/, '$1').trim();
+  } while (stripped !== title);
+  return title;
 }
