@@ -17,6 +17,7 @@ const ALLOWED_PATH_PREFIXES = [
   'settings',
   'audit',
   'admin',
+  'advisors',
   'account',
   'dashboard',
   'modules',
