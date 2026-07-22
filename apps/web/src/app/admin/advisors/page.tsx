@@ -25,7 +25,10 @@ export default function AdminAdvisorsPage() {
     setError('');
     try {
       const res = await fetch('/api/proxy/advisors');
-      if (!res.ok) throw new Error('Could not load advisors.');
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? `Could not load advisors (HTTP ${res.status}).`);
+      }
       setAdvisors((await res.json()) as AdvisorRow[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load advisors.');
