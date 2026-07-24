@@ -7,10 +7,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { StartSessionDto } from './billing.dto';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { Decimal } from '@prisma/client/runtime/library';
+
+/** How often a connected call is charged another minute. */
+const TICK_INTERVAL_MS = 60_000;
 
 @Injectable()
 export class BillingService {
@@ -55,11 +58,15 @@ export class BillingService {
       throw new BadRequestException('Session is already ended');
     }
 
-    await this.endSession(sessionId, 'ENDED_BY_USER');
+    const ended = await this.endSession(sessionId, 'ENDED_BY_USER');
+    await this.terminateTwilioCall(sessionId, session.twilioCallSid ?? undefined);
 
     return {
       sessionId,
       status: 'ENDED_BY_USER',
+      durationSeconds: ended?.durationSeconds ?? 0,
+      billedMinutes: ended?.billedMinutes ?? 0,
+      billedAmountCents: ended?.billedAmountCents ?? 0,
     };
   }
 
@@ -147,7 +154,10 @@ export class BillingService {
     const now = new Date();
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const session = await tx.callSession.findUnique({ where: { id: sessionId } });
+      const session = await tx.callSession.findUnique({
+        where: { id: sessionId },
+        include: { advisor: true },
+      });
       if (!session) {
         throw new NotFoundException(`Session ${sessionId} not found`);
       }
@@ -172,20 +182,22 @@ export class BillingService {
       if (existingDebit) {
         await tx.callSession.update({
           where: { id: sessionId },
-          data: { status: 'BILLING_ACTIVE' },
+          data: { status: 'BILLING_ACTIVE', twilioCallSid: callSid ?? session.twilioCallSid },
         });
         return { status: 'BILLING_ACTIVE', debited: true };
       }
 
+      const rateCents = toCents(session.advisor.ratePerMinute);
+
       const debitResult = await tx.clientProfile.updateMany({
-        where: { id: clientProfileId, balanceMinutes: { gte: 1 } },
-        data: { balanceMinutes: { decrement: 1 } },
+        where: { id: clientProfileId, balanceCents: { gte: rateCents } },
+        data: { balanceCents: { decrement: rateCents } },
       });
 
       if (debitResult.count === 0) {
         await tx.callSession.update({
           where: { id: sessionId },
-          data: { status: 'ENDED_LOW_BALANCE', endedAt: now },
+          data: { status: 'ENDED_LOW_BALANCE', endedAt: now, twilioCallSid: callSid ?? session.twilioCallSid },
         });
         return { status: 'ENDED_LOW_BALANCE', debited: false };
       }
@@ -195,16 +207,21 @@ export class BillingService {
           userId,
           callSessionId: sessionId,
           type: 'DEBIT',
-          amount: new Decimal(1),
-          currency: 'MIN',
+          amount: session.advisor.ratePerMinute,
+          currency: 'USD',
           minutesDelta: -1,
-          description: `Call session ${sessionId} connected - initial minute debit`,
+          description: `Call session ${sessionId} connected — first minute at $${session.advisor.ratePerMinute}/min`,
         },
       });
 
       await tx.callSession.update({
         where: { id: sessionId },
-        data: { startedAt: now, status: 'BILLING_ACTIVE' },
+        data: {
+          startedAt: now,
+          status: 'BILLING_ACTIVE',
+          twilioCallSid: callSid ?? session.twilioCallSid,
+          nextBillAt: new Date(now.getTime() + TICK_INTERVAL_MS),
+        },
       });
 
       return { status: 'BILLING_ACTIVE', debited: true };
@@ -215,6 +232,85 @@ export class BillingService {
     }
 
     return { ok: true, status: result.status };
+  }
+
+  /** Charges one more minute for every connected call whose next-bill time has arrived. */
+  @Cron('* * * * *')
+  async handlePerMinuteBilling() {
+    const due = await this.prisma.callSession.findMany({
+      where: { status: 'BILLING_ACTIVE', nextBillAt: { lte: new Date() } },
+      select: { id: true },
+    });
+
+    for (const session of due) {
+      await this.billNextTick(session.id).catch((error: unknown) => {
+        this.logger.error(
+          `Per-minute billing tick failed for session ${session.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      });
+    }
+  }
+
+  private async billNextTick(sessionId: string) {
+    const now = new Date();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const session = await tx.callSession.findUnique({
+        where: { id: sessionId },
+        include: { advisor: true, client: true },
+      });
+
+      if (!session || session.status !== 'BILLING_ACTIVE' || !session.nextBillAt || session.nextBillAt > now) {
+        return { terminate: false };
+      }
+
+      // Claim this tick atomically: only advance nextBillAt if it still
+      // matches what we just read, so an overlapping run can't double-charge.
+      const claim = await tx.callSession.updateMany({
+        where: { id: sessionId, status: 'BILLING_ACTIVE', nextBillAt: session.nextBillAt },
+        data: { nextBillAt: new Date(session.nextBillAt.getTime() + TICK_INTERVAL_MS) },
+      });
+      if (claim.count === 0) {
+        return { terminate: false };
+      }
+
+      const rateCents = toCents(session.advisor.ratePerMinute);
+
+      const debit = await tx.clientProfile.updateMany({
+        where: { id: session.clientId, balanceCents: { gte: rateCents } },
+        data: { balanceCents: { decrement: rateCents } },
+      });
+
+      if (debit.count === 0) {
+        await tx.callSession.update({
+          where: { id: sessionId },
+          data: { status: 'ENDED_LOW_BALANCE', endedAt: now },
+        });
+        return { terminate: true };
+      }
+
+      await tx.walletTransaction.create({
+        data: {
+          userId: session.client.userId,
+          callSessionId: sessionId,
+          type: 'DEBIT',
+          amount: session.advisor.ratePerMinute,
+          currency: 'USD',
+          minutesDelta: -1,
+          description: `Call session ${sessionId} — per-minute charge`,
+        },
+      });
+
+      return { terminate: false };
+    });
+
+    if (result.terminate) {
+      const session = await this.prisma.callSession.findUnique({
+        where: { id: sessionId },
+        select: { twilioCallSid: true },
+      });
+      await this.terminateTwilioCall(sessionId, session?.twilioCallSid ?? undefined);
+    }
   }
 
   private async terminateTwilioCall(sessionId: string, callSid?: string) {
@@ -249,7 +345,7 @@ export class BillingService {
       include: { client: true },
     });
 
-    if (!session || session.status.startsWith('ENDED')) return;
+    if (!session || session.status.startsWith('ENDED')) return null;
 
     const endedAt = new Date();
     const durationSeconds = Math.max(
@@ -259,19 +355,20 @@ export class BillingService {
 
     const debitAggregate = await this.prisma.walletTransaction.aggregate({
       _sum: { amount: true },
-      where: { callSessionId: sessionId, type: 'DEBIT', currency: 'MIN' },
+      _count: { _all: true },
+      where: { callSessionId: sessionId, type: 'DEBIT' },
     });
 
-    const billedMinutes = debitAggregate._sum.amount
-      ? Number(debitAggregate._sum.amount)
-      : 0;
+    const billedMinutes = debitAggregate._count._all;
+    const billedAmountCents = debitAggregate._sum.amount ? toCents(debitAggregate._sum.amount) : 0;
 
-    await this.prisma.callSession.update({
+    return this.prisma.callSession.update({
       where: { id: sessionId },
       data: {
         endedAt,
         durationSeconds,
         billedMinutes,
+        billedAmountCents,
         status,
       },
     });
@@ -291,4 +388,8 @@ export class BillingService {
       include: { advisor: true },
     });
   }
+}
+
+function toCents(value: unknown): number {
+  return Math.round(Number(value) * 100);
 }

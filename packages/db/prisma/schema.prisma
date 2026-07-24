@@ -149,10 +149,8 @@ model ClientProfile {
   id             String   @id @default(cuid())
   userId         String   @unique
   displayName    String
-  balanceMinutes Int      @default(0)
-  // Dollar-balance wallet, in cents. Replaces balanceMinutes for call
-  // billing (Phase 2) — kept alongside it here so this migration doesn't
-  // break the still-live balanceMinutes-based billing path.
+  // Dollar-balance wallet, in cents. Call billing charges the connected
+  // advisor's real ratePerMinute from this balance.
   balanceCents   Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -195,6 +193,14 @@ model CallSession {
   endedAt         DateTime?
   durationSeconds Int?
   billedMinutes   Int?
+  billedAmountCents Int?
+  // Twilio CallSid, captured from the first status callback once connected —
+  // needed to hang up the call via Twilio's REST API on low balance or when
+  // the client ends the session, since neither happens inside a webhook.
+  twilioCallSid   String?
+  // When the next per-minute debit is due; advanced by the billing cron
+  // each time a tick is successfully charged.
+  nextBillAt      DateTime?
   status          String    @default("ACTIVE") // ACTIVE | ENDED | FAILED
 
   advisor AdvisorProfile @relation("AdvisorSessions", fields: [advisorId], references: [id])

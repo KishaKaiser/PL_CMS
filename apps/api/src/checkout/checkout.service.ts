@@ -235,7 +235,8 @@ export class CheckoutService {
     }
   }
 
-  private async creditMinutesIfNeeded(orderId: string, paymentId: string): Promise<number> {
+  /** Credits the client's dollar wallet for any wallet top-up (minutesPack-flagged) line items. */
+  private async creditWalletIfNeeded(orderId: string, paymentId: string): Promise<number> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -248,12 +249,14 @@ export class CheckoutService {
       return 0;
     }
 
-    let minutesCredited = 0;
+    let creditedCents = 0;
     for (const item of order.items) {
-      minutesCredited += item.product.minutesPack * item.quantity;
+      if (item.product.minutesPack > 0) {
+        creditedCents += Math.round(Number(item.unitPrice) * 100) * item.quantity;
+      }
     }
 
-    if (minutesCredited <= 0) {
+    if (creditedCents <= 0) {
       return 0;
     }
 
@@ -272,21 +275,21 @@ export class CheckoutService {
     await this.prisma.$transaction([
       this.prisma.clientProfile.update({
         where: { id: order.user.clientProfile.id },
-        data: { balanceMinutes: { increment: minutesCredited } },
+        data: { balanceCents: { increment: creditedCents } },
       }),
       this.prisma.walletTransaction.create({
         data: {
           userId: order.userId,
           paymentId,
           type: 'CREDIT',
-          amount: order.totalAmount,
+          amount: creditedCents / 100,
           currency: order.currency,
-          description: `Purchased ${minutesCredited} minutes via PayPal (order ${order.id})`,
+          description: `Added $${(creditedCents / 100).toFixed(2)} to wallet via PayPal (order ${order.id})`,
         },
       }),
     ]);
 
-    return minutesCredited;
+    return creditedCents;
   }
 
   /** Legacy: create DB order only (plain checkout, no PayPal). */
@@ -357,13 +360,13 @@ export class CheckoutService {
     });
 
     if (existingPayment) {
-      const minutesCredited = await this.creditMinutesIfNeeded(order.id, existingPayment.id);
+      const creditedCents = await this.creditWalletIfNeeded(order.id, existingPayment.id);
       return {
         success: existingPayment.status === 'SUCCEEDED',
         orderId: order.id,
         paypalOrderId,
         captureId: capture.captureId,
-        minutesCredited,
+        creditedCents,
       };
     }
 
@@ -400,12 +403,12 @@ export class CheckoutService {
         orderId: order.id,
         paypalOrderId,
         captureId: capture.captureId,
-        minutesCredited: 0,
+        creditedCents: 0,
       };
     }
 
     await this.decrementInventory(order.id);
-    const minutesCredited = await this.creditMinutesIfNeeded(order.id, payment.id);
+    const creditedCents = await this.creditWalletIfNeeded(order.id, payment.id);
     await this.astrologyReports.markReportsAwaitingFulfillment(order.id, userId);
 
     return {
@@ -413,7 +416,7 @@ export class CheckoutService {
       orderId: order.id,
       paypalOrderId,
       captureId: capture.captureId,
-      minutesCredited,
+      creditedCents,
     };
   }
 

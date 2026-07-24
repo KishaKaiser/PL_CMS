@@ -92,6 +92,7 @@ interface CallTransaction {
   endedAt?: string | null;
   durationSeconds?: number | null;
   billedMinutes?: number | null;
+  billedAmountCents?: number | null;
   client?: { user?: { name: string; email: string } };
 }
 
@@ -114,7 +115,7 @@ interface DashboardData {
   addresses: AccountAddress[];
   paymentMethods: PaymentMethod[];
   wallet: {
-    balanceMinutes: number | null;
+    balanceCents: number | null;
     transactions: WalletTransaction[];
   };
   messages: { unreadCount: number };
@@ -357,7 +358,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
   const displayName = data.advisor?.profile.displayName || data.user.name;
   const roleLabel = isAdvisor ? 'Spiritual Advisor' : data.user.role === 'CLIENT' ? 'Client' : data.user.role;
   const profileImageUrl = data.advisor?.profile.profileImageUrl ?? null;
-  const walletValue = data.wallet.balanceMinutes === null ? 'Not set' : `${data.wallet.balanceMinutes} min`;
+  const walletValue = data.wallet.balanceCents === null ? 'Not set' : `$${(data.wallet.balanceCents / 100).toFixed(2)}`;
   const navItems: Array<{ id: DashboardSection; label: string; icon: string; badge?: number }> = [
     { id: 'messages', label: 'Messages', icon: 'fa-regular fa-comments', badge: data.messages.unreadCount },
     { id: 'orders', label: 'Orders', icon: 'fa-solid fa-bag-shopping' },
@@ -605,7 +606,9 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                         <p className="text-sm text-gray-500">{transaction.description ?? transaction.currency}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-semibold">{transaction.minutesDelta ?? Number(transaction.amount)}</p>
+                        <p className={`font-semibold ${transaction.type === 'DEBIT' ? 'text-red-600' : 'text-green-600'}`}>
+                          {transaction.type === 'DEBIT' ? '-' : '+'}${Number(transaction.amount).toFixed(2)}
+                        </p>
                         <p className="text-xs text-gray-500">{new Date(transaction.createdAt).toLocaleDateString()}</p>
                       </div>
                     </div>
@@ -670,7 +673,9 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                       </div>
                       <div className="text-right">
                         <p className="font-semibold">{call.status}</p>
-                        <p className="text-sm text-gray-500">{call.billedMinutes ?? 0} min</p>
+                        <p className="text-sm text-gray-500">
+                          ${((call.billedAmountCents ?? 0) / 100).toFixed(2)} · {call.billedMinutes ?? 0} min
+                        </p>
                       </div>
                     </div>
                   ))}
