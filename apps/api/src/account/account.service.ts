@@ -95,7 +95,7 @@ export class AccountService {
       addresses,
       paymentMethods,
       wallet: {
-        balanceMinutes: user.clientProfile?.balanceMinutes ?? null,
+        balanceCents: user.clientProfile?.balanceCents ?? null,
         transactions: walletTransactions,
       },
       messages: { unreadCount: conversations.length },

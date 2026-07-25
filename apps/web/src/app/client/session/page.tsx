@@ -6,7 +6,7 @@ interface ActiveSession {
   id: string;
   startedAt: string;
   advisorId: string;
-  advisor?: { displayName: string };
+  advisor?: { displayName: string; ratePerMinute: number | string };
   status: string;
 }
 
@@ -21,7 +21,7 @@ export default function ClientSessionPage() {
   const [elapsed, setElapsed] = useState(0);
   const [loading, setLoading] = useState(true);
   const [stopping, setStopping] = useState(false);
-  const [result, setResult] = useState<{ billedMinutes: number; durationSeconds: number } | null>(null);
+  const [result, setResult] = useState<{ billedMinutes: number; billedAmountCents: number; durationSeconds: number } | null>(null);
   const [error, setError] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -87,14 +87,15 @@ export default function ClientSessionPage() {
             Duration: <span className="font-semibold">{formatTime(result.durationSeconds)}</span>
           </p>
           <p className="text-gray-600">
-            Billed: <span className="font-semibold text-indigo-700">{result.billedMinutes} minute{result.billedMinutes !== 1 ? 's' : ''}</span>
+            Billed: <span className="font-semibold text-indigo-700">${(result.billedAmountCents / 100).toFixed(2)}</span>{' '}
+            <span className="text-sm text-gray-500">({result.billedMinutes} minute{result.billedMinutes !== 1 ? 's' : ''})</span>
           </p>
           <div className="mt-6 flex gap-3 justify-center">
             <a href="/client" className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700">
               Back to Portal
             </a>
             <a href="/client/shop" className="rounded border px-4 py-2 text-sm hover:bg-gray-50">
-              Buy More Minutes
+              Add Funds
             </a>
           </div>
         </div>
@@ -113,7 +114,7 @@ export default function ClientSessionPage() {
               Back to Portal
             </a>
             <a href="/client/shop" className="rounded border px-4 py-2 text-sm hover:bg-gray-50">
-              Buy Minutes
+              Add Funds
             </a>
           </div>
         </div>
@@ -122,6 +123,7 @@ export default function ClientSessionPage() {
   }
 
   const billableMinutes = Math.max(1, Math.ceil(elapsed / 60));
+  const estimatedCost = session.advisor ? billableMinutes * Number(session.advisor.ratePerMinute) : null;
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
@@ -140,7 +142,7 @@ export default function ClientSessionPage() {
             {formatTime(elapsed)}
           </p>
           <p className="mt-2 text-sm text-gray-500">
-            ~{billableMinutes} min billed
+            ~{billableMinutes} min billed{estimatedCost !== null ? ` (~$${estimatedCost.toFixed(2)})` : ''}
           </p>
         </div>
 

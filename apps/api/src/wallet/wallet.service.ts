@@ -11,10 +11,10 @@ export class WalletService {
   async getBalance(userId: string) {
     const profile = await this.prisma.clientProfile.findUnique({
       where: { userId },
-      select: { balanceMinutes: true },
+      select: { balanceCents: true },
     });
     if (!profile) throw new NotFoundException('Client profile not found');
-    return { balanceMinutes: profile.balanceMinutes };
+    return { balanceCents: profile.balanceCents };
   }
 
   getTransactions(userId: string, limit?: number, cursor?: string) {

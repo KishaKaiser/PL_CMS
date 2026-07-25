@@ -64,7 +64,7 @@ export class PaymentsService {
     return { received: true };
   }
 
-  private async creditMinutesIfNeeded(orderId: string, paymentId: string): Promise<void> {
+  private async creditWalletIfNeeded(orderId: string, paymentId: string): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -77,12 +77,14 @@ export class PaymentsService {
       return;
     }
 
-    let totalMinutes = 0;
+    let creditedCents = 0;
     for (const item of order.items) {
-      totalMinutes += item.product.minutesPack * item.quantity;
+      if (item.product.minutesPack > 0) {
+        creditedCents += Math.round(Number(item.unitPrice) * 100) * item.quantity;
+      }
     }
 
-    if (totalMinutes <= 0) {
+    if (creditedCents <= 0) {
       return;
     }
 
@@ -98,21 +100,21 @@ export class PaymentsService {
     await this.prisma.$transaction([
       this.prisma.clientProfile.update({
         where: { id: order.user.clientProfile.id },
-        data: { balanceMinutes: { increment: totalMinutes } },
+        data: { balanceCents: { increment: creditedCents } },
       }),
       this.prisma.walletTransaction.create({
         data: {
           userId: order.userId,
           paymentId,
           type: 'CREDIT',
-          amount: order.totalAmount,
+          amount: creditedCents / 100,
           currency: order.currency,
-          description: `Purchased ${totalMinutes} minutes via PayPal (order ${order.id})`,
+          description: `Added $${(creditedCents / 100).toFixed(2)} to wallet via PayPal (order ${order.id})`,
         },
       }),
     ]);
 
-    this.logger.log(`Credited ${totalMinutes} minutes to client ${order.userId}`);
+    this.logger.log(`Credited $${(creditedCents / 100).toFixed(2)} to client ${order.userId}`);
   }
 
   private async onCaptureCompleted(event: PaypalWebhookEvent) {
@@ -183,7 +185,7 @@ export class PaymentsService {
       await this.prisma.$transaction(inventoryUpdates);
     }
 
-    await this.creditMinutesIfNeeded(order.id, payment.id);
+    await this.creditWalletIfNeeded(order.id, payment.id);
 
     this.logger.log(
       `Order ${order.id} confirmed via PayPal webhook (capture ${captureId})`,
@@ -254,29 +256,31 @@ export class PaymentsService {
       data: { status: 'CONFIRMED' },
     });
 
-    let totalMinutes = 0;
+    let creditedCents = 0;
     for (const item of order.items) {
-      totalMinutes += item.product.minutesPack * item.quantity;
+      if (item.product.minutesPack > 0) {
+        creditedCents += Math.round(Number(item.unitPrice) * 100) * item.quantity;
+      }
     }
 
-    if (totalMinutes > 0 && order.user.clientProfile) {
+    if (creditedCents > 0 && order.user.clientProfile) {
       const clientProfileId = order.user.clientProfile.id;
       await this.prisma.clientProfile.update({
         where: { id: clientProfileId },
-        data: { balanceMinutes: { increment: totalMinutes } },
+        data: { balanceCents: { increment: creditedCents } },
       });
       await this.prisma.walletTransaction.create({
         data: {
           userId: order.userId,
           type: 'CREDIT',
-          amount: order.totalAmount,
+          amount: creditedCents / 100,
           currency: order.currency,
-          description: `Purchased ${totalMinutes} minutes (order ${orderId})`,
+          description: `Added $${(creditedCents / 100).toFixed(2)} to wallet (order ${orderId})`,
         },
       });
-      this.logger.log(`Credited ${totalMinutes} minutes to client ${order.userId}`);
+      this.logger.log(`Credited $${(creditedCents / 100).toFixed(2)} to client ${order.userId}`);
     }
 
-    return { success: true, minutesCredited: totalMinutes };
+    return { success: true, creditedCents };
   }
 }
