@@ -18,6 +18,8 @@ const ALLOWED_PATH_PREFIXES = [
   'audit',
   'admin',
   'advisors',
+  'billing',
+  'phone',
   'account',
   'dashboard',
   'modules',

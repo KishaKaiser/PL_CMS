@@ -555,7 +555,7 @@ export default function AdminSettingsPage() {
           <div className="mb-4">
             <h2 className="text-lg font-semibold">Telephony</h2>
             <p className="text-sm text-gray-500">
-              SIP trunk and dial-in number used to bridge calls between clients and advisor extensions on the Grandstream UCM6301. Twilio account credentials stay in server environment variables, not here.
+              SIP trunk and dial-in number used to bridge calls between clients and advisor extensions on the Grandstream UCM6301. Telnyx account credentials stay in server environment variables, not here.
             </p>
           </div>
 
@@ -565,7 +565,7 @@ export default function AdminSettingsPage() {
               <input
                 value={telephonyForm.sipTrunkDomain}
                 onChange={(event) => setTelephonyForm((current) => ({ ...current, sipTrunkDomain: event.target.value }))}
-                placeholder="e.g. your-trunk.pstn.twilio.com"
+                placeholder="e.g. sip.telnyx.com"
                 className="mt-1 w-full rounded border px-3 py-2 text-sm"
               />
             </label>

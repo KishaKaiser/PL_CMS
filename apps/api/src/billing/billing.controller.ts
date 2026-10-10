@@ -7,14 +7,13 @@ import {
   HttpStatus,
   Param,
   Post,
-  Query,
   RawBodyRequest,
   Req,
   Request,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { BillingService } from './billing.service';
+import { BillingService, TelnyxWebhookBody } from './billing.service';
 import { StartSessionDto } from './billing.dto';
 import { Roles, RolesGuard } from '../auth/roles.guard';
 import { Role } from '@pl-cms/shared';
@@ -47,26 +46,15 @@ export class BillingController {
     return this.billingService.getActiveSession(req.user.id);
   }
 
-  @Post('twilio/status-callback')
+  /** Telnyx Call Control webhook. Authenticated by its Ed25519 signature, not a login. */
+  @Post('telnyx/webhook')
   @HttpCode(HttpStatus.OK)
-  handleTwilioStatusCallback(
-    @Headers() headers: Record<string, string>,
-    @Query('sessionId') sessionId: string,
-    @Req() req: RawBodyRequest<{ rawBody?: Buffer; protocol?: string; headers?: Record<string, string>; originalUrl?: string }>,
-    @Body() body: Record<string, string>,
+  handleTelnyxWebhook(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Req() req: RawBodyRequest<object>,
+    @Body() body: TelnyxWebhookBody,
   ) {
     const rawBody = (req.rawBody ?? Buffer.alloc(0)).toString('utf-8');
-    const protocol = req.headers?.['x-forwarded-proto'] ?? req.protocol ?? 'http';
-    const host = req.headers?.['x-forwarded-host'] ?? req.headers?.host ?? 'localhost:3001';
-    const path = req.originalUrl ?? '/api/billing/twilio/status-callback';
-    const callbackUrl = `${protocol}://${host}${path}`;
-
-    return this.billingService.handleTwilioStatusCallback(
-      headers,
-      rawBody,
-      callbackUrl,
-      sessionId,
-      body,
-    );
+    return this.billingService.handleTelnyxWebhook(headers, rawBody, body);
   }
 }
