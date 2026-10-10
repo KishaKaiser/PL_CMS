@@ -70,7 +70,7 @@ export default function AdminAdvisorsPage() {
         <header>
           <h1 className="text-3xl font-bold text-gray-950">Advisors</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Assign each advisor&apos;s internal SIP extension on the Grandstream UCM6301 so calls can be bridged through the Twilio trunk.
+            Assign each advisor&apos;s internal SIP extension on the Grandstream UCM6301 so calls can be bridged through the Telnyx connection.
           </p>
         </header>
 

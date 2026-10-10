@@ -122,7 +122,7 @@ model AdvisorProfile {
   ratePerMinute Decimal  @default(0)
   isOnline      Boolean  @default(false)
   // Plain internal extension on the Grandstream UCM6301 (e.g. "1001"), dialed
-  // through the Twilio SIP trunk to bridge a call to this advisor.
+  // through the Telnyx SIP connection to bridge a call to this advisor.
   sipExtension  String?
   // Whether the queue auto-dialer should call through this advisor's
   // callback queue. Kept separate from isOnline: an advisor can be online
@@ -152,6 +152,9 @@ model ClientProfile {
   // Dollar-balance wallet, in cents. Call billing charges the connected
   // advisor's real ratePerMinute from this balance.
   balanceCents   Int      @default(0)
+  // E.164 number (e.g. "+15551234567") the system dials to connect this
+  // client to an advisor.
+  phoneNumber    String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -194,14 +197,17 @@ model CallSession {
   durationSeconds Int?
   billedMinutes   Int?
   billedAmountCents Int?
-  // Twilio CallSid, captured from the first status callback once connected —
-  // needed to hang up the call via Twilio's REST API on low balance or when
-  // the client ends the session, since neither happens inside a webhook.
-  twilioCallSid   String?
+  // Telnyx Call Control IDs for the two legs of a bridged call. Needed to hang
+  // the legs up via Telnyx's REST API on low balance or when the client ends
+  // the session, since neither happens inside a webhook.
+  clientCallControlId  String?
+  advisorCallControlId String?
   // When the next per-minute debit is due; advanced by the billing cron
   // each time a tick is successfully charged.
   nextBillAt      DateTime?
-  status          String    @default("ACTIVE") // ACTIVE | ENDED | FAILED
+  // PENDING_CONNECTION (dialing the client) → DIALING_ADVISOR → BILLING_ACTIVE,
+  // then ENDED* (ENDED, ENDED_BY_USER, ENDED_LOW_BALANCE, ENDED_NOT_CONNECTED).
+  status          String    @default("ACTIVE")
 
   advisor AdvisorProfile @relation("AdvisorSessions", fields: [advisorId], references: [id])
   client  ClientProfile  @relation("ClientSessions", fields: [clientId], references: [id])

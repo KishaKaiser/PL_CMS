@@ -1,19 +1,40 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { TelnyxService, decodeState } from '../telephony/telnyx.service';
 import { StartSessionDto } from './billing.dto';
-import { createHmac, timingSafeEqual } from 'crypto';
 
 /** How often a connected call is charged another minute. */
 const TICK_INTERVAL_MS = 60_000;
+
+/** A client needs at least this many minutes of the advisor's rate to start a call. */
+export const MIN_CALL_MINUTES = 2;
+
+const CLIENT_RING_SECONDS = 40;
+const ADVISOR_RING_SECONDS = 30;
+
+/** A call that hasn't connected after this long is treated as dead and cleaned up. */
+const STALE_PENDING_MS = 3 * 60_000;
+
+/** Statuses of a call that is still being set up or in progress. */
+export const LIVE_STATUSES = ['PENDING_CONNECTION', 'DIALING_ADVISOR', 'BILLING_ACTIVE'];
+
+export interface TelnyxWebhookBody {
+  data?: {
+    event_type?: string;
+    payload?: {
+      call_control_id?: string;
+      client_state?: string;
+    };
+  };
+}
 
 @Injectable()
 export class BillingService {
@@ -21,29 +42,64 @@ export class BillingService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
+    private readonly telnyx: TelnyxService,
   ) {}
 
+  /** Checks the balance and availability, then rings the client to begin the bridge. */
   async startSession(userId: string, dto: StartSessionDto) {
-    const clientProfile = await this.prisma.clientProfile.findUnique({
-      where: { userId },
-    });
-    if (!clientProfile) throw new NotFoundException('Client profile not found');
+    const client = await this.prisma.clientProfile.findUnique({ where: { userId } });
+    if (!client) throw new NotFoundException('Client profile not found');
+    if (!client.phoneNumber) {
+      throw new BadRequestException('Add your phone number so we know where to call you.');
+    }
 
-    const advisorProfile = await this.prisma.advisorProfile.findUnique({
-      where: { id: dto.advisorId },
+    const advisor = await this.prisma.advisorProfile.findUnique({ where: { id: dto.advisorId } });
+    if (!advisor) throw new NotFoundException('Advisor not found');
+    if (!advisor.isOnline) throw new BadRequestException('This advisor is not taking calls right now.');
+    if (!advisor.sipExtension) throw new BadRequestException('This advisor is not set up for phone calls yet.');
+
+    const rateCents = toCents(advisor.ratePerMinute);
+    if (rateCents <= 0) throw new BadRequestException('This advisor has not set a rate yet.');
+
+    const requiredCents = rateCents * MIN_CALL_MINUTES;
+    if (client.balanceCents < requiredCents) {
+      throw new BadRequestException(
+        `You need at least $${(requiredCents / 100).toFixed(2)} (${MIN_CALL_MINUTES} minutes) in your wallet to call this advisor.`,
+      );
+    }
+
+    const busy = await this.prisma.callSession.findFirst({
+      where: { status: { in: LIVE_STATUSES }, OR: [{ clientId: client.id }, { advisorId: advisor.id }] },
+      select: { clientId: true },
     });
-    if (!advisorProfile) throw new NotFoundException('Advisor not found');
+    if (busy) {
+      throw new ConflictException(
+        busy.clientId === client.id
+          ? 'You already have a call in progress.'
+          : 'This advisor is on another call right now.',
+      );
+    }
 
     const session = await this.prisma.callSession.create({
-      data: {
-        advisorId: dto.advisorId,
-        clientId: clientProfile.id,
-        status: 'PENDING_CONNECTION',
-      },
+      data: { advisorId: advisor.id, clientId: client.id, status: 'PENDING_CONNECTION' },
     });
 
-    return session;
+    try {
+      const { callControlId } = await this.telnyx.dial({
+        to: client.phoneNumber,
+        state: { sessionId: session.id, leg: 'client' },
+        timeoutSecs: CLIENT_RING_SECONDS,
+      });
+      await this.prisma.callSession.update({
+        where: { id: session.id },
+        data: { clientCallControlId: callControlId },
+      });
+    } catch (error) {
+      await this.endSession(session.id, 'ENDED_NOT_CONNECTED');
+      throw error;
+    }
+
+    return { id: session.id, status: session.status };
   }
 
   async stopSession(sessionId: string, userId: string) {
@@ -59,7 +115,7 @@ export class BillingService {
     }
 
     const ended = await this.endSession(sessionId, 'ENDED_BY_USER');
-    await this.terminateTwilioCall(sessionId, session.twilioCallSid ?? undefined);
+    await this.terminateCall(sessionId);
 
     return {
       sessionId,
@@ -70,104 +126,113 @@ export class BillingService {
     };
   }
 
-  async handleTwilioStatusCallback(
-    headers: Record<string, string>,
+  async handleTelnyxWebhook(
+    headers: Record<string, string | string[] | undefined>,
     rawBody: string,
-    callbackUrl: string,
-    sessionId: string,
-    payload: Record<string, string>,
+    body: TelnyxWebhookBody,
   ) {
-    if (!sessionId) {
-      throw new BadRequestException('Missing sessionId query parameter');
+    this.telnyx.verifyWebhook(headers, rawBody);
+
+    const eventType = body.data?.event_type;
+    const payload = body.data?.payload ?? {};
+    const state = decodeState(payload.client_state);
+    const callControlId = payload.call_control_id;
+
+    // Not a call this app placed (or an event we don't act on): acknowledge so Telnyx doesn't retry.
+    if (!state || !callControlId) return { ok: true };
+
+    if (eventType === 'call.answered') {
+      return state.leg === 'client'
+        ? this.onClientAnswered(state.sessionId, callControlId)
+        : this.onAdvisorAnswered(state.sessionId, callControlId);
     }
 
-    this.verifyTwilioSignature(headers, callbackUrl, payload);
+    if (eventType === 'call.hangup') {
+      return this.onLegHangup(state.sessionId, state.leg);
+    }
 
-    const callStatus = (payload.CallStatus ?? payload.CallEvent ?? '').toLowerCase();
-    const callSid = payload.CallSid;
+    return { ok: true };
+  }
 
+  /** Client picked up: now ring the advisor's extension and bridge the two on answer. */
+  private async onClientAnswered(sessionId: string, clientCallControlId: string) {
     const session = await this.prisma.callSession.findUnique({
       where: { id: sessionId },
-      include: { client: { include: { user: true } } },
+      include: { advisor: true },
     });
-
-    if (!session) {
-      throw new NotFoundException(`Session ${sessionId} not found`);
+    if (!session || session.status.startsWith('ENDED')) {
+      await this.telnyx.hangup(clientCallControlId);
+      return { ok: true };
     }
 
-    if (['in-progress', 'answered'].includes(callStatus)) {
-      return this.startBillingForConnectedCall(
-        sessionId,
-        session.client.id,
-        session.client.userId,
-        callSid,
+    // Claim the transition so a redelivered webhook can't ring the advisor twice.
+    const claim = await this.prisma.callSession.updateMany({
+      where: { id: sessionId, status: 'PENDING_CONNECTION' },
+      data: { status: 'DIALING_ADVISOR', clientCallControlId },
+    });
+    if (claim.count === 0) return { ok: true };
+
+    try {
+      if (!session.advisor.sipExtension) throw new Error('Advisor has no SIP extension');
+      const { callControlId } = await this.telnyx.dial({
+        to: this.telnyx.advisorDialUri(session.advisor.sipExtension),
+        state: { sessionId, leg: 'advisor' },
+        timeoutSecs: ADVISOR_RING_SECONDS,
+        linkTo: clientCallControlId,
+      });
+      await this.prisma.callSession.update({
+        where: { id: sessionId },
+        data: { advisorCallControlId: callControlId },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Could not ring advisor for session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
+      await this.endSession(sessionId, 'ENDED_NOT_CONNECTED');
+      await this.telnyx.hangup(clientCallControlId);
     }
 
-    if (['completed', 'canceled', 'busy', 'failed', 'no-answer'].includes(callStatus)) {
-      await this.endSession(sessionId, 'ENDED');
-      return { ok: true, status: 'ENDED' };
-    }
-
-    this.logger.log(
-      `Unhandled Twilio status callback for session ${sessionId}: status=${callStatus}, callSid=${callSid}, rawLength=${rawBody.length}`,
-    );
-    return { ok: true, status: session.status };
+    return { ok: true };
   }
 
-  private verifyTwilioSignature(
-    headers: Record<string, string>,
-    callbackUrl: string,
-    params: Record<string, string>,
-  ) {
-    const twilioAuthToken = this.config.get<string>('TWILIO_AUTH_TOKEN');
-    if (!twilioAuthToken) {
-      throw new UnauthorizedException('TWILIO_AUTH_TOKEN is not configured');
-    }
-
-    const twilioSignature = headers['x-twilio-signature'] ?? headers['X-Twilio-Signature'];
-    if (!twilioSignature) {
-      throw new UnauthorizedException('Missing X-Twilio-Signature header');
-    }
-
-    const sortedKeys = Object.keys(params).sort();
-    const data = sortedKeys.reduce((acc, key) => `${acc}${key}${params[key] ?? ''}`, callbackUrl);
-    const expected = createHmac('sha1', twilioAuthToken).update(data).digest('base64');
-
-    const providedBuffer = Buffer.from(twilioSignature);
-    const expectedBuffer = Buffer.from(expected);
-
-    if (
-      providedBuffer.length !== expectedBuffer.length ||
-      !timingSafeEqual(providedBuffer, expectedBuffer)
-    ) {
-      throw new UnauthorizedException('Invalid Twilio callback signature');
-    }
+  /** Advisor picked up and Telnyx has bridged the call: this is when billing starts. */
+  private async onAdvisorAnswered(sessionId: string, advisorCallControlId: string) {
+    const status = await this.startBillingForConnectedCall(sessionId, advisorCallControlId);
+    return { ok: true, status };
   }
 
-  private async startBillingForConnectedCall(
-    sessionId: string,
-    clientProfileId: string,
-    userId: string,
-    callSid?: string,
-  ) {
+  /** Either party hung up (or a leg failed to connect): finish the session and drop the other leg. */
+  private async onLegHangup(sessionId: string, leg: 'client' | 'advisor') {
+    const session = await this.prisma.callSession.findUnique({ where: { id: sessionId } });
+    if (!session) return { ok: true };
+
+    if (!session.status.startsWith('ENDED')) {
+      await this.endSession(sessionId, session.status === 'BILLING_ACTIVE' ? 'ENDED' : 'ENDED_NOT_CONNECTED');
+    }
+
+    // Make sure nobody is left on a dead line.
+    await this.telnyx.hangup(leg === 'client' ? session.advisorCallControlId : session.clientCallControlId);
+    return { ok: true };
+  }
+
+  private async startBillingForConnectedCall(sessionId: string, advisorCallControlId: string) {
     const now = new Date();
 
     const result = await this.prisma.$transaction(async (tx) => {
       const session = await tx.callSession.findUnique({
         where: { id: sessionId },
-        include: { advisor: true },
+        include: { advisor: true, client: true },
       });
       if (!session) {
         throw new NotFoundException(`Session ${sessionId} not found`);
       }
 
       if (session.status === 'BILLING_ACTIVE') {
-        return { status: 'BILLING_ACTIVE', debited: true };
+        return { status: 'BILLING_ACTIVE' };
       }
 
       if (session.status.startsWith('ENDED')) {
-        return { status: session.status, debited: false };
+        return { status: session.status };
       }
 
       const existingDebit = await tx.walletTransaction.findFirst({
@@ -182,29 +247,29 @@ export class BillingService {
       if (existingDebit) {
         await tx.callSession.update({
           where: { id: sessionId },
-          data: { status: 'BILLING_ACTIVE', twilioCallSid: callSid ?? session.twilioCallSid },
+          data: { status: 'BILLING_ACTIVE', advisorCallControlId },
         });
-        return { status: 'BILLING_ACTIVE', debited: true };
+        return { status: 'BILLING_ACTIVE' };
       }
 
       const rateCents = toCents(session.advisor.ratePerMinute);
 
       const debitResult = await tx.clientProfile.updateMany({
-        where: { id: clientProfileId, balanceCents: { gte: rateCents } },
+        where: { id: session.clientId, balanceCents: { gte: rateCents } },
         data: { balanceCents: { decrement: rateCents } },
       });
 
       if (debitResult.count === 0) {
         await tx.callSession.update({
           where: { id: sessionId },
-          data: { status: 'ENDED_LOW_BALANCE', endedAt: now, twilioCallSid: callSid ?? session.twilioCallSid },
+          data: { status: 'ENDED_LOW_BALANCE', endedAt: now, durationSeconds: 0, advisorCallControlId },
         });
-        return { status: 'ENDED_LOW_BALANCE', debited: false };
+        return { status: 'ENDED_LOW_BALANCE' };
       }
 
       await tx.walletTransaction.create({
         data: {
-          userId,
+          userId: session.client.userId,
           callSessionId: sessionId,
           type: 'DEBIT',
           amount: session.advisor.ratePerMinute,
@@ -219,24 +284,30 @@ export class BillingService {
         data: {
           startedAt: now,
           status: 'BILLING_ACTIVE',
-          twilioCallSid: callSid ?? session.twilioCallSid,
+          advisorCallControlId,
           nextBillAt: new Date(now.getTime() + TICK_INTERVAL_MS),
         },
       });
 
-      return { status: 'BILLING_ACTIVE', debited: true };
+      return { status: 'BILLING_ACTIVE' };
     });
 
     if (result.status === 'ENDED_LOW_BALANCE') {
-      await this.terminateTwilioCall(sessionId, callSid);
+      await this.terminateCall(sessionId);
     }
 
-    return { ok: true, status: result.status };
+    return result.status;
   }
 
   /** Charges one more minute for every connected call whose next-bill time has arrived. */
   @Cron('* * * * *')
   async handlePerMinuteBilling() {
+    await this.expireStaleSessions().catch((error: unknown) => {
+      this.logger.error(
+        `Stale session cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    });
+
     const due = await this.prisma.callSession.findMany({
       where: { status: 'BILLING_ACTIVE', nextBillAt: { lte: new Date() } },
       select: { id: true },
@@ -248,6 +319,22 @@ export class BillingService {
           `Per-minute billing tick failed for session ${session.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         );
       });
+    }
+  }
+
+  /** Closes out calls whose webhooks never arrived, so they don't block the client or advisor forever. */
+  private async expireStaleSessions() {
+    const stale = await this.prisma.callSession.findMany({
+      where: {
+        status: { in: ['PENDING_CONNECTION', 'DIALING_ADVISOR'] },
+        startedAt: { lt: new Date(Date.now() - STALE_PENDING_MS) },
+      },
+      select: { id: true },
+    });
+
+    for (const session of stale) {
+      await this.endSession(session.id, 'ENDED_NOT_CONNECTED');
+      await this.terminateCall(session.id);
     }
   }
 
@@ -282,10 +369,6 @@ export class BillingService {
       });
 
       if (debit.count === 0) {
-        await tx.callSession.update({
-          where: { id: sessionId },
-          data: { status: 'ENDED_LOW_BALANCE', endedAt: now },
-        });
         return { terminate: true };
       }
 
@@ -305,53 +388,39 @@ export class BillingService {
     });
 
     if (result.terminate) {
-      const session = await this.prisma.callSession.findUnique({
-        where: { id: sessionId },
-        select: { twilioCallSid: true },
-      });
-      await this.terminateTwilioCall(sessionId, session?.twilioCallSid ?? undefined);
+      // Out of funds: record the final totals, then drop the call.
+      await this.endSession(sessionId, 'ENDED_LOW_BALANCE');
+      await this.terminateCall(sessionId);
     }
   }
 
-  private async terminateTwilioCall(sessionId: string, callSid?: string) {
-    const accountSid = this.config.get<string>('TWILIO_ACCOUNT_SID');
-    const authToken = this.config.get<string>('TWILIO_AUTH_TOKEN');
+  /** Hangs up both legs of a session (the client's and the advisor's). */
+  private async terminateCall(sessionId: string) {
+    const session = await this.prisma.callSession.findUnique({
+      where: { id: sessionId },
+      select: { clientCallControlId: true, advisorCallControlId: true },
+    });
+    if (!session) return;
 
-    if (!accountSid || !authToken || !callSid) {
-      this.logger.warn(`Unable to terminate Twilio call for session ${sessionId}: missing credentials or call SID`);
+    if (!session.clientCallControlId && !session.advisorCallControlId) {
+      this.logger.warn(`No call legs recorded to hang up for session ${sessionId}`);
       return;
     }
 
-    const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls/${callSid}.json`;
-    const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${auth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: 'Status=completed',
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      this.logger.error(`Failed to terminate Twilio call for session ${sessionId}: ${response.status} ${body}`);
-    }
+    await Promise.all([
+      this.telnyx.hangup(session.clientCallControlId),
+      this.telnyx.hangup(session.advisorCallControlId),
+    ]);
   }
 
   private async endSession(sessionId: string, status: string) {
     const session = await this.prisma.callSession.findUnique({
       where: { id: sessionId },
-      include: { client: true },
     });
 
     if (!session || session.status.startsWith('ENDED')) return null;
 
     const endedAt = new Date();
-    const durationSeconds = Math.max(
-      0,
-      Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000),
-    );
 
     const debitAggregate = await this.prisma.walletTransaction.aggregate({
       _sum: { amount: true },
@@ -361,6 +430,13 @@ export class BillingService {
 
     const billedMinutes = debitAggregate._count._all;
     const billedAmountCents = debitAggregate._sum.amount ? toCents(debitAggregate._sum.amount) : 0;
+
+    // startedAt is reset to the moment billing begins, so a call that never
+    // connected (and was never billed) has no talk time.
+    const durationSeconds =
+      billedMinutes > 0
+        ? Math.max(0, Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000))
+        : 0;
 
     return this.prisma.callSession.update({
       where: { id: sessionId },
@@ -383,13 +459,19 @@ export class BillingService {
     return this.prisma.callSession.findFirst({
       where: {
         clientId: clientProfile.id,
-        status: { in: ['PENDING_CONNECTION', 'BILLING_ACTIVE'] },
+        status: { in: LIVE_STATUSES },
       },
-      include: { advisor: true },
+      select: {
+        id: true,
+        advisorId: true,
+        startedAt: true,
+        status: true,
+        advisor: { select: { displayName: true, ratePerMinute: true } },
+      },
     });
   }
 }
 
-function toCents(value: unknown): number {
+export function toCents(value: unknown): number {
   return Math.round(Number(value) * 100);
 }
