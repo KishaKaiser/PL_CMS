@@ -39,7 +39,7 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
   const [loadError, setLoadError] = useState('');
   const [profile, setProfile] = useState<PhoneProfile | null>(null);
   const [callingId, setCallingId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ advisorId: string; text: string; needsFunds?: boolean } | null>(null);
+  const [notice, setNotice] = useState<{ advisorId: string; text: string; needsFunds?: boolean; suggestedDollars?: number } | null>(null);
   const [phoneFor, setPhoneFor] = useState<OnlineAdvisor | null>(null);
   const [phoneInput, setPhoneInput] = useState('');
   const [phoneError, setPhoneError] = useState('');
@@ -77,6 +77,8 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
         advisorId: advisor.id,
         text: `You need at least ${formatDollars(requiredCents)} (${MIN_CALL_MINUTES} minutes) in your wallet to call ${advisor.displayName}. You have ${formatDollars(currentProfile.balanceCents)}.`,
         needsFunds: true,
+        // Pre-fill the Add Funds page with what they are short by (it enforces its own $5 minimum).
+        suggestedDollars: Math.ceil((requiredCents - currentProfile.balanceCents) / 100),
       });
       return;
     }
@@ -203,7 +205,10 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
                     <p className="mt-2 text-sm text-red-600">
                       {notice.text}{' '}
                       {notice.needsFunds && (
-                        <a href="/client/shop" className="font-medium underline">
+                        <a
+                          href={notice.suggestedDollars ? `/client/shop?amount=${Math.max(5, notice.suggestedDollars)}` : '/client/shop'}
+                          className="font-medium underline"
+                        >
                           Add funds
                         </a>
                       )}

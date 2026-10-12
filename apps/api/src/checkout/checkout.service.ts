@@ -41,6 +41,12 @@ export class CheckoutService {
       );
     }
 
+    // Wallet credit is credited at full price, so a coupon would let someone
+    // pay less than they receive.
+    if (dto.couponCode && products.some((product) => product.minutesPack > 0)) {
+      throw new BadRequestException('Coupons cannot be used on wallet credit.');
+    }
+
     // Validate variants exist and are active
     const variantIds = dto.items.map((i) => i.variantId).filter(Boolean) as string[];
     const variants =

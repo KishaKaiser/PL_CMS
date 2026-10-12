@@ -112,7 +112,7 @@ export default function ProductDetailClient({ product, variants, productImage, p
 
           {product.minutesPack > 0 && (
             <p className="rounded-lg bg-green-50 px-4 py-3 text-base font-medium text-green-700">
-              Includes {product.minutesPack} minutes of advisor call time
+              Adds this amount to your call wallet for advisor phone calls
             </p>
           )}
 

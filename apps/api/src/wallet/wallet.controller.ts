@@ -12,6 +12,11 @@ export class WalletController {
     return this.walletService.getBalance(req.user.id);
   }
 
+  @Get('credit-product')
+  getCreditProduct() {
+    return this.walletService.getCreditProduct();
+  }
+
   @Get('transactions')
   getTransactions(
     @Request() req: { user: { id: string } },
