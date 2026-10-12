@@ -593,7 +593,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
               <div className="mb-6 rounded-2xl bg-purple-50 p-6">
                 <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">Current balance</p>
                 <p className="mt-2 text-4xl font-bold text-gray-950">{walletValue}</p>
-                <a href="/shop" className="mt-5 inline-block rounded-lg bg-purple-700 px-6 py-3 font-semibold text-white hover:bg-purple-800">Add money to wallet</a>
+                <a href="/client/shop" className="mt-5 inline-block rounded-lg bg-purple-700 px-6 py-3 font-semibold text-white hover:bg-purple-800">Add money to wallet</a>
               </div>
               {data.wallet.transactions.length === 0 ? (
                 <EmptyText text="No wallet transactions yet." />
