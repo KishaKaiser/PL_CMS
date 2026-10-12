@@ -62,7 +62,9 @@ export default async function ShopPage({ searchParams }: Props) {
   const showTitle = page?.builderLayout?.settings?.showTitle !== false;
   const showBreadcrumbs = page?.builderLayout?.settings?.breadcrumbs !== false;
   const title = page?.title ?? 'Shop';
-  const filteredProducts = filterProducts(products, selectedCategory, selectedPrice, selectedColor);
+  // Wallet credit is bought from the Add Funds page, not browsed in the shop.
+  const shopProducts = products.filter((product) => !(product.minutesPack > 0));
+  const filteredProducts = filterProducts(shopProducts, selectedCategory, selectedPrice, selectedColor);
   const productCards = filteredProducts.map((product) => ({
     ...product,
     imageSrc: getSafeImageSrc(product.featuredMedia?.url ?? product.imageUrl),
