@@ -32,6 +32,9 @@ export interface TelnyxWebhookBody {
     payload?: {
       call_control_id?: string;
       client_state?: string;
+      hangup_cause?: string;
+      hangup_source?: string;
+      sip_hangup_cause?: string;
     };
   };
 }
@@ -140,6 +143,15 @@ export class BillingService {
 
     // Not a call this app placed (or an event we don't act on): acknowledge so Telnyx doesn't retry.
     if (!state || !callControlId) return { ok: true };
+
+    // Why a leg ended is the first thing to look at when a call drops.
+    if (eventType === 'call.answered' || eventType === 'call.hangup') {
+      const detail =
+        eventType === 'call.hangup'
+          ? ` cause=${payload.hangup_cause ?? '?'} sip=${payload.sip_hangup_cause ?? '?'} source=${payload.hangup_source ?? '?'}`
+          : '';
+      this.logger.log(`${eventType} session=${state.sessionId} leg=${state.leg}${detail}`);
+    }
 
     if (eventType === 'call.answered') {
       return state.leg === 'client'
