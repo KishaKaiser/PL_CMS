@@ -14,6 +14,7 @@ export class AdminAdvisorsService {
         ratePerMinute: true,
         isOnline: true,
         sipExtension: true,
+        phoneNumber: true,
         queueCallingEnabled: true,
         user: { select: { id: true, name: true, email: true } },
       },

@@ -8,6 +8,7 @@ interface AdvisorRow {
   ratePerMinute: string | number;
   isOnline: boolean;
   sipExtension: string | null;
+  phoneNumber: string | null;
   queueCallingEnabled: boolean;
   user: { id: string; name: string; email: string };
 }
@@ -70,7 +71,8 @@ export default function AdminAdvisorsPage() {
         <header>
           <h1 className="text-3xl font-bold text-gray-950">Advisors</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Assign each advisor&apos;s internal SIP extension on the Grandstream UCM6301 so calls can be bridged through the Telnyx connection.
+            Give each advisor an extension, the short code that identifies them on the phone. Calls are placed to the phone number
+            the advisor keeps in their own account settings, which they must add before they can go online.
           </p>
         </header>
 
@@ -89,6 +91,7 @@ export default function AdminAdvisorsPage() {
                   <th className="px-4 py-3">Advisor</th>
                   <th className="px-4 py-3">Rate/min</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Phone</th>
                   <th className="px-4 py-3">Extension</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -105,6 +108,9 @@ export default function AdminAdvisorsPage() {
                       <span className={`rounded-full px-2 py-1 text-xs font-medium ${advisor.isOnline ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                         {advisor.isOnline ? 'Online' : 'Offline'}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-700">
+                      {advisor.phoneNumber ?? <span className="text-xs text-amber-700">Not set</span>}
                     </td>
                     <td className="px-4 py-3">
                       <input

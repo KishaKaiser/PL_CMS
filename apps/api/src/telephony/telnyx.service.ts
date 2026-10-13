@@ -82,12 +82,6 @@ export class TelnyxService {
     }
   }
 
-  /** SIP address Telnyx dials to reach an advisor's extension on the UCM. */
-  advisorDialUri(extension: string): string {
-    const template = this.requireConfig('TELNYX_ADVISOR_DIAL_TEMPLATE');
-    return template.replace('{extension}', extension);
-  }
-
   /** Throws unless the request was signed by Telnyx (Ed25519 over "timestamp|rawBody"). */
   verifyWebhook(headers: Record<string, string | string[] | undefined>, rawBody: string): void {
     const publicKeyB64 = this.config.get<string>('TELNYX_PUBLIC_KEY');

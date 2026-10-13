@@ -121,9 +121,13 @@ model AdvisorProfile {
   profileImageUrl String?
   ratePerMinute Decimal  @default(0)
   isOnline      Boolean  @default(false)
-  // Plain internal extension on the Grandstream UCM6301 (e.g. "1001"), dialed
-  // through the Telnyx SIP connection to bridge a call to this advisor.
+  // Short code that identifies this advisor on the phone (e.g. "1001"), such
+  // as when a caller keys it into the dial-in hotline. It is only a label the
+  // system uses to know who to call; calls are placed to phoneNumber.
   sipExtension  String?
+  // E.164 number of the advisor's own phone. When a client asks to speak to
+  // this advisor, the system dials this number and bridges the client to it.
+  phoneNumber   String?
   // Whether the queue auto-dialer should call through this advisor's
   // callback queue. Kept separate from isOnline: an advisor can be online
   // for direct/scheduled calls without the queue auto-dialer running.
