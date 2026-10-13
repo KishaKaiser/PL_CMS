@@ -229,6 +229,16 @@ export default function ClientSessionPage() {
           </p>
         </div>
 
+        {balanceCents !== null && (
+          <p className="mb-4 text-sm text-gray-600">
+            Wallet balance: <span className="font-semibold">${(balanceCents / 100).toFixed(2)}</span>
+            {' · '}
+            <a href="/client/shop" target="_blank" rel="noopener" className="font-medium text-indigo-700 underline">
+              Add funds
+            </a>
+          </p>
+        )}
+
         {lowFunds && (
           <div
             className={`mb-4 rounded-lg border px-4 py-3 text-left text-sm ${
