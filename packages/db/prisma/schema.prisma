@@ -206,11 +206,16 @@ model CallSession {
   // the session, since neither happens inside a webhook.
   clientCallControlId  String?
   advisorCallControlId String?
-  // When the next per-minute debit is due; advanced by the billing cron
-  // each time a tick is successfully charged.
+  // When the client and advisor were bridged. Talk time is measured from here.
+  connectedAt     DateTime?
+  // When the next debit is due. Right after connecting it is the end of the
+  // free period (when billing starts); after that the billing cron advances it
+  // a minute at a time as each tick is charged.
   nextBillAt      DateTime?
-  // PENDING_CONNECTION (dialing the client) → DIALING_ADVISOR → BILLING_ACTIVE,
-  // then ENDED* (ENDED, ENDED_BY_USER, ENDED_LOW_BALANCE, ENDED_NOT_CONNECTED).
+  // PENDING_CONNECTION (dialing the client) → AWAITING_CLIENT (client must press 1)
+  // → DIALING_ADVISOR (advisor must press 1) → CONNECTED (bridged, free period)
+  // → BILLING_ACTIVE, then ENDED* (ENDED, ENDED_BY_USER, ENDED_LOW_BALANCE,
+  // ENDED_NOT_CONNECTED).
   status          String    @default("ACTIVE")
 
   advisor AdvisorProfile @relation("AdvisorSessions", fields: [advisorId], references: [id])

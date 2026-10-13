@@ -5,9 +5,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 interface ActiveSession {
   id: string;
   startedAt: string;
+  connectedAt?: string | null;
+  nextBillAt?: string | null;
   advisorId: string;
   advisor?: { displayName: string; ratePerMinute: number | string };
-  status: 'PENDING_CONNECTION' | 'DIALING_ADVISOR' | 'BILLING_ACTIVE' | string;
+  /** PENDING_CONNECTION → AWAITING_CLIENT → DIALING_ADVISOR → CONNECTED (free period) → BILLING_ACTIVE */
+  status: string;
+  _count?: { walletTransactions: number };
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -53,11 +57,13 @@ export default function ClientSessionPage() {
     return () => clearInterval(poll);
   }, [loadSession]);
 
+  const talking = session?.status === 'CONNECTED' || session?.status === 'BILLING_ACTIVE';
+
   useEffect(() => {
-    if (session?.status !== 'BILLING_ACTIVE') return;
+    if (!talking) return;
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
-  }, [session?.status]);
+  }, [talking]);
 
   async function handleStop() {
     if (!session) return;
@@ -137,9 +143,24 @@ export default function ClientSessionPage() {
   }
 
   const advisorName = session.advisor?.displayName ?? 'your advisor';
-  const connecting = session.status !== 'BILLING_ACTIVE';
 
-  if (connecting) {
+  if (!talking) {
+    const steps: Record<string, { title: string; detail: string }> = {
+      PENDING_CONNECTION: {
+        title: 'Calling your phone…',
+        detail: 'Answer the call on your phone. You are not charged until you are talking with your advisor.',
+      },
+      AWAITING_CLIENT: {
+        title: 'Press 1 on your phone',
+        detail: 'Press 1 on your phone to begin your call. We will then connect you to your advisor.',
+      },
+      DIALING_ADVISOR: {
+        title: `Connecting you to ${advisorName}…`,
+        detail: 'Stay on the line while we reach the advisor. You are not charged until you are talking.',
+      },
+    };
+    const step = steps[session.status] ?? steps.PENDING_CONNECTION;
+
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
         <div className="rounded-xl border bg-white p-8 shadow-md text-center max-w-sm w-full">
@@ -147,14 +168,8 @@ export default function ClientSessionPage() {
             <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
             Connecting
           </div>
-          <h1 className="mb-2 text-2xl font-bold text-gray-800">
-            {session.status === 'PENDING_CONNECTION' ? 'Calling your phone…' : `Connecting you to ${advisorName}…`}
-          </h1>
-          <p className="mb-6 text-sm text-gray-500">
-            {session.status === 'PENDING_CONNECTION'
-              ? 'Answer the call on your phone and we will connect you. You are not charged until you are talking.'
-              : 'Stay on the line while we reach the advisor. You are not charged until they answer.'}
-          </p>
+          <h1 className="mb-2 text-2xl font-bold text-gray-800">{step.title}</h1>
+          <p className="mb-6 text-sm text-gray-500">{step.detail}</p>
           {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
           <button
             onClick={handleStop}
@@ -168,9 +183,14 @@ export default function ClientSessionPage() {
     );
   }
 
-  const elapsed = Math.max(0, Math.floor((now - new Date(session.startedAt).getTime()) / 1000));
-  const billableMinutes = Math.max(1, Math.ceil(elapsed / 60));
-  const estimatedCost = session.advisor ? billableMinutes * Number(session.advisor.ratePerMinute) : null;
+  const connectedAtMs = new Date(session.connectedAt ?? session.startedAt).getTime();
+  const elapsed = Math.max(0, Math.floor((now - connectedAtMs) / 1000));
+  const freeSecondsLeft =
+    session.status === 'CONNECTED' && session.nextBillAt
+      ? Math.max(0, Math.ceil((new Date(session.nextBillAt).getTime() - now) / 1000))
+      : 0;
+  const billedMinutes = session._count?.walletTransactions ?? 0;
+  const billedSoFar = session.advisor ? billedMinutes * Number(session.advisor.ratePerMinute) : null;
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
@@ -189,7 +209,9 @@ export default function ClientSessionPage() {
             {formatTime(elapsed)}
           </p>
           <p className="mt-2 text-sm text-gray-500">
-            ~{billableMinutes} min billed{estimatedCost !== null ? ` (~$${estimatedCost.toFixed(2)})` : ''}
+            {session.status === 'CONNECTED'
+              ? `Free for the next ${freeSecondsLeft} second${freeSecondsLeft !== 1 ? 's' : ''}, then billing starts`
+              : `${billedMinutes} min billed${billedSoFar !== null ? ` ($${billedSoFar.toFixed(2)} so far)` : ''}`}
           </p>
         </div>
 
