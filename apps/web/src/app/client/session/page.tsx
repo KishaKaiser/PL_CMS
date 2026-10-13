@@ -30,6 +30,7 @@ export default function ClientSessionPage() {
   const [callEnded, setCallEnded] = useState(false);
   const [result, setResult] = useState<{ billedMinutes: number; billedAmountCents: number; durationSeconds: number } | null>(null);
   const [error, setError] = useState('');
+  const [balanceCents, setBalanceCents] = useState<number | null>(null);
   const hadSession = useRef(false);
 
   const loadSession = useCallback(async () => {
@@ -39,6 +40,11 @@ export default function ClientSessionPage() {
       if (data && data.id) {
         hadSession.current = true;
         setSession(data);
+        // The wallet balance drives the low-funds notice below.
+        fetch('/api/proxy/phone/me')
+          .then((r) => (r.ok ? (r.json() as Promise<{ balanceCents: number }>) : null))
+          .then((profile) => setBalanceCents(profile ? profile.balanceCents : null))
+          .catch(() => undefined);
       } else {
         // The call vanished from the active list: the other side hung up (or it never connected).
         if (hadSession.current) setCallEnded(true);
@@ -192,6 +198,14 @@ export default function ClientSessionPage() {
   const billedMinutes = session._count?.walletTransactions ?? 0;
   const billedSoFar = session.advisor ? billedMinutes * Number(session.advisor.ratePerMinute) : null;
 
+  // Billing charges each minute up front, so the balance left covers this many minutes beyond the current one.
+  const rateCents = session.advisor ? Math.round(Number(session.advisor.ratePerMinute) * 100) : 0;
+  const minutesCovered =
+    session.status === 'BILLING_ACTIVE' && balanceCents !== null && rateCents > 0
+      ? Math.floor(balanceCents / rateCents)
+      : null;
+  const lowFunds = minutesCovered !== null && minutesCovered <= 1;
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
       <div className="rounded-xl border bg-white p-8 shadow-md text-center max-w-sm w-full">
@@ -214,6 +228,27 @@ export default function ClientSessionPage() {
               : `${billedMinutes} min billed${billedSoFar !== null ? ` ($${billedSoFar.toFixed(2)} so far)` : ''}`}
           </p>
         </div>
+
+        {lowFunds && (
+          <div
+            className={`mb-4 rounded-lg border px-4 py-3 text-left text-sm ${
+              minutesCovered === 0 ? 'border-red-200 bg-red-50 text-red-800' : 'border-amber-200 bg-amber-50 text-amber-800'
+            }`}
+          >
+            <p className="font-semibold">
+              {minutesCovered === 0 ? 'Your balance covers only the current minute.' : 'Your balance is running low.'}
+            </p>
+            <p className="mt-1">
+              {minutesCovered === 0
+                ? 'The call will end when this minute is over unless you add funds.'
+                : 'It covers about one more minute after this one.'}{' '}
+              <a href="/client/shop" target="_blank" rel="noopener" className="font-medium underline">
+                Add funds
+              </a>{' '}
+              in a new tab and your call keeps going.
+            </p>
+          </div>
+        )}
 
         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
