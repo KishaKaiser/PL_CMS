@@ -33,6 +33,17 @@ const CLIENT_PROMPT = 'Welcome to The Psychic Link. To begin your call, press 1 
 const ADVISOR_PROMPT = 'You have a call from The Psychic Link. Press 1 to accept this call.';
 const CLIENT_UNAVAILABLE_MESSAGE =
   'We are sorry, your advisor is unavailable right now. You have not been charged. Goodbye.';
+const CLIENT_LOW_BALANCE_WARNING =
+  'Your balance is running low. This call will end in about thirty seconds unless you add funds to your wallet on the website.';
+const ADVISOR_LOW_BALANCE_WARNING = "The client's balance is running low. This call will end in about thirty seconds.";
+const CLIENT_OUT_OF_FUNDS_MESSAGE = 'Your balance has run out, so this call is ending. Goodbye.';
+const ADVISOR_OUT_OF_FUNDS_MESSAGE = "The client's balance has run out, so this call is ending. Goodbye.";
+
+/** How long before the next charge the low-balance warning is spoken. */
+const LOW_BALANCE_WARNING_LEAD_MS = 30_000;
+
+/** If a goodbye message's end is never reported, hang up anyway after this long. */
+const GOODBYE_BACKSTOP_MS = 8_000;
 
 /** Statuses of a call that is still being set up or in progress. */
 export const LIVE_STATUSES = ['PENDING_CONNECTION', 'AWAITING_CLIENT', 'DIALING_ADVISOR', 'CONNECTED', 'BILLING_ACTIVE'];
@@ -383,8 +394,9 @@ export class BillingService {
     if (!session) return { ok: true };
 
     if (session.status.startsWith('ENDED')) {
-      // Already finished. After a setup failure the client may still be hearing a goodbye; let it finish.
-      if (session.status !== 'ENDED_NOT_CONNECTED') {
+      // Already finished. After a setup failure or running out of funds a goodbye may still be
+      // playing to the other party; let it finish (it hangs up when done).
+      if (session.status !== 'ENDED_NOT_CONNECTED' && session.status !== 'ENDED_LOW_BALANCE') {
         await this.telnyx.hangup(leg === 'client' ? session.advisorCallControlId : session.clientCallControlId);
       }
       return { ok: true };
@@ -436,6 +448,52 @@ export class BillingService {
           `Billing tick failed for session ${session.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         );
       });
+    }
+
+    await this.warnLowBalance().catch((error: unknown) => {
+      this.logger.error(
+        `Low-balance warning failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    });
+  }
+
+  /**
+   * About thirty seconds before a charge the client can't cover, tell both parties the call is about to end
+   * so it isn't a surprise. Adding funds on the website in that time lets the call continue.
+   */
+  private async warnLowBalance() {
+    const now = new Date();
+    const candidates = await this.prisma.callSession.findMany({
+      where: {
+        status: 'BILLING_ACTIVE',
+        lowBalanceWarnedAt: null,
+        nextBillAt: { gt: now, lte: new Date(now.getTime() + LOW_BALANCE_WARNING_LEAD_MS) },
+      },
+      include: { advisor: true, client: true },
+    });
+
+    for (const session of candidates) {
+      if (session.client.balanceCents >= toCents(session.advisor.ratePerMinute)) continue;
+
+      // Claim the warning so overlapping runs only speak it once.
+      const claim = await this.prisma.callSession.updateMany({
+        where: { id: session.id, status: 'BILLING_ACTIVE', lowBalanceWarnedAt: null },
+        data: { lowBalanceWarnedAt: now },
+      });
+      if (claim.count === 0) continue;
+
+      if (session.clientCallControlId) {
+        await this.telnyx.speak(session.clientCallControlId, CLIENT_LOW_BALANCE_WARNING, {
+          sessionId: session.id,
+          leg: 'client',
+        });
+      }
+      if (session.advisorCallControlId) {
+        await this.telnyx.speak(session.advisorCallControlId, ADVISOR_LOW_BALANCE_WARNING, {
+          sessionId: session.id,
+          leg: 'advisor',
+        });
+      }
     }
   }
 
@@ -490,6 +548,7 @@ export class BillingService {
         data: {
           status: 'BILLING_ACTIVE',
           nextBillAt: new Date(session.nextBillAt.getTime() + TICK_INTERVAL_MS),
+          lowBalanceWarnedAt: null,
         },
       });
       if (claim.count === 0) {
@@ -526,10 +585,50 @@ export class BillingService {
     });
 
     if (result.terminate) {
-      // Out of funds: record the final totals, then drop the call.
+      // Out of funds: record the final totals, tell both parties, then drop the call.
       await this.endSession(sessionId, 'ENDED_LOW_BALANCE');
-      await this.terminateCall(sessionId);
+      await this.endCallWithMessage(sessionId);
     }
+  }
+
+  /**
+   * Tells both parties the call is ending because the balance ran out, then hangs up. Each leg is
+   * hung up when its message finishes (call.speak.ended); the timer is a backstop in case that
+   * never arrives, and if no message could be played at all the call is dropped right away.
+   */
+  private async endCallWithMessage(sessionId: string) {
+    const session = await this.prisma.callSession.findUnique({
+      where: { id: sessionId },
+      select: { clientCallControlId: true, advisorCallControlId: true },
+    });
+    if (!session) return;
+
+    const [clientSpoke, advisorSpoke] = await Promise.all([
+      session.clientCallControlId
+        ? this.telnyx.speak(session.clientCallControlId, CLIENT_OUT_OF_FUNDS_MESSAGE, {
+            sessionId,
+            leg: 'client',
+            step: 'goodbye',
+          })
+        : false,
+      session.advisorCallControlId
+        ? this.telnyx.speak(session.advisorCallControlId, ADVISOR_OUT_OF_FUNDS_MESSAGE, {
+            sessionId,
+            leg: 'advisor',
+            step: 'goodbye',
+          })
+        : false,
+    ]);
+
+    if (!clientSpoke && !advisorSpoke) {
+      await this.terminateCall(sessionId);
+      return;
+    }
+
+    const backstop = setTimeout(() => {
+      void this.terminateCall(sessionId);
+    }, GOODBYE_BACKSTOP_MS);
+    backstop.unref();
   }
 
   /** Hangs up both legs of a session (the client's and the advisor's). */

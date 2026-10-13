@@ -212,6 +212,9 @@ model CallSession {
   // free period (when billing starts); after that the billing cron advances it
   // a minute at a time as each tick is charged.
   nextBillAt      DateTime?
+  // When both parties were told the balance is about to run out; cleared each
+  // time a minute is charged so a later shortage can warn again.
+  lowBalanceWarnedAt DateTime?
   // PENDING_CONNECTION (dialing the client) → AWAITING_CLIENT (client must press 1)
   // → DIALING_ADVISOR (advisor must press 1) → CONNECTED (bridged, free period)
   // → BILLING_ACTIVE, then ENDED* (ENDED, ENDED_BY_USER, ENDED_LOW_BALANCE,
