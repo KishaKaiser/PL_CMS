@@ -75,6 +75,7 @@ interface AdvisorProfile {
   profileImageUrl?: string | null;
   ratePerMinute: number | string;
   isOnline: boolean;
+  phoneNumber?: string | null;
 }
 
 interface PayoutMethod {
@@ -170,6 +171,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     displayName: '',
     bio: '',
     ratePerMinute: '0',
+    phoneNumber: '',
     isOnline: false,
   });
   const [payoutForm, setPayoutForm] = useState(emptyPayoutMethod);
@@ -192,6 +194,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
           displayName: nextData.advisor.profile.displayName,
           bio: nextData.advisor.profile.bio ?? '',
           ratePerMinute: String(nextData.advisor.profile.ratePerMinute ?? 0),
+          phoneNumber: nextData.advisor.profile.phoneNumber ?? '',
           isOnline: nextData.advisor.profile.isOnline,
         });
       }
@@ -631,6 +634,12 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
             <form onSubmit={handleAdvisorSave} className="max-w-2xl space-y-4">
               <Input label="Display name" value={advisorForm.displayName} onChange={(displayNameValue) => setAdvisorForm((f) => ({ ...f, displayName: displayNameValue }))} />
               <Input label="Rate per minute" value={advisorForm.ratePerMinute} onChange={(ratePerMinute) => setAdvisorForm((f) => ({ ...f, ratePerMinute }))} type="number" />
+              <div>
+                <Input label="Your phone number" value={advisorForm.phoneNumber} onChange={(phoneNumber) => setAdvisorForm((f) => ({ ...f, phoneNumber }))} type="tel" />
+                <p className="mt-1 text-xs text-gray-500">
+                  When a client asks to talk to you, we call this number and connect them. It is never shown to clients, and you need it on file before you can turn on calls.
+                </p>
+              </div>
               <label className="block text-sm font-medium text-gray-700">
                 Bio
                 <textarea value={advisorForm.bio} onChange={(event) => setAdvisorForm((f) => ({ ...f, bio: event.target.value }))} rows={5} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100" />

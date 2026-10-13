@@ -59,7 +59,7 @@ export class BillingService {
     const advisor = await this.prisma.advisorProfile.findUnique({ where: { id: dto.advisorId } });
     if (!advisor) throw new NotFoundException('Advisor not found');
     if (!advisor.isOnline) throw new BadRequestException('This advisor is not taking calls right now.');
-    if (!advisor.sipExtension) throw new BadRequestException('This advisor is not set up for phone calls yet.');
+    if (!advisor.phoneNumber) throw new BadRequestException('This advisor is not set up for phone calls yet.');
 
     const rateCents = toCents(advisor.ratePerMinute);
     if (rateCents <= 0) throw new BadRequestException('This advisor has not set a rate yet.');
@@ -185,9 +185,9 @@ export class BillingService {
     if (claim.count === 0) return { ok: true };
 
     try {
-      if (!session.advisor.sipExtension) throw new Error('Advisor has no SIP extension');
+      if (!session.advisor.phoneNumber) throw new Error('Advisor has no phone number on file');
       const { callControlId } = await this.telnyx.dial({
-        to: this.telnyx.advisorDialUri(session.advisor.sipExtension),
+        to: session.advisor.phoneNumber,
         state: { sessionId, leg: 'advisor' },
         timeoutSecs: ADVISOR_RING_SECONDS,
         linkTo: clientCallControlId,

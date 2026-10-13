@@ -3,6 +3,7 @@ import type { Prisma } from '@pl-cms/db';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { deriveMediaTitle, serializeMediaAsset } from '../admin/admin-media/media.util';
+import { normalizePhoneNumber } from '../telephony/phone-number';
 import {
   SaveAddressDto,
   SavePaymentMethodDto,
@@ -190,9 +191,30 @@ export class AccountService {
 
   async updateAdvisorProfile(userId: string, dto: UpdateAdvisorProfileDto) {
     const advisor = await this.getAdvisorProfileForUser(userId);
+
+    let phoneNumber: string | null | undefined;
+    if (dto.phoneNumber !== undefined) {
+      if (dto.phoneNumber.trim() === '') {
+        phoneNumber = null;
+      } else {
+        const normalized = normalizePhoneNumber(dto.phoneNumber);
+        if (!normalized) {
+          throw new BadRequestException('Enter a valid phone number, including area code.');
+        }
+        phoneNumber = normalized;
+      }
+    }
+
+    // Clients are connected by calling the advisor's phone, so they must have one on file to take calls.
+    const finalPhoneNumber = phoneNumber !== undefined ? phoneNumber : advisor.phoneNumber;
+    if (dto.isOnline === true && !finalPhoneNumber) {
+      throw new BadRequestException('Add your phone number before turning on calls, so we know where to reach you.');
+    }
+
     return this.prisma.advisorProfile.update({
       where: { id: advisor.id },
       data: {
+        ...(phoneNumber !== undefined ? { phoneNumber } : {}),
         ...(dto.displayName !== undefined ? { displayName: dto.displayName.trim() } : {}),
         ...(dto.bio !== undefined ? { bio: dto.bio.trim() || null } : {}),
         ...(dto.profileImageUrl !== undefined ? { profileImageUrl: dto.profileImageUrl.trim() || null } : {}),

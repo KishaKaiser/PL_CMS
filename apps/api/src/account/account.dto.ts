@@ -105,6 +105,12 @@ export class UpdateAdvisorProfileDto {
   @Min(0)
   ratePerMinute?: number;
 
+  /** The advisor's own phone, called to connect them to a client. Empty clears it. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  phoneNumber?: string;
+
   @IsOptional()
   @IsBoolean()
   isOnline?: boolean;
