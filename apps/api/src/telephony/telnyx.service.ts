@@ -18,19 +18,24 @@ const WEBHOOK_TOLERANCE_SECONDS = 300;
 
 export type CallLeg = 'client' | 'advisor';
 
+/** What a leg is doing: waiting for the caller to press 1, or hearing a goodbye before hanging up. */
+export type CallStep = 'consent' | 'goodbye';
+
 /** Travels with each Telnyx call leg and comes back, base64-encoded, on every webhook. */
 export interface CallState {
   sessionId: string;
   leg: CallLeg;
+  step?: CallStep;
 }
 
 export interface DialOptions {
   to: string;
   state: CallState;
   timeoutSecs: number;
-  /** Call-control id of an already-answered leg to bridge this new leg to. */
-  linkTo?: string;
 }
+
+/** Spoken voice for prompts (Telnyx format <Provider>.<Voice>); override with TELNYX_TTS_VOICE. */
+const DEFAULT_TTS_VOICE = 'AWS.Polly.Joanna';
 
 @Injectable()
 export class TelnyxService {
@@ -47,10 +52,6 @@ export class TelnyxService {
       timeout_secs: options.timeoutSecs,
       client_state: encodeState(options.state),
     };
-    if (options.linkTo) {
-      body.link_to = options.linkTo;
-      body.bridge_on_answer = true;
-    }
 
     const response = await this.request('/calls', body);
     if (!response.ok) {
@@ -66,6 +67,52 @@ export class TelnyxService {
       throw new BadGatewayException('The phone service could not place the call. Please try again.');
     }
     return { callControlId };
+  }
+
+  /** Plays a spoken prompt and waits for the caller to press 1; the result arrives as a call.gather.ended webhook. */
+  async promptToPressOne(callControlId: string, text: string, state: CallState): Promise<void> {
+    const response = await this.command(callControlId, 'gather_using_speak', {
+      payload: text,
+      voice: this.config.get<string>('TELNYX_TTS_VOICE') || DEFAULT_TTS_VOICE,
+      minimum_digits: 1,
+      maximum_digits: 1,
+      valid_digits: '1',
+      maximum_tries: 2,
+      timeout_millis: 10_000,
+      invalid_payload: 'That was not a valid choice.',
+      client_state: encodeState(state),
+    });
+    if (!response.ok) {
+      this.logger.error(`Telnyx prompt failed (${response.status}): ${await response.text()}`);
+      throw new BadGatewayException('The phone service could not play the prompt.');
+    }
+  }
+
+  /** Speaks a message to one leg; a call.speak.ended webhook follows when it finishes. */
+  async speak(callControlId: string, text: string, state: CallState): Promise<boolean> {
+    try {
+      const response = await this.command(callControlId, 'speak', {
+        payload: text,
+        voice: this.config.get<string>('TELNYX_TTS_VOICE') || DEFAULT_TTS_VOICE,
+        client_state: encodeState(state),
+      });
+      if (!response.ok && response.status !== 404 && response.status !== 422) {
+        this.logger.error(`Telnyx speak failed (${response.status}): ${await response.text()}`);
+      }
+      return response.ok;
+    } catch (error) {
+      this.logger.error(`Telnyx speak failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return false;
+    }
+  }
+
+  /** Connects two answered legs so the client and advisor can talk. */
+  async bridge(callControlId: string, otherCallControlId: string): Promise<void> {
+    const response = await this.command(callControlId, 'bridge', { call_control_id: otherCallControlId });
+    if (!response.ok) {
+      this.logger.error(`Telnyx bridge failed (${response.status}): ${await response.text()}`);
+      throw new BadGatewayException('The phone service could not connect the call.');
+    }
   }
 
   /** Hangs up one leg. A leg that has already ended is not an error. */
@@ -116,6 +163,10 @@ export class TelnyxService {
     }
   }
 
+  private command(callControlId: string, action: string, body: unknown) {
+    return this.request(`/calls/${encodeURIComponent(callControlId)}/actions/${action}`, body);
+  }
+
   private request(path: string, body: unknown) {
     return fetch(`${TELNYX_API_BASE}${path}`, {
       method: 'POST',
@@ -146,7 +197,8 @@ export function decodeState(encoded: string | undefined): CallState | null {
   try {
     const parsed = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8')) as Partial<CallState>;
     if (typeof parsed.sessionId === 'string' && (parsed.leg === 'client' || parsed.leg === 'advisor')) {
-      return { sessionId: parsed.sessionId, leg: parsed.leg };
+      const step = parsed.step === 'consent' || parsed.step === 'goodbye' ? parsed.step : undefined;
+      return { sessionId: parsed.sessionId, leg: parsed.leg, ...(step ? { step } : {}) };
     }
   } catch {
     // fall through

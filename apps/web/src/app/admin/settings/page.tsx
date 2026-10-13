@@ -45,8 +45,9 @@ interface AstrologyReportForm {
 }
 
 interface TelephonyForm {
-  sipTrunkDomain: string;
   dialInNumber: string;
+  /** Free seconds after a call connects before per-minute billing begins. */
+  billingDelaySeconds: string;
 }
 
 interface SiteHomepageForm {
@@ -71,8 +72,8 @@ const defaultIdentityForm: SiteIdentityForm = {
 };
 
 const defaultTelephonyForm: TelephonyForm = {
-  sipTrunkDomain: '',
   dialInNumber: '',
+  billingDelaySeconds: '45',
 };
 
 const defaultAstrologyReportForm: AstrologyReportForm = {
@@ -160,8 +161,8 @@ export default function AdminSettingsPage() {
       ollamaModel: readString(astrologyReport?.ollamaModel, defaultAstrologyReportForm.ollamaModel),
     });
     setTelephonyForm({
-      sipTrunkDomain: readString(telephony?.sipTrunkDomain, defaultTelephonyForm.sipTrunkDomain),
       dialInNumber: readString(telephony?.dialInNumber, defaultTelephonyForm.dialInNumber),
+      billingDelaySeconds: String(telephony?.billingDelaySeconds ?? defaultTelephonyForm.billingDelaySeconds),
     });
   }, []);
 
@@ -555,19 +556,23 @@ export default function AdminSettingsPage() {
           <div className="mb-4">
             <h2 className="text-lg font-semibold">Telephony</h2>
             <p className="text-sm text-gray-500">
-              SIP trunk and dial-in number used to bridge calls between clients and advisor extensions on the Grandstream UCM6301. Telnyx account credentials stay in server environment variables, not here.
+              Phone call settings for clients and advisors. Telnyx account credentials stay in server environment variables, not here.
             </p>
           </div>
 
           <div className="max-w-xl space-y-4">
             <label className="block text-sm font-medium text-gray-700">
-              SIP trunk domain
+              Free seconds before billing starts
               <input
-                value={telephonyForm.sipTrunkDomain}
-                onChange={(event) => setTelephonyForm((current) => ({ ...current, sipTrunkDomain: event.target.value }))}
-                placeholder="e.g. sip.telnyx.com"
+                value={telephonyForm.billingDelaySeconds}
+                onChange={(event) => setTelephonyForm((current) => ({ ...current, billingDelaySeconds: event.target.value.replace(/[^\d]/g, '') }))}
+                inputMode="numeric"
+                placeholder="45"
                 className="mt-1 w-full rounded border px-3 py-2 text-sm"
               />
+              <span className="mt-1 block text-xs font-normal text-gray-500">
+                After the client and advisor are connected, the call is free for this long, then the first minute is charged. 0 to 300 seconds; 30 to 60 is typical.
+              </span>
             </label>
             <label className="block text-sm font-medium text-gray-700">
               Dial-in number

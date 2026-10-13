@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
-import { TelnyxService, decodeState } from '../telephony/telnyx.service';
+import { CallLeg, TelnyxService, decodeState } from '../telephony/telnyx.service';
 import { StartSessionDto } from './billing.dto';
 
 /** How often a connected call is charged another minute. */
@@ -23,8 +23,22 @@ const ADVISOR_RING_SECONDS = 30;
 /** A call that hasn't connected after this long is treated as dead and cleaned up. */
 const STALE_PENDING_MS = 3 * 60_000;
 
+/** Free seconds after the two parties are connected before billing starts (admin Settings → Telephony can change it). */
+const DEFAULT_BILLING_DELAY_SECONDS = 45;
+const MAX_BILLING_DELAY_SECONDS = 300;
+const TELEPHONY_SETTINGS_KEY = 'telephony_settings';
+
+// What each party hears. Spoken with a text-to-speech voice.
+const CLIENT_PROMPT = 'Welcome to The Psychic Link. To begin your call, press 1 now.';
+const ADVISOR_PROMPT = 'You have a call from The Psychic Link. Press 1 to accept this call.';
+const CLIENT_UNAVAILABLE_MESSAGE =
+  'We are sorry, your advisor is unavailable right now. You have not been charged. Goodbye.';
+
 /** Statuses of a call that is still being set up or in progress. */
-export const LIVE_STATUSES = ['PENDING_CONNECTION', 'DIALING_ADVISOR', 'BILLING_ACTIVE'];
+export const LIVE_STATUSES = ['PENDING_CONNECTION', 'AWAITING_CLIENT', 'DIALING_ADVISOR', 'CONNECTED', 'BILLING_ACTIVE'];
+
+/** Statuses where the two parties are talking: free period (CONNECTED) or billed (BILLING_ACTIVE). */
+const TALKING_STATUSES = ['CONNECTED', 'BILLING_ACTIVE'];
 
 export interface TelnyxWebhookBody {
   data?: {
@@ -35,6 +49,8 @@ export interface TelnyxWebhookBody {
       hangup_cause?: string;
       hangup_source?: string;
       sip_hangup_cause?: string;
+      digits?: string;
+      status?: string;
     };
   };
 }
@@ -48,7 +64,7 @@ export class BillingService {
     private readonly telnyx: TelnyxService,
   ) {}
 
-  /** Checks the balance and availability, then rings the client to begin the bridge. */
+  /** Checks the balance and availability, then rings the client to begin the call. */
   async startSession(userId: string, dto: StartSessionDto) {
     const client = await this.prisma.clientProfile.findUnique({ where: { userId } });
     if (!client) throw new NotFoundException('Client profile not found');
@@ -144,30 +160,120 @@ export class BillingService {
     // Not a call this app placed (or an event we don't act on): acknowledge so Telnyx doesn't retry.
     if (!state || !callControlId) return { ok: true };
 
-    // Why a leg ended is the first thing to look at when a call drops.
-    if (eventType === 'call.answered' || eventType === 'call.hangup') {
-      const detail =
-        eventType === 'call.hangup'
-          ? ` cause=${payload.hangup_cause ?? '?'} sip=${payload.sip_hangup_cause ?? '?'} source=${payload.hangup_source ?? '?'}`
-          : '';
-      this.logger.log(`${eventType} session=${state.sessionId} leg=${state.leg}${detail}`);
-    }
-
-    if (eventType === 'call.answered') {
-      return state.leg === 'client'
-        ? this.onClientAnswered(state.sessionId, callControlId)
-        : this.onAdvisorAnswered(state.sessionId, callControlId);
-    }
-
+    // Why a leg ended or what a party pressed is the first thing to look at when a call misbehaves.
     if (eventType === 'call.hangup') {
-      return this.onLegHangup(state.sessionId, state.leg);
+      this.logger.log(
+        `${eventType} session=${state.sessionId} leg=${state.leg} cause=${payload.hangup_cause ?? '?'} sip=${payload.sip_hangup_cause ?? '?'} source=${payload.hangup_source ?? '?'}`,
+      );
+    } else if (eventType === 'call.gather.ended') {
+      this.logger.log(
+        `${eventType} session=${state.sessionId} leg=${state.leg} digits=${payload.digits ?? ''} status=${payload.status ?? '?'}`,
+      );
+    } else if (eventType === 'call.answered' || eventType === 'call.speak.ended') {
+      this.logger.log(`${eventType} session=${state.sessionId} leg=${state.leg}`);
+    }
+
+    switch (eventType) {
+      case 'call.answered':
+        return state.leg === 'client'
+          ? this.onClientAnswered(state.sessionId, callControlId)
+          : this.onAdvisorAnswered(state.sessionId, callControlId);
+
+      case 'call.gather.ended':
+        return this.onGatherEnded(state.sessionId, state.leg, callControlId, payload.digits);
+
+      case 'call.speak.ended':
+        // A goodbye has finished playing: now hang up.
+        if (state.step === 'goodbye') await this.telnyx.hangup(callControlId);
+        return { ok: true };
+
+      case 'call.hangup':
+        return this.onLegHangup(state.sessionId, state.leg);
+
+      default:
+        return { ok: true };
+    }
+  }
+
+  /** The client picked up: ask them to press 1 before we involve the advisor. */
+  private async onClientAnswered(sessionId: string, clientCallControlId: string) {
+    const session = await this.prisma.callSession.findUnique({ where: { id: sessionId }, select: { status: true } });
+    if (!session || session.status.startsWith('ENDED')) {
+      await this.telnyx.hangup(clientCallControlId);
+      return { ok: true };
+    }
+
+    // Claim the transition so a redelivered webhook can't play the prompt twice.
+    const claim = await this.prisma.callSession.updateMany({
+      where: { id: sessionId, status: 'PENDING_CONNECTION' },
+      data: { status: 'AWAITING_CLIENT', clientCallControlId },
+    });
+    if (claim.count === 0) return { ok: true };
+
+    try {
+      await this.telnyx.promptToPressOne(clientCallControlId, CLIENT_PROMPT, {
+        sessionId,
+        leg: 'client',
+        step: 'consent',
+      });
+    } catch (error) {
+      this.logger.error(
+        `Could not prompt the client for session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      await this.endSession(sessionId, 'ENDED_NOT_CONNECTED');
+      await this.telnyx.hangup(clientCallControlId);
     }
 
     return { ok: true };
   }
 
-  /** Client picked up: now ring the advisor's extension and bridge the two on answer. */
-  private async onClientAnswered(sessionId: string, clientCallControlId: string) {
+  /** The advisor picked up: ask them to press 1 to accept before we connect anyone. */
+  private async onAdvisorAnswered(sessionId: string, advisorCallControlId: string) {
+    const session = await this.prisma.callSession.findUnique({ where: { id: sessionId }, select: { status: true } });
+    if (!session || session.status !== 'DIALING_ADVISOR') {
+      await this.telnyx.hangup(advisorCallControlId);
+      return { ok: true };
+    }
+
+    try {
+      await this.telnyx.promptToPressOne(advisorCallControlId, ADVISOR_PROMPT, {
+        sessionId,
+        leg: 'advisor',
+        step: 'consent',
+      });
+    } catch (error) {
+      this.logger.error(
+        `Could not prompt the advisor for session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      await this.failSetup(sessionId);
+    }
+
+    return { ok: true };
+  }
+
+  /** A party finished the "press 1" prompt, whether or not they pressed it. */
+  private async onGatherEnded(sessionId: string, leg: CallLeg, callControlId: string, digits: string | undefined) {
+    const pressedOne = digits === '1';
+
+    if (leg === 'client') {
+      if (!pressedOne) {
+        // The client didn't start the call: nothing to explain, nothing to charge.
+        await this.endSession(sessionId, 'ENDED_NOT_CONNECTED');
+        await this.terminateCall(sessionId);
+        return { ok: true };
+      }
+      return this.dialAdvisor(sessionId, callControlId);
+    }
+
+    if (!pressedOne) {
+      await this.failSetup(sessionId);
+      return { ok: true };
+    }
+    return this.connectCall(sessionId, callControlId);
+  }
+
+  /** The client pressed 1: ring the advisor's own phone. */
+  private async dialAdvisor(sessionId: string, clientCallControlId: string) {
     const session = await this.prisma.callSession.findUnique({
       where: { id: sessionId },
       include: { advisor: true },
@@ -179,8 +285,8 @@ export class BillingService {
 
     // Claim the transition so a redelivered webhook can't ring the advisor twice.
     const claim = await this.prisma.callSession.updateMany({
-      where: { id: sessionId, status: 'PENDING_CONNECTION' },
-      data: { status: 'DIALING_ADVISOR', clientCallControlId },
+      where: { id: sessionId, status: 'AWAITING_CLIENT' },
+      data: { status: 'DIALING_ADVISOR' },
     });
     if (claim.count === 0) return { ok: true };
 
@@ -190,7 +296,6 @@ export class BillingService {
         to: session.advisor.phoneNumber,
         state: { sessionId, leg: 'advisor' },
         timeoutSecs: ADVISOR_RING_SECONDS,
-        linkTo: clientCallControlId,
       });
       await this.prisma.callSession.update({
         where: { id: sessionId },
@@ -200,145 +305,154 @@ export class BillingService {
       this.logger.error(
         `Could not ring advisor for session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
-      await this.endSession(sessionId, 'ENDED_NOT_CONNECTED');
-      await this.telnyx.hangup(clientCallControlId);
+      await this.failSetup(sessionId);
     }
 
     return { ok: true };
   }
 
-  /** Advisor picked up and Telnyx has bridged the call: this is when billing starts. */
-  private async onAdvisorAnswered(sessionId: string, advisorCallControlId: string) {
-    const status = await this.startBillingForConnectedCall(sessionId, advisorCallControlId);
-    return { ok: true, status };
+  /** The advisor pressed 1: bridge the two calls. Billing starts after the free period. */
+  private async connectCall(sessionId: string, advisorCallControlId: string) {
+    const session = await this.prisma.callSession.findUnique({
+      where: { id: sessionId },
+      select: { status: true, clientCallControlId: true },
+    });
+    if (!session || session.status !== 'DIALING_ADVISOR' || !session.clientCallControlId) {
+      await this.telnyx.hangup(advisorCallControlId);
+      return { ok: true };
+    }
+
+    const now = new Date();
+    const delaySeconds = await this.getBillingDelaySeconds();
+
+    // Claim the transition so a redelivered webhook can't bridge twice.
+    const claim = await this.prisma.callSession.updateMany({
+      where: { id: sessionId, status: 'DIALING_ADVISOR' },
+      data: {
+        status: 'CONNECTED',
+        connectedAt: now,
+        nextBillAt: new Date(now.getTime() + delaySeconds * 1000),
+        advisorCallControlId,
+      },
+    });
+    if (claim.count === 0) return { ok: true };
+
+    try {
+      await this.telnyx.bridge(session.clientCallControlId, advisorCallControlId);
+    } catch (error) {
+      this.logger.error(
+        `Could not bridge session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      await this.endSession(sessionId, 'ENDED_NOT_CONNECTED');
+      await this.terminateCall(sessionId);
+    }
+
+    return { ok: true };
+  }
+
+  /**
+   * The advisor couldn't be reached or didn't accept. Nobody is charged: end the
+   * session, drop the advisor's line, and tell the client before hanging up on them.
+   */
+  private async failSetup(sessionId: string) {
+    const ended = await this.endSession(sessionId, 'ENDED_NOT_CONNECTED');
+    if (!ended) return;
+
+    const session = await this.prisma.callSession.findUnique({
+      where: { id: sessionId },
+      select: { clientCallControlId: true, advisorCallControlId: true },
+    });
+    if (!session) return;
+
+    await this.telnyx.hangup(session.advisorCallControlId);
+
+    if (session.clientCallControlId) {
+      const spoke = await this.telnyx.speak(session.clientCallControlId, CLIENT_UNAVAILABLE_MESSAGE, {
+        sessionId,
+        leg: 'client',
+        step: 'goodbye',
+      });
+      // If the message couldn't play (the client already left, say), make sure the line is closed.
+      if (!spoke) await this.telnyx.hangup(session.clientCallControlId);
+    }
   }
 
   /** Either party hung up (or a leg failed to connect): finish the session and drop the other leg. */
-  private async onLegHangup(sessionId: string, leg: 'client' | 'advisor') {
+  private async onLegHangup(sessionId: string, leg: CallLeg) {
     const session = await this.prisma.callSession.findUnique({ where: { id: sessionId } });
     if (!session) return { ok: true };
 
-    if (!session.status.startsWith('ENDED')) {
-      await this.endSession(sessionId, session.status === 'BILLING_ACTIVE' ? 'ENDED' : 'ENDED_NOT_CONNECTED');
+    if (session.status.startsWith('ENDED')) {
+      // Already finished. After a setup failure the client may still be hearing a goodbye; let it finish.
+      if (session.status !== 'ENDED_NOT_CONNECTED') {
+        await this.telnyx.hangup(leg === 'client' ? session.advisorCallControlId : session.clientCallControlId);
+      }
+      return { ok: true };
     }
+
+    // The advisor's line ended before the call was connected (no answer, declined, voicemail):
+    // tell the client rather than cutting them off.
+    if (leg === 'advisor' && !TALKING_STATUSES.includes(session.status)) {
+      await this.failSetup(sessionId);
+      return { ok: true };
+    }
+
+    await this.endSession(sessionId, TALKING_STATUSES.includes(session.status) ? 'ENDED' : 'ENDED_NOT_CONNECTED');
 
     // Make sure nobody is left on a dead line.
     await this.telnyx.hangup(leg === 'client' ? session.advisorCallControlId : session.clientCallControlId);
     return { ok: true };
   }
 
-  private async startBillingForConnectedCall(sessionId: string, advisorCallControlId: string) {
-    const now = new Date();
-
-    const result = await this.prisma.$transaction(async (tx) => {
-      const session = await tx.callSession.findUnique({
-        where: { id: sessionId },
-        include: { advisor: true, client: true },
-      });
-      if (!session) {
-        throw new NotFoundException(`Session ${sessionId} not found`);
+  /** How many free seconds a connected call gets before billing starts. */
+  private async getBillingDelaySeconds(): Promise<number> {
+    try {
+      const setting = await this.prisma.setting.findUnique({ where: { key: TELEPHONY_SETTINGS_KEY } });
+      if (setting) {
+        const parsed = JSON.parse(setting.value) as { billingDelaySeconds?: unknown };
+        const raw = parsed.billingDelaySeconds;
+        const seconds = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN;
+        if (Number.isFinite(seconds)) {
+          return Math.min(MAX_BILLING_DELAY_SECONDS, Math.max(0, Math.round(seconds)));
+        }
       }
-
-      if (session.status === 'BILLING_ACTIVE') {
-        return { status: 'BILLING_ACTIVE' };
-      }
-
-      if (session.status.startsWith('ENDED')) {
-        return { status: session.status };
-      }
-
-      const existingDebit = await tx.walletTransaction.findFirst({
-        where: {
-          callSessionId: sessionId,
-          type: 'DEBIT',
-          minutesDelta: -1,
-        },
-        select: { id: true },
-      });
-
-      if (existingDebit) {
-        await tx.callSession.update({
-          where: { id: sessionId },
-          data: { status: 'BILLING_ACTIVE', advisorCallControlId },
-        });
-        return { status: 'BILLING_ACTIVE' };
-      }
-
-      const rateCents = toCents(session.advisor.ratePerMinute);
-
-      const debitResult = await tx.clientProfile.updateMany({
-        where: { id: session.clientId, balanceCents: { gte: rateCents } },
-        data: { balanceCents: { decrement: rateCents } },
-      });
-
-      if (debitResult.count === 0) {
-        await tx.callSession.update({
-          where: { id: sessionId },
-          data: { status: 'ENDED_LOW_BALANCE', endedAt: now, durationSeconds: 0, advisorCallControlId },
-        });
-        return { status: 'ENDED_LOW_BALANCE' };
-      }
-
-      await tx.walletTransaction.create({
-        data: {
-          userId: session.client.userId,
-          callSessionId: sessionId,
-          type: 'DEBIT',
-          amount: session.advisor.ratePerMinute,
-          currency: 'USD',
-          minutesDelta: -1,
-          description: `Call session ${sessionId} connected — first minute at $${session.advisor.ratePerMinute}/min`,
-        },
-      });
-
-      await tx.callSession.update({
-        where: { id: sessionId },
-        data: {
-          startedAt: now,
-          status: 'BILLING_ACTIVE',
-          advisorCallControlId,
-          nextBillAt: new Date(now.getTime() + TICK_INTERVAL_MS),
-        },
-      });
-
-      return { status: 'BILLING_ACTIVE' };
-    });
-
-    if (result.status === 'ENDED_LOW_BALANCE') {
-      await this.terminateCall(sessionId);
+    } catch {
+      // Fall through to the default.
     }
-
-    return result.status;
+    return DEFAULT_BILLING_DELAY_SECONDS;
   }
 
-  /** Charges one more minute for every connected call whose next-bill time has arrived. */
-  @Cron('* * * * *')
-  async handlePerMinuteBilling() {
-    await this.expireStaleSessions().catch((error: unknown) => {
-      this.logger.error(
-        `Stale session cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    });
-
+  /** Charges the next minute for every connected call whose billing time has arrived (first charge ends the free period). */
+  @Cron('*/5 * * * * *')
+  async handleBillingTicks() {
     const due = await this.prisma.callSession.findMany({
-      where: { status: 'BILLING_ACTIVE', nextBillAt: { lte: new Date() } },
+      where: { status: { in: TALKING_STATUSES }, nextBillAt: { lte: new Date() } },
       select: { id: true },
     });
 
     for (const session of due) {
       await this.billNextTick(session.id).catch((error: unknown) => {
         this.logger.error(
-          `Per-minute billing tick failed for session ${session.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          `Billing tick failed for session ${session.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         );
       });
     }
+  }
+
+  @Cron('* * * * *')
+  async handleStaleSessions() {
+    await this.expireStaleSessions().catch((error: unknown) => {
+      this.logger.error(
+        `Stale session cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    });
   }
 
   /** Closes out calls whose webhooks never arrived, so they don't block the client or advisor forever. */
   private async expireStaleSessions() {
     const stale = await this.prisma.callSession.findMany({
       where: {
-        status: { in: ['PENDING_CONNECTION', 'DIALING_ADVISOR'] },
+        status: { in: ['PENDING_CONNECTION', 'AWAITING_CLIENT', 'DIALING_ADVISOR'] },
         startedAt: { lt: new Date(Date.now() - STALE_PENDING_MS) },
       },
       select: { id: true },
@@ -359,15 +473,24 @@ export class BillingService {
         include: { advisor: true, client: true },
       });
 
-      if (!session || session.status !== 'BILLING_ACTIVE' || !session.nextBillAt || session.nextBillAt > now) {
+      if (
+        !session ||
+        !TALKING_STATUSES.includes(session.status) ||
+        !session.nextBillAt ||
+        session.nextBillAt > now
+      ) {
         return { terminate: false };
       }
 
       // Claim this tick atomically: only advance nextBillAt if it still
       // matches what we just read, so an overlapping run can't double-charge.
+      // The first tick moves the call out of its free period into billing.
       const claim = await tx.callSession.updateMany({
-        where: { id: sessionId, status: 'BILLING_ACTIVE', nextBillAt: session.nextBillAt },
-        data: { nextBillAt: new Date(session.nextBillAt.getTime() + TICK_INTERVAL_MS) },
+        where: { id: sessionId, status: session.status, nextBillAt: session.nextBillAt },
+        data: {
+          status: 'BILLING_ACTIVE',
+          nextBillAt: new Date(session.nextBillAt.getTime() + TICK_INTERVAL_MS),
+        },
       });
       if (claim.count === 0) {
         return { terminate: false };
@@ -392,7 +515,10 @@ export class BillingService {
           amount: session.advisor.ratePerMinute,
           currency: 'USD',
           minutesDelta: -1,
-          description: `Call session ${sessionId} — per-minute charge`,
+          description:
+            session.status === 'CONNECTED'
+              ? `Call session ${sessionId} — billing started, first minute at $${session.advisor.ratePerMinute}/min`
+              : `Call session ${sessionId} — per-minute charge`,
         },
       });
 
@@ -443,12 +569,10 @@ export class BillingService {
     const billedMinutes = debitAggregate._count._all;
     const billedAmountCents = debitAggregate._sum.amount ? toCents(debitAggregate._sum.amount) : 0;
 
-    // startedAt is reset to the moment billing begins, so a call that never
-    // connected (and was never billed) has no talk time.
-    const durationSeconds =
-      billedMinutes > 0
-        ? Math.max(0, Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000))
-        : 0;
+    // Talk time runs from when the two parties were bridged; a call that never connected has none.
+    const durationSeconds = session.connectedAt
+      ? Math.max(0, Math.floor((endedAt.getTime() - session.connectedAt.getTime()) / 1000))
+      : 0;
 
     return this.prisma.callSession.update({
       where: { id: sessionId },
@@ -477,8 +601,11 @@ export class BillingService {
         id: true,
         advisorId: true,
         startedAt: true,
+        connectedAt: true,
+        nextBillAt: true,
         status: true,
         advisor: { select: { displayName: true, ratePerMinute: true } },
+        _count: { select: { walletTransactions: { where: { type: 'DEBIT' } } } },
       },
     });
   }
