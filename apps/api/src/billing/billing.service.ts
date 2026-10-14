@@ -34,13 +34,16 @@ const ADVISOR_PROMPT = 'You have a call from The Psychic Link. Press 1 to accept
 const CLIENT_UNAVAILABLE_MESSAGE =
   'We are sorry, your advisor is unavailable right now. You have not been charged. Goodbye.';
 const CLIENT_LOW_BALANCE_WARNING =
-  'Your balance is running low. This call will end in about thirty seconds unless you add funds to your wallet on the website.';
-const ADVISOR_LOW_BALANCE_WARNING = "The client's balance is running low. This call will end in about thirty seconds.";
+  'Your balance is running low. This call will end in about one minute unless you add funds to your wallet on the website.';
+const ADVISOR_LOW_BALANCE_WARNING = "The client's balance is running low. This call will end in about one minute.";
 const CLIENT_OUT_OF_FUNDS_MESSAGE = 'Your balance has run out, so this call is ending. Goodbye.';
 const ADVISOR_OUT_OF_FUNDS_MESSAGE = "The client's balance has run out, so this call is ending. Goodbye.";
 
-/** How long before the next charge the low-balance warning is spoken. */
-const LOW_BALANCE_WARNING_LEAD_MS = 30_000;
+/**
+ * How long before the next charge the low-balance warning is spoken. Each minute is charged up front, so a
+ * lead equal to the billing interval means the warning plays at the start of the final minute the client can pay for.
+ */
+const LOW_BALANCE_WARNING_LEAD_MS = TICK_INTERVAL_MS;
 
 /** If a goodbye message's end is never reported, hang up anyway after this long. */
 const GOODBYE_BACKSTOP_MS = 8_000;
@@ -458,7 +461,7 @@ export class BillingService {
   }
 
   /**
-   * About thirty seconds before a charge the client can't cover, tell both parties the call is about to end
+   * About a minute before a charge the client can't cover, tell both parties the call is about to end
    * so it isn't a surprise. Adding funds on the website in that time lets the call continue.
    */
   private async warnLowBalance() {
