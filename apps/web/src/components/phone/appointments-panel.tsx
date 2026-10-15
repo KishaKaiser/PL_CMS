@@ -150,8 +150,8 @@ export function AppointmentsPanel({ mode }: { mode: Mode }) {
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-sm text-gray-600">
           {mode === 'client'
-            ? 'Your requested and confirmed calls. We ring your phone at the scheduled time, and once more a couple of minutes later if you do not pick up, so keep your wallet funded.'
-            : 'Requests from clients. When you accept, we ring the client at the scheduled time and then you. If a call is not answered we try once more a couple of minutes later.'}{' '}
+            ? 'Your requested and confirmed calls. We ring your phone at the scheduled time, and once more about 30 seconds later if you do not pick up. If both calls are missed, you will need to schedule a new appointment. Keep your wallet funded.'
+            : 'Requests from clients. When you accept, we ring the client at the scheduled time and then you. If a call is not answered we try once more about 30 seconds later; after two misses the client has to reschedule.'}{' '}
           Times are shown in your local time.
         </p>
         <button type="button" onClick={() => void load()} className="shrink-0 rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50">

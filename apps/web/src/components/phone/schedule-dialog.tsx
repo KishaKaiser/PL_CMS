@@ -104,8 +104,8 @@ export function ScheduleDialog({
         <h3 className="text-lg font-semibold text-gray-900">Schedule a call with {advisor.displayName}</h3>
         <p className="mt-1 text-sm text-gray-600">
           {formatDollars(toCents(advisor.ratePerMinute))} per minute, charged only while you talk. {advisor.displayName} will
-          confirm, and we will call you at the time you choose. If you do not pick up, we will try once more a couple of minutes
-          later.
+          confirm, and we will call you at the time you choose. If you do not pick up, we will try once more about 30 seconds
+          later. If that call is missed too, the appointment is cancelled and you will need to schedule a new one.
         </p>
 
         <label className="mt-4 block text-sm font-medium text-gray-700">

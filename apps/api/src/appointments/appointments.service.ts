@@ -23,17 +23,18 @@ const SLOT_MINUTES = 30;
 const MIN_ACCEPT_LEAD_MINUTES = 5;
 
 /**
- * A call that does not connect (nobody answered, or a press-1 prompt went unanswered) is redialed once,
- * this long after the first attempt ended. A second miss marks the appointment missed.
+ * Every dial opportunity is a "try", whether the call rang out unanswered or could not be placed at all (someone
+ * was on another call). A missed first try is redialed once, REDIAL_DELAY_SECONDS after it ended. A second miss
+ * marks the appointment missed and the client has to reschedule. Nobody is waited on, so the schedule keeps moving.
  */
 const MAX_ATTEMPTS = 2;
-const REDIAL_DELAY_MINUTES = 2;
+const REDIAL_DELAY_SECONDS = 30;
 
 /**
- * Safety net for calls that could not even be placed (someone kept being on another call): an appointment still
- * unfinished this long after its scheduled time is marked missed rather than retried forever.
+ * Not a wait, a guard against ringing at the wrong time: if the system was down when an appointment (or its
+ * redial) came due, it is marked missed rather than calling the client long after the time they chose.
  */
-const GIVE_UP_MINUTES = 20;
+const LATE_START_MINUTES = 5;
 
 /** An appointment stuck mid-dial (the server restarted, say) is put back in the queue after this long. */
 const STUCK_DIALING_MINUTES = 2;
@@ -240,12 +241,14 @@ export class AppointmentsService {
 
   // ── Scheduler ──────────────────────────────────────────────────────────────
 
-  /** Runs every 30 seconds: expires stale requests, places due callbacks, and records how calls ended. */
-  @Cron('*/30 * * * * *')
+  /**
+   * Runs every 10 seconds, so a 30-second redial really does start about 30 seconds after the first call ended:
+   * expires unanswered requests, places due calls, and records how calls ended.
+   */
+  @Cron('*/10 * * * * *')
   async handleTick() {
     const steps: Array<[string, () => Promise<void>]> = [
       ['expire unanswered requests', () => this.expireUnanswered()],
-      ['mark overdue appointments missed', () => this.markOverdueMissed()],
       ['place due calls', () => this.placeDueCalls()],
       ['record call outcomes', () => this.recordOutcomes()],
     ];
@@ -264,70 +267,83 @@ export class AppointmentsService {
     });
   }
 
-  /** An accepted appointment still unfinished long after its time (the call could not be placed) is missed. */
-  private async markOverdueMissed() {
-    await this.prisma.appointment.updateMany({
-      where: {
-        status: 'ACCEPTED',
-        scheduledAt: { lt: new Date(Date.now() - GIVE_UP_MINUTES * MINUTE_MS) },
-      },
-      data: {
-        status: 'MISSED',
-        note: `The call could not be completed within ${GIVE_UP_MINUTES} minutes of the scheduled time.`,
-      },
-    });
-  }
-
-  /** Dials appointments whose time has come: the scheduled time for a first try, nextAttemptAt for the redial. */
+  /** Dials accepted appointments whose time has come: the scheduled time for a first try, nextAttemptAt for the redial. */
   private async placeDueCalls() {
     const now = new Date();
-    const candidates = await this.prisma.appointment.findMany({
-      where: {
-        status: 'ACCEPTED',
-        scheduledAt: { lte: now, gte: new Date(now.getTime() - GIVE_UP_MINUTES * MINUTE_MS) },
-      },
-      select: { id: true, clientId: true, advisorId: true, scheduledAt: true, nextAttemptAt: true },
+    const accepted = await this.prisma.appointment.findMany({
+      where: { status: 'ACCEPTED', scheduledAt: { lte: now } },
+      select: { id: true, clientId: true, advisorId: true, attempts: true, scheduledAt: true, nextAttemptAt: true },
     });
 
-    const due = candidates.filter((appointment) => (appointment.nextAttemptAt ?? appointment.scheduledAt) <= now);
-    for (const appointment of due) {
+    for (const appointment of accepted) {
+      const dueAt = appointment.nextAttemptAt ?? appointment.scheduledAt;
+      if (dueAt > now) continue; // the redial is not due yet
+
+      if (now.getTime() - dueAt.getTime() > LATE_START_MINUTES * MINUTE_MS) {
+        // The system was down when this came due. Calling now would ring the client at the wrong time.
+        await this.prisma.appointment.updateMany({
+          where: { id: appointment.id, status: 'ACCEPTED' },
+          data: {
+            status: 'MISSED',
+            note: 'The call could not be placed at the scheduled time, so it was not made. Please schedule a new appointment.',
+          },
+        });
+        continue;
+      }
+
       await this.placeCall(appointment);
     }
   }
 
-  private async placeCall(appointment: { id: string; clientId: string; advisorId: string }) {
+  private async placeCall(appointment: { id: string; clientId: string; advisorId: string; attempts: number }) {
     // Claim it so an overlapping run (or a second server) can't dial the same appointment twice.
+    // Every dial opportunity counts as a try, whether or not the call can be placed.
     const claim = await this.prisma.appointment.updateMany({
       where: { id: appointment.id, status: 'ACCEPTED' },
-      data: { status: 'IN_PROGRESS' },
+      data: { status: 'IN_PROGRESS', attempts: { increment: 1 } },
     });
     if (claim.count === 0) return;
 
+    const tryNumber = appointment.attempts + 1;
+
     try {
       await this.billing.startScheduledCall(appointment);
-      // Only a call that was actually placed counts as an attempt; a busy line or a phone-service hiccup does not.
-      await this.prisma.appointment.updateMany({
-        where: { id: appointment.id },
-        data: { attempts: { increment: 1 } },
-      });
-      this.logger.log(`Placed the scheduled call for appointment ${appointment.id}`);
+      this.logger.log(`Placed the scheduled call for appointment ${appointment.id} (try ${tryNumber} of ${MAX_ATTEMPTS})`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
 
-      // Nothing here is the client's or advisor's fault except a hard problem with the booking itself
-      // (no funds, no phone number). Everything else (someone on another call, a phone-service hiccup)
-      // is retried on the next tick until the window runs out.
-      const hard = error instanceof BadRequestException || error instanceof NotFoundException;
-      if (hard) {
+      // A hard problem with the booking itself (no funds, no phone number) will not fix itself in 30 seconds.
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
         this.logger.warn(`Appointment ${appointment.id} could not be placed: ${message}`);
         await this.prisma.appointment.updateMany({
           where: { id: appointment.id, status: 'IN_PROGRESS' },
           data: { status: 'MISSED', note: message },
         });
+        return;
+      }
+
+      // Someone was on another call, or the phone service had a problem. That uses up this try like a miss would.
+      const reason =
+        error instanceof ConflictException ? message.replace(/\.$/, '').toLowerCase() : 'the phone service had a problem';
+      this.logger.warn(`Appointment ${appointment.id} could not be placed on try ${tryNumber}: ${message}`);
+
+      if (tryNumber < MAX_ATTEMPTS) {
+        await this.prisma.appointment.updateMany({
+          where: { id: appointment.id, status: 'IN_PROGRESS' },
+          data: {
+            status: 'ACCEPTED',
+            callSessionId: null,
+            nextAttemptAt: new Date(Date.now() + REDIAL_DELAY_SECONDS * 1000),
+            note: `The call could not be placed (${reason}). We will try once more in about ${REDIAL_DELAY_SECONDS} seconds.`,
+          },
+        });
       } else {
         await this.prisma.appointment.updateMany({
           where: { id: appointment.id, status: 'IN_PROGRESS' },
-          data: { status: 'ACCEPTED', callSessionId: null },
+          data: {
+            status: 'MISSED',
+            note: `The call could not be placed after two tries (${reason}). Please schedule a new appointment.`,
+          },
         });
       }
     }
@@ -381,14 +397,17 @@ export class AppointmentsService {
           data: {
             status: 'ACCEPTED',
             callSessionId: null,
-            nextAttemptAt: new Date(endedAt.getTime() + REDIAL_DELAY_MINUTES * MINUTE_MS),
-            note: `The first call was not answered. We will try once more in about ${REDIAL_DELAY_MINUTES} minutes.`,
+            nextAttemptAt: new Date(endedAt.getTime() + REDIAL_DELAY_SECONDS * 1000),
+            note: `The first call was not answered. We will try once more in about ${REDIAL_DELAY_SECONDS} seconds.`,
           },
         });
       } else {
         await this.prisma.appointment.updateMany({
           where: { id: appointment.id, status: 'IN_PROGRESS' },
-          data: { status: 'MISSED', note: 'The call was not answered after two tries.' },
+          data: {
+            status: 'MISSED',
+            note: 'The call was not answered after two tries. Please schedule a new appointment.',
+          },
         });
       }
     }
