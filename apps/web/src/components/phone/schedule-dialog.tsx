@@ -15,7 +15,7 @@ export interface DialogProfile {
 }
 
 /** Keep in step with the API: how far ahead a booking must be, and how far ahead it can be. */
-const MIN_LEAD_MINUTES = 30;
+const MIN_LEAD_MINUTES = 10;
 const MAX_ADVANCE_DAYS = 60;
 const MIN_CALL_MINUTES = 2;
 

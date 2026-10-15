@@ -13,7 +13,7 @@ import { BillingService, MIN_CALL_MINUTES, toCents } from '../billing/billing.se
 import { RequestAppointmentDto } from './appointments.dto';
 
 /** The earliest a client can book, counted from now. */
-export const MIN_LEAD_MINUTES = 30;
+export const MIN_LEAD_MINUTES = 10;
 export const MAX_ADVANCE_DAYS = 60;
 
 /** Appointments for the same advisor (or the same client) must be at least this far apart. */
