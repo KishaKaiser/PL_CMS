@@ -104,6 +104,7 @@ model User {
   accountAddresses    AccountAddress[]
   savedPaymentMethods SavedPaymentMethod[]
   productReviews ProductReview[]
+  advisorReviews AdvisorReview[]
   postComments   PostComment[]
 
   @@map("users")
@@ -128,6 +129,10 @@ model AdvisorProfile {
   // E.164 number of the advisor's own phone. When a client asks to speak to
   // this advisor, the system dials this number and bridges the client to it.
   phoneNumber   String?
+  // URL-friendly name for the advisor's public profile page (/advisors/<slug>).
+  // Assigned from the display name the first time it is needed and then kept
+  // stable, so shared links keep working if the advisor changes their name.
+  slug          String?  @unique
   // Whether the queue auto-dialer should call through this advisor's
   // callback queue. Kept separate from isOnline: an advisor can be online
   // for direct/scheduled calls without the queue auto-dialer running.
@@ -141,6 +146,7 @@ model AdvisorProfile {
   callSessionsAsAdvisor CallSession[]        @relation("AdvisorSessions")
   payoutMethods       AdvisorPayoutMethod[]
   appointments        Appointment[]          @relation("AdvisorAppointments")
+  reviews             AdvisorReview[]
 
   @@map("advisor_profiles")
 }
@@ -275,9 +281,17 @@ model Appointment {
   advisorId     String
   clientId      String
   scheduledAt   DateTime
-  // PENDING | ACCEPTED | DECLINED | COMPLETED | MISSED | CANCELLED
+  // PENDING (awaiting the advisor) → ACCEPTED → IN_PROGRESS (the call is being placed)
+  // → COMPLETED | MISSED. Or DECLINED, CANCELLED, EXPIRED (the advisor never responded).
   status        String   @default("PENDING")
-  // Set once the scheduled call actually connects.
+  // Why an appointment was missed or expired, shown to both parties.
+  note          String?
+  // How many calls have been placed for this appointment. If the first one does not
+  // connect the system redials once; a second miss marks the appointment missed.
+  attempts      Int      @default(0)
+  // When the redial is due after a miss. Empty means the scheduled time is the next try.
+  nextAttemptAt DateTime?
+  // The call placed for this appointment; set when the system starts dialing.
   callSessionId String?  @unique
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -822,6 +836,27 @@ model ProductReview {
   @@index([productId])
   @@index([userId])
   @@map("product_reviews")
+}
+
+// A client's star rating and comment for an advisor, shown on the advisor's public
+// profile. Only clients who have actually spoken with the advisor can leave one,
+// and each client has a single review per advisor that they can edit.
+model AdvisorReview {
+  id        String   @id @default(cuid())
+  advisorId String
+  userId    String
+  rating    Int      // 1 to 5
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  advisor AdvisorProfile @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([advisorId, userId])
+  @@index([advisorId, createdAt])
+  @@index([userId])
+  @@map("advisor_reviews")
 }
 
 model PostComment {

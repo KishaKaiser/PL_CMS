@@ -1,18 +1,42 @@
-import { Body, Controller, Get, Put, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../auth/roles.guard';
-import { SetPhoneNumberDto } from './billing.dto';
+import { SetPhoneNumberDto, SubmitReviewDto } from './billing.dto';
 import { PhoneService } from './phone.service';
 
 @Controller('phone')
 export class PhoneController {
   constructor(private readonly phoneService: PhoneService) {}
 
-  /** Public: the grid of advisors currently taking calls. */
+  /** Public: the cards of advisors who are online right now. */
   @Get('advisors')
-  listOnlineAdvisors() {
-    return this.phoneService.listOnlineAdvisors();
+  listAdvisors() {
+    return this.phoneService.listAdvisors();
+  }
+
+  /** Public: one advisor's profile page data (bio, rate, hours, rating and comments), online or not. */
+  @Get('advisors/:slug')
+  getPublicProfile(@Param('slug') slug: string) {
+    return this.phoneService.getPublicProfile(slug);
+  }
+
+  @Get('advisors/:slug/my-review')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.CLIENT)
+  getMyReview(@Request() req: { user: { id: string } }, @Param('slug') slug: string) {
+    return this.phoneService.getMyReview(req.user.id, slug);
+  }
+
+  @Post('advisors/:slug/review')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.CLIENT)
+  submitReview(
+    @Request() req: { user: { id: string } },
+    @Param('slug') slug: string,
+    @Body() dto: SubmitReviewDto,
+  ) {
+    return this.phoneService.submitReview(req.user.id, slug, dto);
   }
 
   @Get('me')

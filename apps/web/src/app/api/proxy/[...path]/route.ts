@@ -20,6 +20,7 @@ const ALLOWED_PATH_PREFIXES = [
   'advisors',
   'billing',
   'phone',
+  'appointments',
   'account',
   'dashboard',
   'modules',

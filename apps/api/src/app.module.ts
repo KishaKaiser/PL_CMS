@@ -12,6 +12,7 @@ import { CheckoutModule } from './checkout/checkout.module';
 import { PaymentsModule } from './payments/payments.module';
 import { WalletModule } from './wallet/wallet.module';
 import { BillingModule } from './billing/billing.module';
+import { AppointmentsModule } from './appointments/appointments.module';
 import { ShippingModule } from './shipping/shipping.module';
 import { FulfillmentModule } from './fulfillment/fulfillment.module';
 import { AdminModule } from './admin/admin.module';
@@ -45,6 +46,7 @@ import { AstrologyModule } from './astrology/astrology.module';
     PaymentsModule,
     WalletModule,
     BillingModule,
+    AppointmentsModule,
     ShippingModule,
     FulfillmentModule,
     AdminModule,

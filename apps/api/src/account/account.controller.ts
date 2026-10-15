@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Request,
   Res,
   UploadedFile,
@@ -31,6 +32,7 @@ import {
   SavePayoutMethodDto,
   UpdateAccountDto,
   UpdateAdvisorProfileDto,
+  UpdateAdvisorScheduleDto,
 } from './account.dto';
 import { AccountService } from './account.service';
 import { AstrologyReportsService } from '../astrology/astrology-reports.service';
@@ -120,6 +122,14 @@ export class AccountController {
     @Body() dto: UpdateAdvisorProfileDto,
   ) {
     return this.accountService.updateAdvisorProfile(req.user.id, dto);
+  }
+
+  @Put('advisor-profile/schedule')
+  updateAdvisorSchedule(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: UpdateAdvisorScheduleDto,
+  ) {
+    return this.accountService.updateAdvisorSchedule(req.user.id, dto);
   }
 
   @Post('advisor-profile/image')

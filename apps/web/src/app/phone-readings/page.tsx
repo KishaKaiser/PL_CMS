@@ -22,12 +22,12 @@ export default async function PhoneReadingsPage() {
       <main className="mx-auto max-w-7xl px-6 py-12">
         <header className="mb-10 text-center">
           <p className="text-sm font-semibold uppercase tracking-widest" style={{ color: siteConfig.theme.primaryColor }}>
-            Live Now
+            Talk to an Advisor
           </p>
           <h1 className="mt-2 text-4xl font-bold text-gray-950">Phone Readings</h1>
           <p className="mt-3 text-gray-600">
-            Choose an advisor who is available and press Call Now. We ring your phone, connect you, and you only pay for the
-            minutes you talk.
+            Press Call Now to talk to an available advisor right away. Open an advisor&apos;s profile to read their reviews and
+            schedule, or to book a call for later. We ring your phone, connect you, and you only pay for the minutes you talk.
           </p>
         </header>
 

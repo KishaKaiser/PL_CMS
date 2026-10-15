@@ -8,7 +8,7 @@ interface ActiveSession {
   connectedAt?: string | null;
   nextBillAt?: string | null;
   advisorId: string;
-  advisor?: { displayName: string; ratePerMinute: number | string };
+  advisor?: { displayName: string; ratePerMinute: number | string; slug?: string | null };
   /** PENDING_CONNECTION → AWAITING_CLIENT → DIALING_ADVISOR → CONNECTED (free period) → BILLING_ACTIVE */
   status: string;
   _count?: { walletTransactions: number };
@@ -28,10 +28,12 @@ export default function ClientSessionPage() {
   const [loading, setLoading] = useState(true);
   const [stopping, setStopping] = useState(false);
   const [callEnded, setCallEnded] = useState(false);
-  const [result, setResult] = useState<{ billedMinutes: number; billedAmountCents: number; durationSeconds: number } | null>(null);
+  const [result, setResult] = useState<{ billedMinutes: number; billedAmountCents: number; durationSeconds: number; advisorProfilePath?: string } | null>(null);
   const [error, setError] = useState('');
   const [balanceCents, setBalanceCents] = useState<number | null>(null);
   const hadSession = useRef(false);
+  // Where to send the client to rate the advisor once the call is over.
+  const [reviewPath, setReviewPath] = useState<string | null>(null);
 
   const loadSession = useCallback(async () => {
     try {
@@ -40,6 +42,7 @@ export default function ClientSessionPage() {
       if (data && data.id) {
         hadSession.current = true;
         setSession(data);
+        setReviewPath(data.advisor?.slug ?? data.advisorId);
         // The wallet balance drives the low-funds notice below.
         fetch('/api/proxy/phone/me')
           .then((r) => (r.ok ? (r.json() as Promise<{ balanceCents: number }>) : null))
@@ -112,6 +115,13 @@ export default function ClientSessionPage() {
             Billed: <span className="font-semibold text-indigo-700">${(result.billedAmountCents / 100).toFixed(2)}</span>{' '}
             <span className="text-sm text-gray-500">({result.billedMinutes} minute{result.billedMinutes !== 1 ? 's' : ''})</span>
           </p>
+          {(result.advisorProfilePath ?? reviewPath) && (
+            <p className="mt-4 text-sm">
+              <a href={`/advisors/${result.advisorProfilePath ?? reviewPath}#review`} className="font-medium text-indigo-700 underline">
+                Rate your call
+              </a>
+            </p>
+          )}
           <div className="mt-6 flex gap-3 justify-center">
             <a href="/client" className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700">
               Back to Portal
@@ -135,6 +145,13 @@ export default function ClientSessionPage() {
               ? 'The call has ended. Your wallet shows the final charge.'
               : "You don't have a call in progress."}
           </p>
+          {callEnded && reviewPath && (
+            <p className="mb-6 text-sm">
+              <a href={`/advisors/${reviewPath}#review`} className="font-medium text-indigo-700 underline">
+                Rate your call
+              </a>
+            </p>
+          )}
           <div className="flex gap-3 justify-center">
             <a href="/phone-readings" className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700">
               Find an Advisor
