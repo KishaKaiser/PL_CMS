@@ -2,6 +2,7 @@
 
 import type { ChangeEvent, ReactNode } from 'react';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { AppointmentsPanel } from './phone/appointments-panel';
 import { PrivateMessageInbox } from './private-message-inbox';
 
 type DashboardMode = 'client' | 'advisor';
@@ -12,6 +13,7 @@ type DashboardSection =
   | 'addresses'
   | 'payments'
   | 'wallet'
+  | 'appointments'
   | 'account'
   | 'advisor-profile'
   | 'payouts'
@@ -369,6 +371,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     { id: 'addresses', label: 'Saved Addresses', icon: 'fa-solid fa-location-dot' },
     { id: 'payments', label: 'Saved Payments', icon: 'fa-regular fa-credit-card' },
     { id: 'wallet', label: 'Wallet', icon: 'fa-solid fa-wallet' },
+    { id: 'appointments', label: 'Appointments', icon: 'fa-regular fa-calendar' },
     { id: 'account', label: 'Account Details', icon: 'fa-regular fa-user' },
     ...(isAdvisor
       ? [
@@ -620,6 +623,8 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
               )}
             </div>
           )}
+
+          {activeSection === 'appointments' && <AppointmentsPanel mode={isAdvisor ? 'advisor' : 'client'} />}
 
           {activeSection === 'account' && (
             <form onSubmit={handleAccountSave} className="max-w-xl space-y-4">

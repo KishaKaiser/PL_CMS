@@ -275,9 +275,12 @@ model Appointment {
   advisorId     String
   clientId      String
   scheduledAt   DateTime
-  // PENDING | ACCEPTED | DECLINED | COMPLETED | MISSED | CANCELLED
+  // PENDING (awaiting the advisor) → ACCEPTED → IN_PROGRESS (the call is being placed)
+  // → COMPLETED | MISSED. Or DECLINED, CANCELLED, EXPIRED (the advisor never responded).
   status        String   @default("PENDING")
-  // Set once the scheduled call actually connects.
+  // Why an appointment was missed or expired, shown to both parties.
+  note          String?
+  // The call placed for this appointment; set when the system starts dialing.
   callSessionId String?  @unique
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import type { AdvisorProfile, ClientProfile } from '@pl-cms/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { CallLeg, TelnyxService, decodeState } from '../telephony/telnyx.service';
 import { StartSessionDto } from './billing.dto';
@@ -31,6 +32,9 @@ const TELEPHONY_SETTINGS_KEY = 'telephony_settings';
 // What each party hears. Spoken with a text-to-speech voice.
 const CLIENT_PROMPT = 'Welcome to The Psychic Link. To begin your call, press 1 now.';
 const ADVISOR_PROMPT = 'You have a call from The Psychic Link. Press 1 to accept this call.';
+const scheduledClientPrompt = (advisorName: string) =>
+  `Welcome to The Psychic Link. This is your scheduled call with ${advisorName}. To begin your call, press 1 now.`;
+const SCHEDULED_ADVISOR_PROMPT = 'You have a scheduled call from The Psychic Link. Press 1 to accept this call.';
 const CLIENT_UNAVAILABLE_MESSAGE =
   'We are sorry, your advisor is unavailable right now. You have not been charged. Goodbye.';
 const CLIENT_LOW_BALANCE_WARNING =
@@ -82,13 +86,39 @@ export class BillingService {
   async startSession(userId: string, dto: StartSessionDto) {
     const client = await this.prisma.clientProfile.findUnique({ where: { userId } });
     if (!client) throw new NotFoundException('Client profile not found');
-    if (!client.phoneNumber) {
-      throw new BadRequestException('Add your phone number so we know where to call you.');
-    }
 
     const advisor = await this.prisma.advisorProfile.findUnique({ where: { id: dto.advisorId } });
     if (!advisor) throw new NotFoundException('Advisor not found');
-    if (!advisor.isOnline) throw new BadRequestException('This advisor is not taking calls right now.');
+
+    return this.placeCall(client, advisor, { requireOnline: true });
+  }
+
+  /**
+   * Places the callback for an accepted appointment. It runs the same checks and the same press-1 call
+   * flow as a live call, except the advisor does not have to be switched online: they agreed to take this
+   * call at this time.
+   */
+  async startScheduledCall(appointment: { id: string; clientId: string; advisorId: string }) {
+    const client = await this.prisma.clientProfile.findUnique({ where: { id: appointment.clientId } });
+    if (!client) throw new NotFoundException('Client profile not found');
+
+    const advisor = await this.prisma.advisorProfile.findUnique({ where: { id: appointment.advisorId } });
+    if (!advisor) throw new NotFoundException('Advisor not found');
+
+    return this.placeCall(client, advisor, { requireOnline: false, appointmentId: appointment.id });
+  }
+
+  private async placeCall(
+    client: ClientProfile,
+    advisor: AdvisorProfile,
+    options: { requireOnline: boolean; appointmentId?: string },
+  ) {
+    if (!client.phoneNumber) {
+      throw new BadRequestException('Add your phone number so we know where to call you.');
+    }
+    if (options.requireOnline && !advisor.isOnline) {
+      throw new BadRequestException('This advisor is not taking calls right now.');
+    }
     if (!advisor.phoneNumber) throw new BadRequestException('This advisor is not set up for phone calls yet.');
 
     const rateCents = toCents(advisor.ratePerMinute);
@@ -116,6 +146,14 @@ export class BillingService {
     const session = await this.prisma.callSession.create({
       data: { advisorId: advisor.id, clientId: client.id, status: 'PENDING_CONNECTION' },
     });
+
+    // Link the appointment before dialing so the prompts can use the scheduled-call wording.
+    if (options.appointmentId) {
+      await this.prisma.appointment.update({
+        where: { id: options.appointmentId },
+        data: { callSessionId: session.id },
+      });
+    }
 
     try {
       const { callControlId } = await this.telnyx.dial({
@@ -211,7 +249,14 @@ export class BillingService {
 
   /** The client picked up: ask them to press 1 before we involve the advisor. */
   private async onClientAnswered(sessionId: string, clientCallControlId: string) {
-    const session = await this.prisma.callSession.findUnique({ where: { id: sessionId }, select: { status: true } });
+    const session = await this.prisma.callSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        status: true,
+        advisor: { select: { displayName: true } },
+        appointment: { select: { id: true } },
+      },
+    });
     if (!session || session.status.startsWith('ENDED')) {
       await this.telnyx.hangup(clientCallControlId);
       return { ok: true };
@@ -225,11 +270,11 @@ export class BillingService {
     if (claim.count === 0) return { ok: true };
 
     try {
-      await this.telnyx.promptToPressOne(clientCallControlId, CLIENT_PROMPT, {
-        sessionId,
-        leg: 'client',
-        step: 'consent',
-      });
+      await this.telnyx.promptToPressOne(
+        clientCallControlId,
+        session.appointment ? scheduledClientPrompt(session.advisor?.displayName ?? 'your advisor') : CLIENT_PROMPT,
+        { sessionId, leg: 'client', step: 'consent' },
+      );
     } catch (error) {
       this.logger.error(
         `Could not prompt the client for session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -243,18 +288,21 @@ export class BillingService {
 
   /** The advisor picked up: ask them to press 1 to accept before we connect anyone. */
   private async onAdvisorAnswered(sessionId: string, advisorCallControlId: string) {
-    const session = await this.prisma.callSession.findUnique({ where: { id: sessionId }, select: { status: true } });
+    const session = await this.prisma.callSession.findUnique({
+      where: { id: sessionId },
+      select: { status: true, appointment: { select: { id: true } } },
+    });
     if (!session || session.status !== 'DIALING_ADVISOR') {
       await this.telnyx.hangup(advisorCallControlId);
       return { ok: true };
     }
 
     try {
-      await this.telnyx.promptToPressOne(advisorCallControlId, ADVISOR_PROMPT, {
-        sessionId,
-        leg: 'advisor',
-        step: 'consent',
-      });
+      await this.telnyx.promptToPressOne(
+        advisorCallControlId,
+        session.appointment ? SCHEDULED_ADVISOR_PROMPT : ADVISOR_PROMPT,
+        { sessionId, leg: 'advisor', step: 'consent' },
+      );
     } catch (error) {
       this.logger.error(
         `Could not prompt the advisor for session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,

@@ -9,5 +9,6 @@ import { PhoneService } from './phone.service';
   imports: [TelephonyModule],
   controllers: [BillingController, PhoneController],
   providers: [BillingService, PhoneService],
+  exports: [BillingService],
 })
 export class BillingModule {}
