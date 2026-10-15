@@ -29,7 +29,16 @@ const STATUS_STYLES: Record<string, { label: string; className: string }> = {
 const UPCOMING_STATUSES = ['PENDING', 'ACCEPTED', 'IN_PROGRESS'];
 
 function formatWhen(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short', timeZoneName: 'short' });
+  // dateStyle/timeStyle cannot be combined with timeZoneName (it throws), so spell the fields out.
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
 }
 
 async function readMessage(res: Response, fallback: string): Promise<string> {
