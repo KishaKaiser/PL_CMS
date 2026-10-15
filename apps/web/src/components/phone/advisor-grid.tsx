@@ -1,40 +1,29 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { fundsNotice, loginUrl, startCallRequest, usePhoneProfile, type PhoneProfile } from './phone-client';
+import { PhonePromptDialog } from './phone-prompt-dialog';
 import { formatDollars, readMessage, toCents } from './phone-format';
-import { ScheduleDialog } from './schedule-dialog';
 
 interface AdvisorCard {
   id: string;
+  slug: string;
   displayName: string;
   bio: string | null;
   profileImageUrl: string | null;
   ratePerMinute: number | string;
-  isOnline: boolean;
   busy: boolean;
 }
 
-interface PhoneProfile {
-  phoneNumber: string | null;
-  balanceCents: number;
-}
-
-/** A client needs this many minutes of the advisor's rate in their wallet to start a call. */
-const MIN_CALL_MINUTES = 2;
 const REFRESH_INTERVAL_MS = 15_000;
 
 export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
   const [advisors, setAdvisors] = useState<AdvisorCard[] | null>(null);
   const [loadError, setLoadError] = useState('');
-  const [profile, setProfile] = useState<PhoneProfile | null>(null);
+  const { profile, setProfile } = usePhoneProfile();
   const [callingId, setCallingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ advisorId: string; text: string; needsFunds?: boolean; suggestedDollars?: number } | null>(null);
   const [phoneFor, setPhoneFor] = useState<AdvisorCard | null>(null);
-  const [phoneInput, setPhoneInput] = useState('');
-  const [phoneError, setPhoneError] = useState('');
-  const [savingPhone, setSavingPhone] = useState(false);
-  const [scheduling, setScheduling] = useState<AdvisorCard | null>(null);
-  const [confirmation, setConfirmation] = useState('');
 
   const loadAdvisors = useCallback(async () => {
     try {
@@ -53,36 +42,17 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
     return () => clearInterval(refresh);
   }, [loadAdvisors]);
 
-  useEffect(() => {
-    // 401/403 simply means "not signed in as a client", which is a normal state for visitors.
-    fetch('/api/proxy/phone/me')
-      .then((res) => (res.ok ? (res.json() as Promise<PhoneProfile>) : null))
-      .then(setProfile)
-      .catch(() => setProfile(null));
-  }, []);
-
   async function startCall(advisor: AdvisorCard, currentProfile: PhoneProfile) {
-    const requiredCents = toCents(advisor.ratePerMinute) * MIN_CALL_MINUTES;
-    if (currentProfile.balanceCents < requiredCents) {
-      setNotice({
-        advisorId: advisor.id,
-        text: `You need at least ${formatDollars(requiredCents)} (${MIN_CALL_MINUTES} minutes) in your wallet to call ${advisor.displayName}. You have ${formatDollars(currentProfile.balanceCents)}.`,
-        needsFunds: true,
-        // Pre-fill the Add Funds page with what they are short by (it enforces its own $5 minimum).
-        suggestedDollars: Math.ceil((requiredCents - currentProfile.balanceCents) / 100),
-      });
+    const shortfall = fundsNotice(advisor.displayName, advisor.ratePerMinute, currentProfile);
+    if (shortfall) {
+      setNotice({ advisorId: advisor.id, text: shortfall.text, needsFunds: true, suggestedDollars: shortfall.suggestedDollars });
       return;
     }
 
     setCallingId(advisor.id);
     setNotice(null);
     try {
-      const res = await fetch('/api/proxy/billing/start', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ advisorId: advisor.id }),
-      });
-      if (!res.ok) throw new Error(await readMessage(res, 'Could not start the call'));
+      await startCallRequest(advisor.id);
       window.location.href = '/client/session';
     } catch (err: unknown) {
       setNotice({ advisorId: advisor.id, text: err instanceof Error ? err.message : 'Could not start the call' });
@@ -92,52 +62,15 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
   }
 
   function handleCallNow(advisor: AdvisorCard) {
-    setConfirmation('');
     if (!profile) {
-      window.location.href = `/login?next=${encodeURIComponent('/phone-readings')}`;
+      window.location.href = loginUrl('/phone-readings');
       return;
     }
     if (!profile.phoneNumber) {
       setPhoneFor(advisor);
-      setPhoneInput('');
-      setPhoneError('');
       return;
     }
     void startCall(advisor, profile);
-  }
-
-  function handleSchedule(advisor: AdvisorCard) {
-    setNotice(null);
-    setConfirmation('');
-    if (!profile) {
-      window.location.href = `/login?next=${encodeURIComponent('/phone-readings')}`;
-      return;
-    }
-    setScheduling(advisor);
-  }
-
-  async function handleSavePhone(event: React.FormEvent) {
-    event.preventDefault();
-    if (!phoneFor) return;
-    setSavingPhone(true);
-    setPhoneError('');
-    try {
-      const res = await fetch('/api/proxy/phone/me', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ phoneNumber: phoneInput }),
-      });
-      if (!res.ok) throw new Error(await readMessage(res, 'Could not save your phone number'));
-      const saved = (await res.json()) as PhoneProfile;
-      setProfile(saved);
-      const advisor = phoneFor;
-      setPhoneFor(null);
-      void startCall(advisor, saved);
-    } catch (err: unknown) {
-      setPhoneError(err instanceof Error ? err.message : 'Could not save your phone number');
-    } finally {
-      setSavingPhone(false);
-    }
   }
 
   return (
@@ -154,22 +87,13 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
         </div>
       )}
 
-      {confirmation && (
-        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-          {confirmation}{' '}
-          <a href="/client" className="font-medium underline">
-            View my appointments
-          </a>
-        </div>
-      )}
-
       {loadError && <p className="mb-4 text-center text-sm text-red-600">{loadError}</p>}
 
       {advisors === null && !loadError && <p className="text-center text-gray-500">Loading advisors…</p>}
 
       {advisors !== null && advisors.length === 0 && (
         <p className="text-center text-gray-500">
-          No advisors are available yet. This page refreshes on its own, so check back in a moment.
+          No advisors are taking calls right now. This page refreshes on its own, so check back in a moment.
         </p>
       )}
 
@@ -178,14 +102,10 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
           {advisors.map((advisor) => {
             const showImage = advisor.profileImageUrl && /^(https?:)?\//.test(advisor.profileImageUrl);
             const calling = callingId === advisor.id;
-            const offline = !advisor.isOnline;
-            const unavailable = offline || advisor.busy;
-            const statusText = offline ? 'Offline' : advisor.busy ? 'On another call' : 'Available now';
-            const statusColor = offline ? 'text-gray-500' : advisor.busy ? 'text-amber-700' : 'text-green-700';
-            const dotColor = offline ? 'bg-gray-400' : advisor.busy ? 'bg-amber-500' : 'bg-green-500';
+            const profileHref = `/advisors/${advisor.slug}`;
             return (
               <li key={advisor.id} className="flex flex-col rounded-xl border bg-white p-6 shadow-sm">
-                <div className="flex items-center gap-4">
+                <a href={profileHref} className="flex items-center gap-4" aria-label={`View ${advisor.displayName}'s profile`}>
                   {showImage ? (
                     <img src={advisor.profileImageUrl ?? ''} alt={advisor.displayName} className="h-16 w-16 rounded-full object-cover" />
                   ) : (
@@ -197,34 +117,33 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
                     </div>
                   )}
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">{advisor.displayName}</h2>
+                    <h2 className="text-lg font-semibold text-gray-900 hover:underline">{advisor.displayName}</h2>
                     <p className="text-sm text-gray-600">{formatDollars(toCents(advisor.ratePerMinute))} / min</p>
-                    <p className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${statusColor}`}>
-                      <span className={`h-2 w-2 rounded-full ${dotColor}`} />
-                      {statusText}
+                    <p className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${advisor.busy ? 'text-amber-700' : 'text-green-700'}`}>
+                      <span className={`h-2 w-2 rounded-full ${advisor.busy ? 'bg-amber-500' : 'bg-green-500'}`} />
+                      {advisor.busy ? 'On another call' : 'Available now'}
                     </p>
                   </div>
-                </div>
+                </a>
 
                 {advisor.bio && <p className="mt-4 line-clamp-3 text-sm text-gray-600">{advisor.bio}</p>}
 
                 <div className="mt-auto grid gap-2 pt-5">
                   <button
                     onClick={() => handleCallNow(advisor)}
-                    disabled={unavailable || callingId !== null}
+                    disabled={advisor.busy || callingId !== null}
                     className="w-full rounded-lg py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ backgroundColor: primaryColor }}
                   >
-                    {calling ? 'Calling…' : offline ? 'Offline' : advisor.busy ? 'Unavailable' : 'Call Now'}
+                    {calling ? 'Calling…' : advisor.busy ? 'Unavailable' : 'Call Now'}
                   </button>
-                  <button
-                    onClick={() => handleSchedule(advisor)}
-                    disabled={callingId !== null}
-                    className="w-full rounded-lg border py-2.5 text-sm font-semibold hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ borderColor: primaryColor, color: primaryColor }}
+                  <a
+                    href={profileHref}
+                    className="text-center text-sm font-medium underline"
+                    style={{ color: primaryColor }}
                   >
-                    Schedule a Call
-                  </button>
+                    View profile, ratings and schedule
+                  </a>
                   {notice?.advisorId === advisor.id && (
                     <p className="text-sm text-red-600">
                       {notice.text}{' '}
@@ -245,59 +164,18 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
         </ul>
       )}
 
-      {scheduling && profile && (
-        <ScheduleDialog
-          advisor={scheduling}
-          profile={profile}
+      {phoneFor && (
+        <PhonePromptDialog
+          advisorName={phoneFor.displayName}
           primaryColor={primaryColor}
-          onProfileChange={setProfile}
-          onClose={() => setScheduling(null)}
-          onBooked={(message) => {
-            setScheduling(null);
-            setConfirmation(message);
+          onClose={() => setPhoneFor(null)}
+          onSaved={(saved) => {
+            const advisor = phoneFor;
+            setProfile(saved);
+            setPhoneFor(null);
+            void startCall(advisor, saved);
           }}
         />
-      )}
-
-      {phoneFor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-          <form onSubmit={handleSavePhone} className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-gray-900">Where should we call you?</h2>
-            <p className="mt-1 text-sm text-gray-600">
-              We will ring this number, then connect you to {phoneFor.displayName}.
-            </p>
-            <label className="mt-4 block text-sm font-medium text-gray-700">
-              Your phone number
-              <input
-                value={phoneInput}
-                onChange={(event) => setPhoneInput(event.target.value)}
-                type="tel"
-                autoComplete="tel"
-                placeholder="(555) 123-4567"
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                autoFocus
-              />
-            </label>
-            {phoneError && <p className="mt-2 text-sm text-red-600">{phoneError}</p>}
-            <div className="mt-5 flex gap-3">
-              <button
-                type="submit"
-                disabled={savingPhone || phoneInput.trim() === ''}
-                className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                style={{ backgroundColor: primaryColor }}
-              >
-                {savingPhone ? 'Saving…' : 'Save and call'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setPhoneFor(null)}
-                className="rounded-lg border px-4 py-2.5 text-sm hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
       )}
     </div>
   );

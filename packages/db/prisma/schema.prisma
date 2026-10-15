@@ -104,6 +104,7 @@ model User {
   accountAddresses    AccountAddress[]
   savedPaymentMethods SavedPaymentMethod[]
   productReviews ProductReview[]
+  advisorReviews AdvisorReview[]
   postComments   PostComment[]
 
   @@map("users")
@@ -128,6 +129,10 @@ model AdvisorProfile {
   // E.164 number of the advisor's own phone. When a client asks to speak to
   // this advisor, the system dials this number and bridges the client to it.
   phoneNumber   String?
+  // URL-friendly name for the advisor's public profile page (/advisors/<slug>).
+  // Assigned from the display name the first time it is needed and then kept
+  // stable, so shared links keep working if the advisor changes their name.
+  slug          String?  @unique
   // Whether the queue auto-dialer should call through this advisor's
   // callback queue. Kept separate from isOnline: an advisor can be online
   // for direct/scheduled calls without the queue auto-dialer running.
@@ -141,6 +146,7 @@ model AdvisorProfile {
   callSessionsAsAdvisor CallSession[]        @relation("AdvisorSessions")
   payoutMethods       AdvisorPayoutMethod[]
   appointments        Appointment[]          @relation("AdvisorAppointments")
+  reviews             AdvisorReview[]
 
   @@map("advisor_profiles")
 }
@@ -830,6 +836,27 @@ model ProductReview {
   @@index([productId])
   @@index([userId])
   @@map("product_reviews")
+}
+
+// A client's star rating and comment for an advisor, shown on the advisor's public
+// profile. Only clients who have actually spoken with the advisor can leave one,
+// and each client has a single review per advisor that they can edit.
+model AdvisorReview {
+  id        String   @id @default(cuid())
+  advisorId String
+  userId    String
+  rating    Int      // 1 to 5
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  advisor AdvisorProfile @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([advisorId, userId])
+  @@index([advisorId, createdAt])
+  @@index([userId])
+  @@map("advisor_reviews")
 }
 
 model PostComment {

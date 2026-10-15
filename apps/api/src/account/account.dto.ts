@@ -1,12 +1,19 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
+  IsInt,
   IsNumber,
   IsObject,
   IsOptional,
   IsString,
+  Matches,
+  Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UpdateAccountDto {
   @IsOptional()
@@ -114,6 +121,36 @@ export class UpdateAdvisorProfileDto {
   @IsOptional()
   @IsBoolean()
   isOnline?: boolean;
+}
+
+const TIME_OF_DAY = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export class ScheduleSlotDto {
+  /** 0 = Sunday … 6 = Saturday */
+  @IsInt()
+  @Min(0)
+  @Max(6)
+  dayOfWeek!: number;
+
+  @Matches(TIME_OF_DAY, { message: 'Times must look like 09:00' })
+  startTime!: string;
+
+  @Matches(TIME_OF_DAY, { message: 'Times must look like 17:00' })
+  endTime!: string;
+}
+
+/** The advisor's usual weekly hours, shown on their public profile. Replaces whatever was saved before. */
+export class UpdateAdvisorScheduleDto {
+  /** An IANA time zone name such as "America/New_York": the zone the hours are in. */
+  @IsString()
+  @MaxLength(64)
+  timezone!: string;
+
+  @IsArray()
+  @ArrayMaxSize(28)
+  @ValidateNested({ each: true })
+  @Type(() => ScheduleSlotDto)
+  slots!: ScheduleSlotDto[];
 }
 
 export class SavePayoutMethodDto {

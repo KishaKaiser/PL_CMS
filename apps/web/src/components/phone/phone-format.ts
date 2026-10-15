@@ -12,3 +12,15 @@ export async function readMessage(res: Response, fallback: string): Promise<stri
   if (Array.isArray(data.message)) return data.message.join(' ');
   return data.message ?? fallback;
 }
+
+/** Index 0 is Sunday, matching the API. */
+export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** The order a week is usually shown in: Monday first. */
+export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+/** "13:30" becomes "1:30 PM" (or "13:30" in 24-hour locales). */
+export function formatTimeOfDay(time: string): string {
+  const [hours, minutes] = time.split(':').map(Number);
+  return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}

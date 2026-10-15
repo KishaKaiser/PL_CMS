@@ -176,7 +176,7 @@ export class BillingService {
   async stopSession(sessionId: string, userId: string) {
     const session = await this.prisma.callSession.findUnique({
       where: { id: sessionId },
-      include: { client: true },
+      include: { client: true, advisor: { select: { id: true, slug: true } } },
     });
 
     if (!session) throw new NotFoundException(`Session ${sessionId} not found`);
@@ -190,6 +190,8 @@ export class BillingService {
 
     return {
       sessionId,
+      // Lets the call-ended screen link to the advisor's profile, where the client can leave a review.
+      advisorProfilePath: session.advisor.slug ?? session.advisor.id,
       status: 'ENDED_BY_USER',
       durationSeconds: ended?.durationSeconds ?? 0,
       billedMinutes: ended?.billedMinutes ?? 0,
@@ -754,7 +756,7 @@ export class BillingService {
         connectedAt: true,
         nextBillAt: true,
         status: true,
-        advisor: { select: { displayName: true, ratePerMinute: true } },
+        advisor: { select: { displayName: true, ratePerMinute: true, slug: true } },
         _count: { select: { walletTransactions: { where: { type: 'DEBIT' } } } },
       },
     });

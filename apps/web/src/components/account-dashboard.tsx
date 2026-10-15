@@ -2,6 +2,8 @@
 
 import type { ChangeEvent, ReactNode } from 'react';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { AdvisorPublicLink } from './phone/advisor-public-link';
+import { AdvisorScheduleEditor, type ScheduleSlot } from './phone/advisor-schedule-editor';
 import { AppointmentsPanel } from './phone/appointments-panel';
 import { PrivateMessageInbox } from './private-message-inbox';
 
@@ -78,6 +80,7 @@ interface AdvisorProfile {
   ratePerMinute: number | string;
   isOnline: boolean;
   phoneNumber?: string | null;
+  slug?: string | null;
 }
 
 interface PayoutMethod {
@@ -127,6 +130,7 @@ interface DashboardData {
     profile: AdvisorProfile;
     payoutMethods: PayoutMethod[];
     callTransactions: CallTransaction[];
+    schedule: ScheduleSlot[];
   };
 }
 
@@ -636,6 +640,8 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
           )}
 
           {activeSection === 'advisor-profile' && isAdvisor && (
+            <div className="space-y-10">
+            <AdvisorPublicLink slug={data.advisor?.profile.slug ?? null} />
             <form onSubmit={handleAdvisorSave} className="max-w-2xl space-y-4">
               <Input label="Display name" value={advisorForm.displayName} onChange={(displayNameValue) => setAdvisorForm((f) => ({ ...f, displayName: displayNameValue }))} />
               <Input label="Rate per minute" value={advisorForm.ratePerMinute} onChange={(ratePerMinute) => setAdvisorForm((f) => ({ ...f, ratePerMinute }))} type="number" />
@@ -652,6 +658,8 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
               <Checkbox checked={advisorForm.isOnline} label="Available online" onChange={(isOnline) => setAdvisorForm((f) => ({ ...f, isOnline }))} />
               <PrimaryButton disabled={saving === 'advisor'}>Save Advisor Profile</PrimaryButton>
             </form>
+            {data.advisor && <AdvisorScheduleEditor initialSlots={data.advisor.schedule ?? []} />}
+            </div>
           )}
 
           {activeSection === 'payouts' && isAdvisor && data.advisor && (

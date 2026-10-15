@@ -4,12 +4,14 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { deriveMediaTitle, serializeMediaAsset } from '../admin/admin-media/media.util';
 import { normalizePhoneNumber } from '../telephony/phone-number';
+import { ensureAdvisorSlug } from '../billing/advisor-slug';
 import {
   SaveAddressDto,
   SavePaymentMethodDto,
   SavePayoutMethodDto,
   UpdateAccountDto,
   UpdateAdvisorProfileDto,
+  UpdateAdvisorScheduleDto,
 } from './account.dto';
 
 @Injectable()
@@ -90,6 +92,16 @@ export class AccountService {
           })
         : [];
 
+    // The advisor's public profile link and weekly hours, shown in their dashboard.
+    const advisorSlug = user.advisorProfile ? await ensureAdvisorSlug(this.prisma, user.advisorProfile) : null;
+    const schedule = user.advisorProfile
+      ? await this.prisma.availabilitySchedule.findMany({
+          where: { advisorId: user.advisorProfile.id },
+          select: { dayOfWeek: true, startTime: true, endTime: true, timezone: true },
+          orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+        })
+      : [];
+
     return {
       user,
       orders,
@@ -102,9 +114,52 @@ export class AccountService {
       messages: { unreadCount: conversations.length },
       downloads,
       advisor: user.advisorProfile
-        ? { profile: user.advisorProfile, payoutMethods, callTransactions }
+        ? { profile: { ...user.advisorProfile, slug: advisorSlug }, payoutMethods, callTransactions, schedule }
         : null,
     };
+  }
+
+  /** Replaces the advisor's weekly hours (shown on their public profile) with the ones they just saved. */
+  async updateAdvisorSchedule(userId: string, dto: UpdateAdvisorScheduleDto) {
+    const advisor = await this.getAdvisorProfileForUser(userId);
+
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: dto.timezone });
+    } catch {
+      throw new BadRequestException('Choose a valid time zone.');
+    }
+
+    // HH:MM strings sort correctly as text.
+    const slots = [...dto.slots].sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime));
+    for (const [index, slot] of slots.entries()) {
+      if (slot.startTime >= slot.endTime) throw new BadRequestException('Each period must end after it starts.');
+      const previous = slots[index - 1];
+      if (previous && previous.dayOfWeek === slot.dayOfWeek && slot.startTime < previous.endTime) {
+        throw new BadRequestException('Hours on the same day cannot overlap.');
+      }
+    }
+
+    const saved = await this.prisma.$transaction(async (tx) => {
+      await tx.availabilitySchedule.deleteMany({ where: { advisorId: advisor.id } });
+      if (slots.length > 0) {
+        await tx.availabilitySchedule.createMany({
+          data: slots.map((slot) => ({
+            advisorId: advisor.id,
+            dayOfWeek: slot.dayOfWeek,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            timezone: dto.timezone,
+          })),
+        });
+      }
+      return tx.availabilitySchedule.findMany({
+        where: { advisorId: advisor.id },
+        select: { dayOfWeek: true, startTime: true, endTime: true, timezone: true },
+        orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+      });
+    });
+
+    return { timezone: dto.timezone, slots: saved };
   }
 
   async updateAccount(userId: string, dto: UpdateAccountDto) {
