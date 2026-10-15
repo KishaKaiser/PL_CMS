@@ -280,6 +280,11 @@ model Appointment {
   status        String   @default("PENDING")
   // Why an appointment was missed or expired, shown to both parties.
   note          String?
+  // How many calls have been placed for this appointment. If the first one does not
+  // connect the system redials once; a second miss marks the appointment missed.
+  attempts      Int      @default(0)
+  // When the redial is due after a miss. Empty means the scheduled time is the next try.
+  nextAttemptAt DateTime?
   // The call placed for this appointment; set when the system starts dialing.
   callSessionId String?  @unique
   createdAt     DateTime @default(now())

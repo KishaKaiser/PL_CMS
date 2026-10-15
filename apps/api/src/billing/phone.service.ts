@@ -7,11 +7,14 @@ import { LIVE_STATUSES } from './billing.service';
 export class PhoneService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Advisors a client can call right now. Never exposes an advisor's phone number. */
-  async listOnlineAdvisors() {
+  /**
+   * Every advisor a client can call or book: anyone with a phone number and a rate. Online advisors come first
+   * (available ones before those on a call), then offline advisors, who can still be scheduled.
+   * Never exposes an advisor's phone number.
+   */
+  async listAdvisors() {
     const advisors = await this.prisma.advisorProfile.findMany({
       where: {
-        isOnline: true,
         phoneNumber: { not: null },
         ratePerMinute: { gt: 0 },
       },
@@ -21,6 +24,7 @@ export class PhoneService {
         bio: true,
         profileImageUrl: true,
         ratePerMinute: true,
+        isOnline: true,
       },
       orderBy: { displayName: 'asc' },
       take: 100,
@@ -32,7 +36,11 @@ export class PhoneService {
     });
     const busyIds = new Set(onCall.map((session) => session.advisorId));
 
-    return advisors.map((advisor) => ({ ...advisor, busy: busyIds.has(advisor.id) }));
+    // Array.prototype.sort is stable, so advisors keep their alphabetical order within each group.
+    const rank = (advisor: { isOnline: boolean; busy: boolean }) => (!advisor.isOnline ? 2 : advisor.busy ? 1 : 0);
+    return advisors
+      .map((advisor) => ({ ...advisor, busy: advisor.isOnline && busyIds.has(advisor.id) }))
+      .sort((a, b) => rank(a) - rank(b));
   }
 
   async getMyPhoneProfile(userId: string) {

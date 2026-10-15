@@ -11,12 +11,6 @@ type AuthedRequest = { user: { id: string; role: string } };
 export class AppointmentsController {
   constructor(private readonly appointments: AppointmentsService) {}
 
-  /** Public: advisors a client can book (online or not). */
-  @Get('advisors')
-  listBookableAdvisors() {
-    return this.appointments.listBookableAdvisors();
-  }
-
   @Post()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.CLIENT)

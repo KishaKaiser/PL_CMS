@@ -1,13 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { formatDollars, readMessage, toCents } from './phone-format';
+import { ScheduleDialog } from './schedule-dialog';
 
-interface OnlineAdvisor {
+interface AdvisorCard {
   id: string;
   displayName: string;
   bio: string | null;
   profileImageUrl: string | null;
   ratePerMinute: number | string;
+  isOnline: boolean;
   busy: boolean;
 }
 
@@ -20,36 +23,24 @@ interface PhoneProfile {
 const MIN_CALL_MINUTES = 2;
 const REFRESH_INTERVAL_MS = 15_000;
 
-function toCents(value: number | string): number {
-  return Math.round(Number(value) * 100);
-}
-
-function formatDollars(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-async function readMessage(res: Response, fallback: string): Promise<string> {
-  const data = (await res.json().catch(() => ({}))) as { message?: string | string[] };
-  if (Array.isArray(data.message)) return data.message.join(' ');
-  return data.message ?? fallback;
-}
-
 export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
-  const [advisors, setAdvisors] = useState<OnlineAdvisor[] | null>(null);
+  const [advisors, setAdvisors] = useState<AdvisorCard[] | null>(null);
   const [loadError, setLoadError] = useState('');
   const [profile, setProfile] = useState<PhoneProfile | null>(null);
   const [callingId, setCallingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ advisorId: string; text: string; needsFunds?: boolean; suggestedDollars?: number } | null>(null);
-  const [phoneFor, setPhoneFor] = useState<OnlineAdvisor | null>(null);
+  const [phoneFor, setPhoneFor] = useState<AdvisorCard | null>(null);
   const [phoneInput, setPhoneInput] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [savingPhone, setSavingPhone] = useState(false);
+  const [scheduling, setScheduling] = useState<AdvisorCard | null>(null);
+  const [confirmation, setConfirmation] = useState('');
 
   const loadAdvisors = useCallback(async () => {
     try {
       const res = await fetch('/api/proxy/phone/advisors');
       if (!res.ok) throw new Error(await readMessage(res, 'Could not load advisors'));
-      setAdvisors((await res.json()) as OnlineAdvisor[]);
+      setAdvisors((await res.json()) as AdvisorCard[]);
       setLoadError('');
     } catch (err: unknown) {
       setLoadError(err instanceof Error ? err.message : 'Could not load advisors');
@@ -70,7 +61,7 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
       .catch(() => setProfile(null));
   }, []);
 
-  async function startCall(advisor: OnlineAdvisor, currentProfile: PhoneProfile) {
+  async function startCall(advisor: AdvisorCard, currentProfile: PhoneProfile) {
     const requiredCents = toCents(advisor.ratePerMinute) * MIN_CALL_MINUTES;
     if (currentProfile.balanceCents < requiredCents) {
       setNotice({
@@ -100,7 +91,8 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
     }
   }
 
-  function handleCallNow(advisor: OnlineAdvisor) {
+  function handleCallNow(advisor: AdvisorCard) {
+    setConfirmation('');
     if (!profile) {
       window.location.href = `/login?next=${encodeURIComponent('/phone-readings')}`;
       return;
@@ -112,6 +104,16 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
       return;
     }
     void startCall(advisor, profile);
+  }
+
+  function handleSchedule(advisor: AdvisorCard) {
+    setNotice(null);
+    setConfirmation('');
+    if (!profile) {
+      window.location.href = `/login?next=${encodeURIComponent('/phone-readings')}`;
+      return;
+    }
+    setScheduling(advisor);
   }
 
   async function handleSavePhone(event: React.FormEvent) {
@@ -152,13 +154,22 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
         </div>
       )}
 
+      {confirmation && (
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          {confirmation}{' '}
+          <a href="/client" className="font-medium underline">
+            View my appointments
+          </a>
+        </div>
+      )}
+
       {loadError && <p className="mb-4 text-center text-sm text-red-600">{loadError}</p>}
 
       {advisors === null && !loadError && <p className="text-center text-gray-500">Loading advisors…</p>}
 
       {advisors !== null && advisors.length === 0 && (
         <p className="text-center text-gray-500">
-          No advisors are taking calls right now. This page refreshes on its own — check back in a moment.
+          No advisors are available yet. This page refreshes on its own, so check back in a moment.
         </p>
       )}
 
@@ -167,6 +178,11 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
           {advisors.map((advisor) => {
             const showImage = advisor.profileImageUrl && /^(https?:)?\//.test(advisor.profileImageUrl);
             const calling = callingId === advisor.id;
+            const offline = !advisor.isOnline;
+            const unavailable = offline || advisor.busy;
+            const statusText = offline ? 'Offline' : advisor.busy ? 'On another call' : 'Available now';
+            const statusColor = offline ? 'text-gray-500' : advisor.busy ? 'text-amber-700' : 'text-green-700';
+            const dotColor = offline ? 'bg-gray-400' : advisor.busy ? 'bg-amber-500' : 'bg-green-500';
             return (
               <li key={advisor.id} className="flex flex-col rounded-xl border bg-white p-6 shadow-sm">
                 <div className="flex items-center gap-4">
@@ -183,26 +199,34 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
                   <div>
                     <h2 className="text-lg font-semibold text-gray-900">{advisor.displayName}</h2>
                     <p className="text-sm text-gray-600">{formatDollars(toCents(advisor.ratePerMinute))} / min</p>
-                    <p className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${advisor.busy ? 'text-amber-700' : 'text-green-700'}`}>
-                      <span className={`h-2 w-2 rounded-full ${advisor.busy ? 'bg-amber-500' : 'bg-green-500'}`} />
-                      {advisor.busy ? 'On another call' : 'Available now'}
+                    <p className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${statusColor}`}>
+                      <span className={`h-2 w-2 rounded-full ${dotColor}`} />
+                      {statusText}
                     </p>
                   </div>
                 </div>
 
                 {advisor.bio && <p className="mt-4 line-clamp-3 text-sm text-gray-600">{advisor.bio}</p>}
 
-                <div className="mt-auto pt-5">
+                <div className="mt-auto grid gap-2 pt-5">
                   <button
                     onClick={() => handleCallNow(advisor)}
-                    disabled={advisor.busy || callingId !== null}
+                    disabled={unavailable || callingId !== null}
                     className="w-full rounded-lg py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ backgroundColor: primaryColor }}
                   >
-                    {calling ? 'Calling…' : advisor.busy ? 'Unavailable' : 'Call Now'}
+                    {calling ? 'Calling…' : offline ? 'Offline' : advisor.busy ? 'Unavailable' : 'Call Now'}
+                  </button>
+                  <button
+                    onClick={() => handleSchedule(advisor)}
+                    disabled={callingId !== null}
+                    className="w-full rounded-lg border py-2.5 text-sm font-semibold hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ borderColor: primaryColor, color: primaryColor }}
+                  >
+                    Schedule a Call
                   </button>
                   {notice?.advisorId === advisor.id && (
-                    <p className="mt-2 text-sm text-red-600">
+                    <p className="text-sm text-red-600">
                       {notice.text}{' '}
                       {notice.needsFunds && (
                         <a
@@ -219,6 +243,20 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
             );
           })}
         </ul>
+      )}
+
+      {scheduling && profile && (
+        <ScheduleDialog
+          advisor={scheduling}
+          profile={profile}
+          primaryColor={primaryColor}
+          onProfileChange={setProfile}
+          onClose={() => setScheduling(null)}
+          onBooked={(message) => {
+            setScheduling(null);
+            setConfirmation(message);
+          }}
+        />
       )}
 
       {phoneFor && (

@@ -9,10 +9,10 @@ import { PhoneService } from './phone.service';
 export class PhoneController {
   constructor(private readonly phoneService: PhoneService) {}
 
-  /** Public: the grid of advisors currently taking calls. */
+  /** Public: the advisor cards, online advisors first, each of which can be called now or scheduled. */
   @Get('advisors')
-  listOnlineAdvisors() {
-    return this.phoneService.listOnlineAdvisors();
+  listAdvisors() {
+    return this.phoneService.listAdvisors();
   }
 
   @Get('me')
