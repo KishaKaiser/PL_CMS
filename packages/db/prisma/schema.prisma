@@ -863,6 +863,10 @@ model AdvisorReview {
   userId    String
   rating    Int      // 1 to 5
   comment   String?
+  // Set by an admin to hide the review from the public profile and the advisor's
+  // average. The review itself is kept so it can be shown again.
+  hiddenAt     DateTime?
+  hiddenReason String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -871,6 +875,7 @@ model AdvisorReview {
 
   @@unique([advisorId, userId])
   @@index([advisorId, createdAt])
+  @@index([advisorId, hiddenAt])
   @@index([userId])
   @@map("advisor_reviews")
 }

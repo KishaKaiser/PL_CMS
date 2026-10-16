@@ -7,16 +7,16 @@ import { readMessage } from './phone-format';
 
 type Access = 'loading' | 'signed-out' | 'not-a-client' | 'not-eligible' | 'eligible';
 
-/** Lets a client who has spoken with the advisor leave (or edit) a star rating and comment. */
+/** Lets a client who has spoken with the advisor leave a star rating and comment. A posted review cannot be changed. */
 export function ReviewForm({ slug, advisorName, primaryColor }: { slug: string; advisorName: string; primaryColor: string }) {
   const router = useRouter();
   const [access, setAccess] = useState<Access>('loading');
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
-  const [hadReview, setHadReview] = useState(false);
+  // The review the client already posted; it is shown read-only because reviews cannot be changed.
+  const [posted, setPosted] = useState<{ rating: number; comment: string | null } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     fetch(`/api/proxy/phone/advisors/${encodeURIComponent(slug)}/my-review`)
@@ -25,11 +25,7 @@ export function ReviewForm({ slug, advisorName, primaryColor }: { slug: string; 
         if (!res.ok) return setAccess('not-a-client');
         const data = (await res.json()) as { eligible: boolean; review: { rating: number; comment: string | null } | null };
         if (!data.eligible) return setAccess('not-eligible');
-        if (data.review) {
-          setRating(data.review.rating);
-          setComment(data.review.comment ?? '');
-          setHadReview(true);
-        }
+        if (data.review) setPosted(data.review);
         setAccess('eligible');
       })
       .catch(() => setAccess('not-a-client'));
@@ -43,7 +39,6 @@ export function ReviewForm({ slug, advisorName, primaryColor }: { slug: string; 
     }
     setSaving(true);
     setError('');
-    setSaved(false);
     try {
       const res = await fetch(`/api/proxy/phone/advisors/${encodeURIComponent(slug)}/review`, {
         method: 'POST',
@@ -51,8 +46,7 @@ export function ReviewForm({ slug, advisorName, primaryColor }: { slug: string; 
         body: JSON.stringify({ rating, comment }),
       });
       if (!res.ok) throw new Error(await readMessage(res, 'Could not save your review'));
-      setSaved(true);
-      setHadReview(true);
+      setPosted({ rating, comment: comment.trim() || null });
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not save your review');
@@ -78,9 +72,23 @@ export function ReviewForm({ slug, advisorName, primaryColor }: { slug: string; 
     return <p className="mb-6 text-sm text-gray-500">You can leave a review once you have spoken with {advisorName}.</p>;
   }
 
+  if (posted) {
+    return (
+      <div id="review" className="mb-8 rounded-lg border bg-gray-50 p-4">
+        <h3 className="font-semibold text-gray-900">Your review</h3>
+        <p className="mt-2 text-2xl leading-none" aria-label={`${posted.rating} out of 5 stars`}>
+          <span className="text-amber-500">{'★'.repeat(posted.rating)}</span>
+          <span className="text-gray-300">{'★'.repeat(5 - posted.rating)}</span>
+        </p>
+        {posted.comment && <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{posted.comment}</p>}
+        <p className="mt-3 text-xs text-gray-500">Thank you for your review. Reviews cannot be changed once they are posted.</p>
+      </div>
+    );
+  }
+
   return (
     <form id="review" onSubmit={handleSubmit} className="mb-8 rounded-lg border bg-gray-50 p-4">
-      <h3 className="font-semibold text-gray-900">{hadReview ? 'Your review' : `How was your call with ${advisorName}?`}</h3>
+      <h3 className="font-semibold text-gray-900">{`How was your call with ${advisorName}?`}</h3>
 
       <div className="mt-2 flex gap-1" role="radiogroup" aria-label="Star rating">
         {[1, 2, 3, 4, 5].map((star) => (
@@ -110,10 +118,11 @@ export function ReviewForm({ slug, advisorName, primaryColor }: { slug: string; 
         />
       </label>
 
-      <p className="mt-1 text-xs text-gray-500">Your first name and last initial are shown with your review.</p>
+      <p className="mt-1 text-xs text-gray-500">
+        Your username is shown with your review. You cannot change a review after posting it, so please check it first.
+      </p>
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-      {saved && <p className="mt-2 text-sm text-green-700">Thank you. Your review is saved.</p>}
 
       <button
         type="submit"
@@ -121,7 +130,7 @@ export function ReviewForm({ slug, advisorName, primaryColor }: { slug: string; 
         className="mt-3 rounded-lg px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
         style={{ backgroundColor: primaryColor }}
       >
-        {saving ? 'Saving…' : hadReview ? 'Update review' : 'Post review'}
+        {saving ? 'Posting…' : 'Post review'}
       </button>
     </form>
   );
