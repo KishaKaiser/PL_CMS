@@ -17,6 +17,8 @@ import { SettingsController } from './admin-settings/settings.controller';
 import { SettingsService } from './admin-settings/settings.service';
 import { TaxonomiesController } from './admin-taxonomies/taxonomies.controller';
 import { TaxonomiesService } from './admin-taxonomies/taxonomies.service';
+import { AdminReviewsController } from './admin-reviews/reviews.controller';
+import { AdminReviewsService } from './admin-reviews/reviews.service';
 import { AdminUsersController } from './admin-users/users.controller';
 import { AdminUsersService } from './admin-users/users.service';
 import { AuditController } from './audit/audit.controller';
@@ -40,6 +42,7 @@ import { DefaultContentModule } from '../bootstrap/default-content.module';
     ModulesController,
     ThemeBuilderController,
     AdminAdvisorsController,
+    AdminReviewsController,
   ],
   providers: [
     DashboardService,
@@ -54,6 +57,7 @@ import { DefaultContentModule } from '../bootstrap/default-content.module';
     ModulesService,
     ThemeBuilderService,
     AdminAdvisorsService,
+    AdminReviewsService,
   ],
   exports: [AuditService, PostsService],
 })

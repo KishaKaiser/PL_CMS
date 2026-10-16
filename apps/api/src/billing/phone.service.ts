@@ -81,12 +81,12 @@ export class PhoneService {
         select: { id: true },
       }),
       this.prisma.advisorReview.aggregate({
-        where: { advisorId: advisor.id },
+        where: { advisorId: advisor.id, hiddenAt: null },
         _avg: { rating: true },
         _count: { _all: true },
       }),
       this.prisma.advisorReview.findMany({
-        where: { advisorId: advisor.id },
+        where: { advisorId: advisor.id, hiddenAt: null },
         select: { id: true, rating: true, comment: true, createdAt: true, user: { select: { username: true, role: true } } },
         orderBy: { createdAt: 'desc' },
         take: MAX_PUBLIC_REVIEWS,
