@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { deriveMediaTitle, serializeMediaAsset } from '../admin/admin-media/media.util';
 import { normalizePhoneNumber } from '../telephony/phone-number';
 import { ensureAdvisorSlug } from '../billing/advisor-slug';
+import { publicName } from '../common/public-identity';
 import {
   SaveAddressDto,
   SavePaymentMethodDto,
@@ -104,7 +105,7 @@ export class AccountService {
       : [];
 
     return {
-      user,
+      user: { ...user, publicName: publicName(user) },
       orders,
       addresses,
       paymentMethods,

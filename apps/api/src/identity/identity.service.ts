@@ -1,12 +1,12 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Role } from '@pl-cms/shared';
-import { ensureAdvisorSlug, slugify } from '../billing/advisor-slug';
-import { generateUniqueUsername } from '../common/public-identity';
+import { ensureAdvisorSlug, slugMatchesUsername } from '../billing/advisor-slug';
+import { displayNameFromUsername, generateUniqueUsername } from '../common/public-identity';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Brings existing clients and advisors in line with the username-only rule each time the API starts: everyone
- * gets a username, their public display name matches it, and advisor profile links no longer carry a real name.
+ * gets a username, their public display name is that username in readable form (psychic_denise → Psychic Denise), and advisor profile links no longer carry a real name.
  * Running it again changes nothing.
  */
 @Injectable()
@@ -48,21 +48,23 @@ export class IdentityService implements OnApplicationBootstrap {
         touched = true;
       }
 
-      if (user.clientProfile && user.clientProfile.displayName !== username) {
-        await this.prisma.clientProfile.update({ where: { id: user.clientProfile.id }, data: { displayName: username } });
+      const shownName = displayNameFromUsername(username);
+
+      if (user.clientProfile && user.clientProfile.displayName !== shownName) {
+        await this.prisma.clientProfile.update({ where: { id: user.clientProfile.id }, data: { displayName: shownName } });
         touched = true;
       }
 
       const advisor = user.advisorProfile;
       if (advisor) {
-        if (advisor.displayName !== username) {
-          await this.prisma.advisorProfile.update({ where: { id: advisor.id }, data: { displayName: username } });
+        if (advisor.displayName !== shownName) {
+          await this.prisma.advisorProfile.update({ where: { id: advisor.id }, data: { displayName: shownName } });
           touched = true;
         }
-        // A link made from the old display name could spell out a real name, so rebuild it from the username.
-        if (advisor.slug && !advisor.slug.startsWith(slugify(username))) {
+        // The profile link is the username in lowercase with underscores. Rebuild any link made another way.
+        if (advisor.slug && !slugMatchesUsername(advisor.slug, username)) {
           await this.prisma.advisorProfile.update({ where: { id: advisor.id }, data: { slug: null } });
-          await ensureAdvisorSlug(this.prisma, { id: advisor.id, displayName: username, slug: null });
+          await ensureAdvisorSlug(this.prisma, { id: advisor.id, displayName: shownName, slug: null });
           touched = true;
         }
       }
