@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhoneNumber } from '../telephony/phone-number';
 import { publicName } from '../common/public-identity';
@@ -10,7 +11,10 @@ const MAX_PUBLIC_REVIEWS = 50;
 
 @Injectable()
 export class PhoneService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   /**
    * The advisors on the readings page: those switched online right now, available ones before those on a call.
@@ -107,6 +111,8 @@ export class PhoneService {
       busy: advisor.isOnline && (liveSession !== null || queueLength > 0),
       queueEnabled: advisor.queueCallingEnabled,
       queueLength,
+      // How to reach this advisor by phoning the hotline, when both the hotline and their extension are set up.
+      hotline: this.hotlineFor(advisor.sipExtension),
       schedule: {
         timezone: slots[0]?.timezone ?? null,
         slots: slots.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime, endTime })),
@@ -193,6 +199,12 @@ export class PhoneService {
   }
 
   /** An advisor with a public page: set up to take calls (phone number and rate), found by slug or id. */
+  private hotlineFor(extension: string | null) {
+    const configured = this.config.get<string>('TELNYX_HOTLINE_NUMBER');
+    const number = configured ? normalizePhoneNumber(configured) : null;
+    return number && extension ? { number, extension } : null;
+  }
+
   /** How many clients are waiting in (or being called from) each advisor's queue. */
   private async queueLengths(advisorIds: string[]): Promise<Map<string, number>> {
     const spots = await this.prisma.queueAssignment.findMany({
@@ -223,6 +235,7 @@ export class PhoneService {
         ratePerMinute: true,
         isOnline: true,
         queueCallingEnabled: true,
+        sipExtension: true,
       },
     });
     if (!advisor) throw new NotFoundException('Advisor not found');

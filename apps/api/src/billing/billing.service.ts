@@ -38,6 +38,15 @@ const SCHEDULED_ADVISOR_PROMPT = 'You have a scheduled call from The Psychic Lin
 const queuedClientPrompt = (advisorName: string) =>
   `Welcome to The Psychic Link. ${advisorName} is ready to take your call now. To begin your call, press 1 now.`;
 const QUEUED_ADVISOR_PROMPT = 'The next client in your queue is ready. Press 1 to accept this call.';
+/** "2 dollars", "2 dollars and 50 cents": amounts read out by the voice. */
+function spokenAmount(cents: number): string {
+  const dollars = Math.floor(cents / 100);
+  const rest = cents % 100;
+  const dollarText = `${dollars} ${dollars === 1 ? 'dollar' : 'dollars'}`;
+  return rest === 0 ? dollarText : `${dollarText} and ${rest} ${rest === 1 ? 'cent' : 'cents'}`;
+}
+const inboundClientPrompt = (advisorName: string, rateCents: number) =>
+  `You have chosen ${advisorName}, at ${spokenAmount(rateCents)} per minute. To connect now, press 1.`;
 const CLIENT_UNAVAILABLE_MESSAGE =
   'We are sorry, your advisor is unavailable right now. You have not been charged. Goodbye.';
 const CLIENT_LOW_BALANCE_WARNING =
@@ -64,26 +73,40 @@ const TALKING_STATUSES = ['CONNECTED', 'BILLING_ACTIVE'];
 export interface TelnyxWebhookBody {
   data?: {
     event_type?: string;
-    payload?: {
-      call_control_id?: string;
-      client_state?: string;
-      hangup_cause?: string;
-      hangup_source?: string;
-      sip_hangup_cause?: string;
-      digits?: string;
-      status?: string;
-    };
+    payload?: TelnyxWebhookPayload;
   };
 }
+
+export interface TelnyxWebhookPayload {
+  call_control_id?: string;
+  direction?: string;
+  from?: string;
+  to?: string;
+  client_state?: string;
+  hangup_cause?: string;
+  hangup_source?: string;
+  sip_hangup_cause?: string;
+  digits?: string;
+  status?: string;
+}
+
+/** Handles webhooks for calls that are not part of a billing session (the dial-in hotline). */
+export type InboundCallHandler = (eventType: string | undefined, payload: TelnyxWebhookPayload) => Promise<{ ok: boolean }>;
 
 @Injectable()
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
+  private inboundHandler: InboundCallHandler | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly telnyx: TelnyxService,
   ) {}
+
+  /** The hotline registers itself here so incoming calls reach it through the same webhook. */
+  registerInboundHandler(handler: InboundCallHandler) {
+    this.inboundHandler = handler;
+  }
 
   /** Checks the balance and availability, then rings the client to begin the call. */
   async startSession(userId: string, dto: StartSessionDto) {
@@ -133,6 +156,87 @@ export class BillingService {
     if (!client.phoneNumber) {
       throw new BadRequestException('Add your phone number so we know where to call you.');
     }
+    await this.assertCanCall(client, advisor, options);
+
+    const session = await this.prisma.callSession.create({
+      data: { advisorId: advisor.id, clientId: client.id, status: 'PENDING_CONNECTION' },
+    });
+
+    // Link the appointment before dialing so the prompts can use the scheduled-call wording.
+    if (options.appointmentId) {
+      await this.prisma.appointment.update({
+        where: { id: options.appointmentId },
+        data: { callSessionId: session.id },
+      });
+    }
+
+    // Same for a queued callback.
+    if (options.queueAssignmentId) {
+      await this.prisma.queueAssignment.update({
+        where: { id: options.queueAssignmentId },
+        data: { callSessionId: session.id },
+      });
+    } else if (options.requireOnline) {
+      await this.settleQueueSpots(client.id, advisor.id);
+    }
+
+    try {
+      const { callControlId } = await this.telnyx.dial({
+        to: client.phoneNumber,
+        state: { sessionId: session.id, leg: 'client' },
+        timeoutSecs: CLIENT_RING_SECONDS,
+      });
+      await this.prisma.callSession.update({
+        where: { id: session.id },
+        data: { clientCallControlId: callControlId },
+      });
+    } catch (error) {
+      await this.endSession(session.id, 'ENDED_NOT_CONNECTED');
+      throw error;
+    }
+
+    return { id: session.id, status: session.status };
+  }
+
+  /**
+   * A client who phoned the hotline and chose an advisor. They are already on the line, so there is no call to
+   * place to them: the session starts at "waiting for the client to press 1", after we tell them the rate.
+   * Throws (with a message that can be read out to the caller) if the call cannot go ahead.
+   */
+  async startInboundCall(clientId: string, advisorId: string, clientCallControlId: string) {
+    const client = await this.prisma.clientProfile.findUnique({ where: { id: clientId } });
+    if (!client) throw new NotFoundException('We could not find your account.');
+
+    const advisor = await this.prisma.advisorProfile.findUnique({ where: { id: advisorId } });
+    if (!advisor) throw new NotFoundException('That advisor could not be found.');
+
+    await this.assertCanCall(client, advisor, { requireOnline: true });
+
+    const session = await this.prisma.callSession.create({
+      data: { advisorId: advisor.id, clientId: client.id, status: 'AWAITING_CLIENT', clientCallControlId },
+    });
+    await this.settleQueueSpots(client.id, advisor.id);
+
+    try {
+      await this.telnyx.promptToPressOne(clientCallControlId, inboundClientPrompt(advisor.displayName, toCents(advisor.ratePerMinute)), {
+        sessionId: session.id,
+        leg: 'client',
+        step: 'consent',
+      });
+    } catch (error) {
+      await this.endSession(session.id, 'ENDED_NOT_CONNECTED');
+      throw error;
+    }
+
+    return { id: session.id };
+  }
+
+  /** The rules every call has to pass, whoever starts it: the advisor is reachable, the wallet covers it, nobody is in the way. */
+  private async assertCanCall(
+    client: ClientProfile,
+    advisor: AdvisorProfile,
+    options: { requireOnline: boolean; queueAssignmentId?: string },
+  ) {
     if (options.requireOnline && !advisor.isOnline) {
       throw new BadRequestException('This advisor is not taking calls right now.');
     }
@@ -174,49 +278,14 @@ export class BillingService {
           : 'This advisor is on another call right now.',
       );
     }
+  }
 
-    const session = await this.prisma.callSession.create({
-      data: { advisorId: advisor.id, clientId: client.id, status: 'PENDING_CONNECTION' },
+  /** Calling an advisor directly settles any spot this client had in their queue. */
+  private async settleQueueSpots(clientId: string, advisorId: string) {
+    await this.prisma.queueAssignment.updateMany({
+      where: { clientId, status: 'WAITING', queue: { advisorId } },
+      data: { status: 'CANCELLED' },
     });
-
-    // Link the appointment before dialing so the prompts can use the scheduled-call wording.
-    if (options.appointmentId) {
-      await this.prisma.appointment.update({
-        where: { id: options.appointmentId },
-        data: { callSessionId: session.id },
-      });
-    }
-
-    // Same for a queued callback.
-    if (options.queueAssignmentId) {
-      await this.prisma.queueAssignment.update({
-        where: { id: options.queueAssignmentId },
-        data: { callSessionId: session.id },
-      });
-    } else if (options.requireOnline) {
-      // Calling this advisor directly settles any spot this client had in their queue.
-      await this.prisma.queueAssignment.updateMany({
-        where: { clientId: client.id, status: 'WAITING', queue: { advisorId: advisor.id } },
-        data: { status: 'CANCELLED' },
-      });
-    }
-
-    try {
-      const { callControlId } = await this.telnyx.dial({
-        to: client.phoneNumber,
-        state: { sessionId: session.id, leg: 'client' },
-        timeoutSecs: CLIENT_RING_SECONDS,
-      });
-      await this.prisma.callSession.update({
-        where: { id: session.id },
-        data: { clientCallControlId: callControlId },
-      });
-    } catch (error) {
-      await this.endSession(session.id, 'ENDED_NOT_CONNECTED');
-      throw error;
-    }
-
-    return { id: session.id, status: session.status };
   }
 
   async stopSession(sessionId: string, userId: string) {
@@ -257,8 +326,11 @@ export class BillingService {
     const state = decodeState(payload.client_state);
     const callControlId = payload.call_control_id;
 
-    // Not a call this app placed (or an event we don't act on): acknowledge so Telnyx doesn't retry.
-    if (!state || !callControlId) return { ok: true };
+    // Not part of a billing session: either a call into the hotline, or one we don't act on.
+    if (!state) {
+      return this.inboundHandler ? this.inboundHandler(eventType, payload) : { ok: true };
+    }
+    if (!callControlId) return { ok: true };
 
     // Why a leg ended or what a party pressed is the first thing to look at when a call misbehaves.
     if (eventType === 'call.hangup') {

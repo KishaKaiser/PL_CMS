@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { deriveMediaTitle, serializeMediaAsset } from '../admin/admin-media/media.util';
 import { normalizePhoneNumber } from '../telephony/phone-number';
 import { ensureAdvisorSlug } from '../billing/advisor-slug';
+import { ConfigService } from '@nestjs/config';
 import { publicName } from '../common/public-identity';
 import {
   SaveAddressDto,
@@ -17,7 +18,10 @@ import {
 
 @Injectable()
 export class AccountService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async getDashboard(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -116,9 +120,21 @@ export class AccountService {
       messages: { unreadCount: conversations.length },
       downloads,
       advisor: user.advisorProfile
-        ? { profile: { ...user.advisorProfile, slug: advisorSlug }, payoutMethods, callTransactions, schedule }
+        ? {
+            profile: { ...user.advisorProfile, slug: advisorSlug },
+            payoutMethods,
+            callTransactions,
+            schedule,
+            // The hotline callers dial, which the advisor can share along with their extension.
+            hotlineNumber: this.hotlineNumber(),
+          }
         : null,
     };
+  }
+
+  private hotlineNumber(): string | null {
+    const configured = this.config.get<string>('TELNYX_HOTLINE_NUMBER');
+    return configured ? normalizePhoneNumber(configured) : null;
   }
 
   /** Replaces the advisor's weekly hours (shown on their public profile) with the ones they just saved. */

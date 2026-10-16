@@ -28,6 +28,26 @@ export interface CallState {
   step?: CallStep;
 }
 
+/** Where an incoming hotline call is in the menu, before it has become a billed session. */
+export type HotlineStep = 'greeting' | 'menu' | 'queue-offer' | 'goodbye';
+
+/** Travels with an incoming hotline call (which has no session yet) and comes back on every webhook. */
+export interface HotlineState {
+  hotline: true;
+  step: HotlineStep;
+  /** The caller's number as presented to us. */
+  from?: string;
+  /** The client account the caller's number belongs to, once identified. */
+  clientId?: string;
+  /** The advisor being offered a callback. */
+  advisorId?: string;
+  /** How many times the menu has been played, so a caller cannot be stuck in it forever. */
+  tries?: number;
+}
+
+/** Either kind of state a call leg can carry. */
+export type LegState = CallState | HotlineState;
+
 export interface DialOptions {
   to: string;
   state: CallState;
@@ -70,7 +90,7 @@ export class TelnyxService {
   }
 
   /** Plays a spoken prompt and waits for the caller to press 1; the result arrives as a call.gather.ended webhook. */
-  async promptToPressOne(callControlId: string, text: string, state: CallState): Promise<void> {
+  async promptToPressOne(callControlId: string, text: string, state: LegState): Promise<void> {
     const response = await this.command(callControlId, 'gather_using_speak', {
       payload: text,
       voice: this.config.get<string>('TELNYX_TTS_VOICE') || DEFAULT_TTS_VOICE,
@@ -89,7 +109,7 @@ export class TelnyxService {
   }
 
   /** Speaks a message to one leg; a call.speak.ended webhook follows when it finishes. */
-  async speak(callControlId: string, text: string, state: CallState): Promise<boolean> {
+  async speak(callControlId: string, text: string, state: LegState): Promise<boolean> {
     try {
       const response = await this.command(callControlId, 'speak', {
         payload: text,
@@ -103,6 +123,38 @@ export class TelnyxService {
     } catch (error) {
       this.logger.error(`Telnyx speak failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return false;
+    }
+  }
+
+  /** Answers an incoming call; a call.answered webhook follows. */
+  async answer(callControlId: string, state: HotlineState): Promise<void> {
+    const response = await this.command(callControlId, 'answer', { client_state: encodeState(state) });
+    if (!response.ok) {
+      this.logger.error(`Telnyx answer failed (${response.status}): ${await response.text()}`);
+      throw new BadGatewayException('The phone service could not answer the call.');
+    }
+  }
+
+  /**
+   * Plays a prompt and collects digits (ended with #, or after a short pause). The result arrives as a
+   * call.gather.ended webhook; no digits means the caller pressed nothing.
+   */
+  async gatherDigits(callControlId: string, text: string, state: HotlineState, maxDigits: number): Promise<void> {
+    const response = await this.command(callControlId, 'gather_using_speak', {
+      payload: text,
+      voice: this.config.get<string>('TELNYX_TTS_VOICE') || DEFAULT_TTS_VOICE,
+      minimum_digits: 1,
+      maximum_digits: maxDigits,
+      terminating_digit: '#',
+      valid_digits: '0123456789',
+      maximum_tries: 1,
+      timeout_millis: 15_000,
+      inter_digit_timeout_millis: 6_000,
+      client_state: encodeState(state),
+    });
+    if (!response.ok) {
+      this.logger.error(`Telnyx gather failed (${response.status}): ${await response.text()}`);
+      throw new BadGatewayException('The phone service could not play the menu.');
     }
   }
 
@@ -188,7 +240,7 @@ export class TelnyxService {
   }
 }
 
-export function encodeState(state: CallState): string {
+export function encodeState(state: LegState): string {
   return Buffer.from(JSON.stringify(state)).toString('base64');
 }
 
@@ -199,6 +251,28 @@ export function decodeState(encoded: string | undefined): CallState | null {
     if (typeof parsed.sessionId === 'string' && (parsed.leg === 'client' || parsed.leg === 'advisor')) {
       const step = parsed.step === 'consent' || parsed.step === 'goodbye' ? parsed.step : undefined;
       return { sessionId: parsed.sessionId, leg: parsed.leg, ...(step ? { step } : {}) };
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+/** The state of a hotline call, or null if the call is not (or no longer) in the hotline menu. */
+export function decodeHotlineState(encoded: string | undefined): HotlineState | null {
+  if (!encoded) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8')) as Partial<HotlineState>;
+    const steps: HotlineStep[] = ['greeting', 'menu', 'queue-offer', 'goodbye'];
+    if (parsed.hotline === true && parsed.step && steps.includes(parsed.step)) {
+      return {
+        hotline: true,
+        step: parsed.step,
+        ...(typeof parsed.from === 'string' ? { from: parsed.from } : {}),
+        ...(typeof parsed.clientId === 'string' ? { clientId: parsed.clientId } : {}),
+        ...(typeof parsed.advisorId === 'string' ? { advisorId: parsed.advisorId } : {}),
+        ...(typeof parsed.tries === 'number' ? { tries: parsed.tries } : {}),
+      };
     }
   } catch {
     // fall through
