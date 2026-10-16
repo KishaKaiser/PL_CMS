@@ -25,6 +25,7 @@ import { SlidersModule } from './sliders/sliders.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { StoreModule } from './store/store.module';
 import { AstrologyModule } from './astrology/astrology.module';
+import { IdentityModule } from './identity/identity.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { AstrologyModule } from './astrology/astrology.module';
     NewsletterModule,
     StoreModule,
     AstrologyModule,
+    IdentityModule,
   ],
 })
 export class AppModule {}

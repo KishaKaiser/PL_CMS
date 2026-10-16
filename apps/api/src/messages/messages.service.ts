@@ -5,18 +5,33 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { publicName } from '../common/public-identity';
 import { CreateMessageDto } from './messages.dto';
+
+// Other people only ever see a username (or a staff name): never an email address or a client's real name.
+const MESSAGE_USER_SELECT = { id: true, username: true, name: true, role: true } as const;
+
+type MessageUserRow = { id: string; username: string | null; name: string; role: string };
+
+function toMessageUser(user: MessageUserRow) {
+  return { id: user.id, name: publicName(user), role: user.role };
+}
+
+function withPublicUsers<T extends { sender: MessageUserRow; recipient: MessageUserRow }>(message: T) {
+  return { ...message, sender: toMessageUser(message.sender), recipient: toMessageUser(message.recipient) };
+}
 
 @Injectable()
 export class MessagesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listContacts(userId: string) {
-    return this.prisma.user.findMany({
+    const users = await this.prisma.user.findMany({
       where: { id: { not: userId } },
-      orderBy: [{ role: 'asc' }, { name: 'asc' }],
-      select: { id: true, email: true, name: true, role: true },
+      orderBy: [{ role: 'asc' }, { username: 'asc' }, { name: 'asc' }],
+      select: MESSAGE_USER_SELECT,
     });
+    return users.map(toMessageUser);
   }
 
   async listConversations(userId: string) {
@@ -26,14 +41,14 @@ export class MessagesService {
       },
       orderBy: { sentAt: 'desc' },
       include: {
-        sender: { select: { id: true, email: true, name: true, role: true } },
-        recipient: { select: { id: true, email: true, name: true, role: true } },
+        sender: { select: MESSAGE_USER_SELECT },
+        recipient: { select: MESSAGE_USER_SELECT },
       },
     });
 
     const conversations = new Map<string, {
-      participant: { id: string; email: string; name: string; role: string };
-      lastMessage: typeof messages[number];
+      participant: { id: string; name: string; role: string };
+      lastMessage: ReturnType<typeof withPublicUsers<typeof messages[number]>>;
       unreadCount: number;
     }>();
 
@@ -44,8 +59,8 @@ export class MessagesService {
 
       if (!existing) {
         conversations.set(participant.id, {
-          participant,
-          lastMessage: message,
+          participant: toMessageUser(participant),
+          lastMessage: withPublicUsers(message),
           unreadCount: 0,
         });
       }
@@ -70,8 +85,8 @@ export class MessagesService {
       },
       orderBy: { sentAt: 'asc' },
       include: {
-        sender: { select: { id: true, email: true, name: true, role: true } },
-        recipient: { select: { id: true, email: true, name: true, role: true } },
+        sender: { select: MESSAGE_USER_SELECT },
+        recipient: { select: MESSAGE_USER_SELECT },
       },
     });
 
@@ -80,7 +95,7 @@ export class MessagesService {
       data: { readAt: new Date() },
     });
 
-    return messages;
+    return messages.map(withPublicUsers);
   }
 
   async create(userId: string, dto: CreateMessageDto) {
@@ -92,17 +107,18 @@ export class MessagesService {
 
     await this.ensureUserExists(dto.recipientId);
 
-    return this.prisma.message.create({
+    const created = await this.prisma.message.create({
       data: {
         senderId: userId,
         recipientId: dto.recipientId,
         body,
       },
       include: {
-        sender: { select: { id: true, email: true, name: true, role: true } },
-        recipient: { select: { id: true, email: true, name: true, role: true } },
+        sender: { select: MESSAGE_USER_SELECT },
+        recipient: { select: MESSAGE_USER_SELECT },
       },
     });
+    return withPublicUsers(created);
   }
 
   async markRead(userId: string, messageId: string) {

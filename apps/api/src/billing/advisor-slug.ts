@@ -48,11 +48,3 @@ export async function ensureAdvisorSlug(
   // Practically unreachable; the id is always unique and the profile page accepts it.
   return advisor.id;
 }
-
-/** "Jane Q Smith" becomes "Jane S.": reviews show a first name and last initial, not a full name. */
-export function publicReviewerName(name: string | null | undefined): string {
-  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return 'A client';
-  if (parts.length === 1) return parts[0];
-  return `${parts[0]} ${parts[parts.length - 1].charAt(0).toUpperCase()}.`;
-}

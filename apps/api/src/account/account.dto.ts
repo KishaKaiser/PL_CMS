@@ -94,11 +94,6 @@ export class SavePaymentMethodDto {
 export class UpdateAdvisorProfileDto {
   @IsOptional()
   @IsString()
-  @MaxLength(120)
-  displayName?: string;
-
-  @IsOptional()
-  @IsString()
   @MaxLength(2000)
   bio?: string;
 

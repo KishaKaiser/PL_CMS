@@ -4,7 +4,6 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 interface MessageUser {
   id: string;
-  email: string;
   name: string;
   role: string;
 }
@@ -222,7 +221,7 @@ export function PrivateMessageInbox({
             {selectedContact && (
               <div className="mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">{selectedContact.name}</h2>
-                <p className="text-xs text-gray-500">{selectedContact.email}</p>
+                <p className="text-xs text-gray-500">{selectedContact.role}</p>
               </div>
             )}
 

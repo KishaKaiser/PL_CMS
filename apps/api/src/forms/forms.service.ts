@@ -8,6 +8,7 @@ import type { Prisma } from '@pl-cms/db';
 import { Role } from '@pl-cms/shared';
 import * as bcrypt from 'bcryptjs';
 import { normalizeEmailInput } from '../common/input-normalization.util';
+import { assertPublicUsername, generateUniqueUsername, isPublicRole } from '../common/public-identity';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CmsFormStatus,
@@ -148,7 +149,7 @@ export class FormsService {
   ) {
     const email = normalizeEmailInput(readText(data, 'email'));
     const password = readText(data, 'password');
-    const username = normalizeUsername(readText(data, 'username'));
+    const chosenUsername = normalizeUsername(readText(data, 'username'));
     const name = readText(data, 'name') || email;
 
     if (!email) throw new BadRequestException('Email is required');
@@ -156,12 +157,15 @@ export class FormsService {
 
     const existingEmail = await this.prisma.user.findUnique({ where: { email } });
     if (existingEmail) throw new ConflictException(`User with email "${email}" already exists`);
-    if (username) {
-      const existingUsername = await this.prisma.user.findUnique({ where: { username } });
-      if (existingUsername) throw new ConflictException(`Username "${username}" already exists`);
+    if (chosenUsername) {
+      assertPublicUsername(chosenUsername);
+      const existingUsername = await this.prisma.user.findUnique({ where: { username: chosenUsername } });
+      if (existingUsername) throw new ConflictException(`Username "${chosenUsername}" already exists`);
     }
 
     const role = resolveRegistrationRole(form.settings);
+    // Clients and advisors are shown to everyone else by username only, so they always get one.
+    const username = chosenUsername ?? (isPublicRole(role) ? await generateUniqueUsername(this.prisma, role) : null);
     const passwordHash = await bcrypt.hash(password, 12);
 
     await this.prisma.$transaction(async (tx) => {
@@ -171,11 +175,11 @@ export class FormsService {
       });
 
       if (role === Role.CLIENT) {
-        await tx.clientProfile.create({ data: { userId: user.id, displayName: user.name } });
+        await tx.clientProfile.create({ data: { userId: user.id, displayName: username ?? user.name } });
       }
 
       if (role === Role.ADVISOR) {
-        await tx.advisorProfile.create({ data: { userId: user.id, displayName: user.name } });
+        await tx.advisorProfile.create({ data: { userId: user.id, displayName: username ?? user.name } });
       }
 
       await tx.cmsFormSubmission.create({
