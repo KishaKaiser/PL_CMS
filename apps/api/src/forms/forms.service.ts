@@ -8,7 +8,7 @@ import type { Prisma } from '@pl-cms/db';
 import { Role } from '@pl-cms/shared';
 import * as bcrypt from 'bcryptjs';
 import { normalizeEmailInput } from '../common/input-normalization.util';
-import { assertPublicUsername, generateUniqueUsername, isPublicRole } from '../common/public-identity';
+import { assertPublicUsername, displayNameFromUsername, generateUniqueUsername, isPublicRole } from '../common/public-identity';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CmsFormStatus,
@@ -175,11 +175,11 @@ export class FormsService {
       });
 
       if (role === Role.CLIENT) {
-        await tx.clientProfile.create({ data: { userId: user.id, displayName: username ?? user.name } });
+        await tx.clientProfile.create({ data: { userId: user.id, displayName: username ? displayNameFromUsername(username) : user.name } });
       }
 
       if (role === Role.ADVISOR) {
-        await tx.advisorProfile.create({ data: { userId: user.id, displayName: username ?? user.name } });
+        await tx.advisorProfile.create({ data: { userId: user.id, displayName: username ? displayNameFromUsername(username) : user.name } });
       }
 
       await tx.cmsFormSubmission.create({

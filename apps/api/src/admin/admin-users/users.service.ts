@@ -8,7 +8,7 @@ import { Prisma } from '@pl-cms/db';
 import * as bcrypt from 'bcryptjs';
 import { Role } from '@pl-cms/shared';
 import { normalizeEmailInput } from '../../common/input-normalization.util';
-import { assertPublicUsername, generateUniqueUsername, isPublicRole } from '../../common/public-identity';
+import { assertPublicUsername, displayNameFromUsername, generateUniqueUsername, isPublicRole } from '../../common/public-identity';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto, UpdateUserDto, UpdateUserRoleDto, ResetPasswordDto } from './users.dto';
 
@@ -47,6 +47,7 @@ export class AdminUsersService {
       if (existingUsername) throw new ConflictException(`Username "${username}" already exists`);
     }
 
+    const shownName = username ? displayNameFromUsername(username) : null;
     const passwordHash = await bcrypt.hash(dto.password, 12);
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -62,13 +63,13 @@ export class AdminUsersService {
 
       if (dto.role === Role.CLIENT) {
         await tx.clientProfile.create({
-          data: { userId: user.id, displayName: username ?? user.name },
+          data: { userId: user.id, displayName: shownName ?? user.name },
         });
       }
 
       if (dto.role === Role.ADVISOR) {
         await tx.advisorProfile.create({
-          data: { userId: user.id, displayName: username ?? user.name },
+          data: { userId: user.id, displayName: shownName ?? user.name },
         });
       }
 
@@ -106,6 +107,8 @@ export class AdminUsersService {
       }
     }
 
+    const shownName = username ? displayNameFromUsername(username) : null;
+
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.update({
         where: { id },
@@ -121,16 +124,16 @@ export class AdminUsersService {
       if (dto.role === Role.CLIENT) {
         await tx.clientProfile.upsert({
           where: { userId: id },
-          update: { displayName: username ?? name },
-          create: { userId: id, displayName: username ?? name },
+          update: { displayName: shownName ?? name },
+          create: { userId: id, displayName: shownName ?? name },
         });
       }
 
       if (dto.role === Role.ADVISOR) {
         await tx.advisorProfile.upsert({
           where: { userId: id },
-          update: { displayName: username ?? name },
-          create: { userId: id, displayName: username ?? name },
+          update: { displayName: shownName ?? name },
+          create: { userId: id, displayName: shownName ?? name },
         });
       }
 

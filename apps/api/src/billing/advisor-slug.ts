@@ -13,8 +13,25 @@ export function slugify(name: string): string {
   return base || 'advisor';
 }
 
+/** "Psychic_Denise" becomes "psychic_denise": a username as it appears in the profile link. */
+export function slugFromUsername(username: string): string {
+  const base = username
+    .toLowerCase()
+    .replace(/[.\s]+/g, '_')
+    .replace(/[^a-z0-9_-]/g, '')
+    .slice(0, 48);
+  return base || 'advisor';
+}
+
+/** Whether this slug is the one built from the username (or that one with a number added to keep it unique). */
+export function slugMatchesUsername(slug: string, username: string): boolean {
+  const base = slugFromUsername(username);
+  if (slug === base) return true;
+  return slug.startsWith(`${base}_`) && /^[0-9]+$/.test(slug.slice(base.length + 1));
+}
+
 /**
- * The advisor's profile slug, assigning a unique one from their display name the first time it is needed.
+ * The advisor's profile slug, assigning a unique one from their username the first time it is needed.
  * Once assigned it never changes, so links people have shared keep working if the advisor renames themselves.
  */
 export async function ensureAdvisorSlug(
@@ -23,9 +40,11 @@ export async function ensureAdvisorSlug(
 ): Promise<string> {
   if (advisor.slug) return advisor.slug;
 
-  const base = slugify(advisor.displayName);
+  const owner = await prisma.advisorProfile.findUnique({ where: { id: advisor.id }, select: { user: { select: { username: true } } } });
+  const username = owner?.user.username;
+  const base = username ? slugFromUsername(username) : slugify(advisor.displayName);
   for (let attempt = 1; attempt <= 50; attempt++) {
-    const candidate = attempt === 1 ? base : `${base}-${attempt}`;
+    const candidate = attempt === 1 ? base : `${base}_${attempt}`;
 
     const taken = await prisma.advisorProfile.findUnique({ where: { slug: candidate }, select: { id: true } });
     if (taken) continue;

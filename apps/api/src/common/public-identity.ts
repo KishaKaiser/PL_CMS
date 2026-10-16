@@ -11,9 +11,16 @@ export function isPublicRole(role: string | null | undefined): boolean {
   return role === Role.CLIENT || role === Role.ADVISOR;
 }
 
+/** "psychic_denise" becomes "Psychic Denise": the username as people read it. The username itself stays as typed. */
+export function displayNameFromUsername(username: string): string {
+  const words = username.split(/[._-]+/).filter(Boolean);
+  if (words.length === 0) return username;
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+}
+
 /** What other people see for this account. */
 export function publicName(user: { username?: string | null; name?: string | null; role?: string | null }): string {
-  if (user.username) return user.username;
+  if (user.username) return displayNameFromUsername(user.username);
   if (user.role === Role.CLIENT) return 'Client';
   if (user.role === Role.ADVISOR) return 'Advisor';
   return user.name?.trim() || 'Member';

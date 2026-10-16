@@ -25,6 +25,7 @@ interface DashboardUser {
   id: string;
   email: string;
   username?: string | null;
+  publicName?: string;
   name: string;
   role: string;
   createdAt: string;
@@ -364,7 +365,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
   }
 
   // Everyone is shown by username, never a real name.
-  const displayName = data.user.username || data.advisor?.profile.displayName || data.user.name;
+  const displayName = data.user.publicName || data.advisor?.profile.displayName || data.user.name;
   const roleLabel = isAdvisor ? 'Spiritual Advisor' : data.user.role === 'CLIENT' ? 'Client' : data.user.role;
   const profileImageUrl = data.advisor?.profile.profileImageUrl ?? null;
   const walletValue = data.wallet.balanceCents === null ? 'Not set' : `$${(data.wallet.balanceCents / 100).toFixed(2)}`;
@@ -634,6 +635,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
             <form onSubmit={handleAccountSave} className="max-w-xl space-y-4">
               <Input label="Name" value={accountName} onChange={setAccountName} required />
               <ReadOnly label="Username" value={data.user.username ?? ''} />
+              <ReadOnly label="Public name" value={data.user.publicName ?? ''} />
               <p className="-mt-2 text-xs text-gray-500">
                 Your username is the only name other people see. Your name and email stay private.
               </p>
@@ -647,7 +649,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
             <div className="space-y-10">
             <AdvisorPublicLink slug={data.advisor?.profile.slug ?? null} />
             <form onSubmit={handleAdvisorSave} className="max-w-2xl space-y-4">
-              <ReadOnly label="Public name" value={data.user.username ?? data.advisor?.profile.displayName ?? ''} />
+              <ReadOnly label="Public name" value={data.user.publicName ?? data.advisor?.profile.displayName ?? ''} />
               <Input label="Rate per minute" value={advisorForm.ratePerMinute} onChange={(ratePerMinute) => setAdvisorForm((f) => ({ ...f, ratePerMinute }))} type="number" />
               <div>
                 <Input label="Your phone number" value={advisorForm.phoneNumber} onChange={(phoneNumber) => setAdvisorForm((f) => ({ ...f, phoneNumber }))} type="tel" />
