@@ -8,6 +8,7 @@ import { Prisma } from '@pl-cms/db';
 import * as bcrypt from 'bcryptjs';
 import { Role } from '@pl-cms/shared';
 import { normalizeEmailInput } from '../../common/input-normalization.util';
+import { assertPublicUsername, generateUniqueUsername, isPublicRole } from '../../common/public-identity';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto, UpdateUserDto, UpdateUserRoleDto, ResetPasswordDto } from './users.dto';
 
@@ -33,12 +34,14 @@ export class AdminUsersService {
 
   async create(dto: CreateUserDto) {
     const email = normalizeEmailInput(dto.email);
-    const username = normalizeUsername(dto.username);
+    const chosenUsername = normalizeUsername(dto.username);
     const name = dto.name.trim();
     if (!name) throw new BadRequestException('Name is required');
 
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) throw new ConflictException(`User with email "${email}" already exists`);
+    if (chosenUsername) assertPublicUsername(chosenUsername);
+    const username = chosenUsername ?? (isPublicRole(dto.role) ? await generateUniqueUsername(this.prisma, dto.role) : null);
     if (username) {
       const existingUsername = await this.prisma.user.findUnique({ where: { username } });
       if (existingUsername) throw new ConflictException(`Username "${username}" already exists`);
@@ -59,13 +62,13 @@ export class AdminUsersService {
 
       if (dto.role === Role.CLIENT) {
         await tx.clientProfile.create({
-          data: { userId: user.id, displayName: user.name },
+          data: { userId: user.id, displayName: username ?? user.name },
         });
       }
 
       if (dto.role === Role.ADVISOR) {
         await tx.advisorProfile.create({
-          data: { userId: user.id, displayName: user.name },
+          data: { userId: user.id, displayName: username ?? user.name },
         });
       }
 
@@ -78,9 +81,9 @@ export class AdminUsersService {
   }
 
   async update(id: string, dto: UpdateUserDto) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
     const email = normalizeEmailInput(dto.email);
-    const username = normalizeUsername(dto.username ?? undefined);
+    const requestedUsername = normalizeUsername(dto.username ?? undefined);
     const name = dto.name.trim();
     if (!name) throw new BadRequestException('Name is required');
 
@@ -88,6 +91,13 @@ export class AdminUsersService {
     if (existingEmail && existingEmail.id !== id) {
       throw new ConflictException(`User with email "${email}" already exists`);
     }
+
+    // Only check a username that is actually changing, so saving other details never trips over an older username.
+    if (requestedUsername && requestedUsername !== current.username) assertPublicUsername(requestedUsername);
+    // Clients and advisors always keep a username: it is the only name other people see.
+    const username =
+      requestedUsername ??
+      (isPublicRole(dto.role) ? current.username ?? (await generateUniqueUsername(this.prisma, dto.role)) : null);
 
     if (username) {
       const existingUsername = await this.prisma.user.findUnique({ where: { username } });
@@ -111,16 +121,16 @@ export class AdminUsersService {
       if (dto.role === Role.CLIENT) {
         await tx.clientProfile.upsert({
           where: { userId: id },
-          update: { displayName: name },
-          create: { userId: id, displayName: name },
+          update: { displayName: username ?? name },
+          create: { userId: id, displayName: username ?? name },
         });
       }
 
       if (dto.role === Role.ADVISOR) {
         await tx.advisorProfile.upsert({
           where: { userId: id },
-          update: { displayName: name },
-          create: { userId: id, displayName: name },
+          update: { displayName: username ?? name },
+          create: { userId: id, displayName: username ?? name },
         });
       }
 

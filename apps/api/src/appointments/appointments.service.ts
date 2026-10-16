@@ -113,7 +113,7 @@ export class AppointmentsService {
     await this.notify(
       userId,
       advisor.userId,
-      `New appointment request from ${client.displayName || client.user.name} for ${formatUtc(scheduledAt)}. ` +
+      `New appointment request from ${client.displayName} for ${formatUtc(scheduledAt)}. ` +
         'Open Appointments in your dashboard to accept or decline.',
     );
 

@@ -24,6 +24,7 @@ export class AccountService {
       select: {
         id: true,
         email: true,
+        username: true,
         name: true,
         role: true,
         createdAt: true,
@@ -86,7 +87,7 @@ export class AccountService {
       user.advisorProfile
         ? await this.prisma.callSession.findMany({
             where: { advisorId: user.advisorProfile.id },
-            include: { client: { include: { user: { select: { name: true, email: true } } } } },
+            include: { client: { select: { displayName: true } } },
             orderBy: { startedAt: 'desc' },
             take: 8,
           })
@@ -270,7 +271,6 @@ export class AccountService {
       where: { id: advisor.id },
       data: {
         ...(phoneNumber !== undefined ? { phoneNumber } : {}),
-        ...(dto.displayName !== undefined ? { displayName: dto.displayName.trim() } : {}),
         ...(dto.bio !== undefined ? { bio: dto.bio.trim() || null } : {}),
         ...(dto.profileImageUrl !== undefined ? { profileImageUrl: dto.profileImageUrl.trim() || null } : {}),
         ...(dto.ratePerMinute !== undefined

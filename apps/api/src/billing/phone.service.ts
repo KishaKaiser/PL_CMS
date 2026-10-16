@@ -1,7 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhoneNumber } from '../telephony/phone-number';
-import { ensureAdvisorSlug, publicReviewerName } from './advisor-slug';
+import { publicName } from '../common/public-identity';
+import { ensureAdvisorSlug } from './advisor-slug';
 import { SubmitReviewDto } from './billing.dto';
 import { LIVE_STATUSES } from './billing.service';
 
@@ -78,7 +79,7 @@ export class PhoneService {
       }),
       this.prisma.advisorReview.findMany({
         where: { advisorId: advisor.id },
-        select: { id: true, rating: true, comment: true, createdAt: true, user: { select: { name: true } } },
+        select: { id: true, rating: true, comment: true, createdAt: true, user: { select: { username: true, role: true } } },
         orderBy: { createdAt: 'desc' },
         take: MAX_PUBLIC_REVIEWS,
       }),
@@ -107,7 +108,7 @@ export class PhoneService {
         rating: review.rating,
         comment: review.comment,
         createdAt: review.createdAt,
-        reviewerName: publicReviewerName(review.user.name),
+        reviewerName: publicName(review.user),
       })),
     };
   }
