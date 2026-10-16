@@ -52,6 +52,7 @@ export function AppointmentsPanel({ mode }: { mode: Mode }) {
   const [loadError, setLoadError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  const [queueWaiting, setQueueWaiting] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -59,11 +60,17 @@ export function AppointmentsPanel({ mode }: { mode: Mode }) {
       if (!res.ok) throw new Error(await readMessage(res, 'Could not load appointments'));
       setAppointments((await res.json()) as Appointment[]);
       setLoadError('');
+      if (mode === 'advisor') {
+        const queue = await fetch('/api/proxy/callbacks/mine')
+          .then((r) => (r.ok ? (r.json() as Promise<{ waiting?: number }>) : null))
+          .catch(() => null);
+        setQueueWaiting(queue?.waiting ?? 0);
+      }
     } catch (err: unknown) {
       setLoadError(err instanceof Error ? err.message : 'Could not load appointments');
       setAppointments((current) => current ?? []);
     }
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     void load();
@@ -167,6 +174,13 @@ export function AppointmentsPanel({ mode }: { mode: Mode }) {
           Refresh
         </button>
       </div>
+
+      {mode === 'advisor' && queueWaiting > 0 && (
+        <p className="mb-3 rounded-lg bg-purple-50 px-4 py-3 text-sm text-purple-900">
+          {queueWaiting} {queueWaiting === 1 ? 'client is' : 'clients are'} waiting in your callback line. We ring each one in turn when
+          you are online and free, then ring you to connect. If you are offline, they start as soon as you go online.
+        </p>
+      )}
 
       {loadError && <p className="mb-3 text-sm text-red-600">{loadError}</p>}
       {actionError && <p className="mb-3 text-sm text-red-600">{actionError}</p>}

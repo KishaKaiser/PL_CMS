@@ -116,6 +116,11 @@ export class UpdateAdvisorProfileDto {
   @IsOptional()
   @IsBoolean()
   isOnline?: boolean;
+
+  /** Whether clients can wait in line for this advisor while they are on another call. */
+  @IsOptional()
+  @IsBoolean()
+  queueCallingEnabled?: boolean;
 }
 
 const TIME_OF_DAY = /^([01]\d|2[0-3]):[0-5]\d$/;

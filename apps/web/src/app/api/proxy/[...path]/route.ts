@@ -21,6 +21,7 @@ const ALLOWED_PATH_PREFIXES = [
   'billing',
   'phone',
   'appointments',
+  'callbacks',
   'account',
   'dashboard',
   'modules',

@@ -31,6 +31,7 @@ export class PhoneService {
         bio: true,
         profileImageUrl: true,
         ratePerMinute: true,
+        queueCallingEnabled: true,
       },
       orderBy: { displayName: 'asc' },
       take: 100,
@@ -41,13 +42,20 @@ export class PhoneService {
       select: { advisorId: true },
     });
     const busyIds = new Set(onCall.map((session) => session.advisorId));
+    const queueLengths = await this.queueLengths(advisors.map((advisor) => advisor.id));
 
     const cards = await Promise.all(
-      advisors.map(async (advisor) => ({
-        ...advisor,
-        slug: await ensureAdvisorSlug(this.prisma, advisor),
-        busy: busyIds.has(advisor.id),
-      })),
+      advisors.map(async ({ queueCallingEnabled, ...advisor }) => {
+        const queueLength = queueLengths.get(advisor.id) ?? 0;
+        return {
+          ...advisor,
+          slug: await ensureAdvisorSlug(this.prisma, advisor),
+          // Busy while on a call, or while clients already in line are waiting for their turn.
+          busy: busyIds.has(advisor.id) || queueLength > 0,
+          queueEnabled: queueCallingEnabled,
+          queueLength,
+        };
+      }),
     );
 
     // Array.prototype.sort is stable, so advisors keep their alphabetical order within each group.
@@ -62,7 +70,7 @@ export class PhoneService {
     const advisor = await this.findPublicAdvisor(slugOrId);
     const slug = await ensureAdvisorSlug(this.prisma, advisor);
 
-    const [slots, liveSession, ratings, reviews] = await Promise.all([
+    const [slots, liveSession, ratings, reviews, queueLengths] = await Promise.all([
       this.prisma.availabilitySchedule.findMany({
         where: { advisorId: advisor.id },
         select: { dayOfWeek: true, startTime: true, endTime: true, timezone: true },
@@ -83,7 +91,9 @@ export class PhoneService {
         orderBy: { createdAt: 'desc' },
         take: MAX_PUBLIC_REVIEWS,
       }),
+      this.queueLengths([advisor.id]),
     ]);
+    const queueLength = queueLengths.get(advisor.id) ?? 0;
 
     const average = ratings._avg.rating;
     return {
@@ -94,7 +104,9 @@ export class PhoneService {
       profileImageUrl: advisor.profileImageUrl,
       ratePerMinute: advisor.ratePerMinute,
       isOnline: advisor.isOnline,
-      busy: advisor.isOnline && liveSession !== null,
+      busy: advisor.isOnline && (liveSession !== null || queueLength > 0),
+      queueEnabled: advisor.queueCallingEnabled,
+      queueLength,
       schedule: {
         timezone: slots[0]?.timezone ?? null,
         slots: slots.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime, endTime })),
@@ -168,6 +180,19 @@ export class PhoneService {
   }
 
   /** An advisor with a public page: set up to take calls (phone number and rate), found by slug or id. */
+  /** How many clients are waiting in (or being called from) each advisor's queue. */
+  private async queueLengths(advisorIds: string[]): Promise<Map<string, number>> {
+    const spots = await this.prisma.queueAssignment.findMany({
+      where: { status: { in: ['WAITING', 'CALLING'] }, queue: { advisorId: { in: advisorIds } } },
+      select: { queue: { select: { advisorId: true } } },
+    });
+    const lengths = new Map<string, number>();
+    for (const spot of spots) {
+      lengths.set(spot.queue.advisorId, (lengths.get(spot.queue.advisorId) ?? 0) + 1);
+    }
+    return lengths;
+  }
+
   private async findPublicAdvisor(slugOrId: string) {
     const advisor = await this.prisma.advisorProfile.findFirst({
       where: {
@@ -184,6 +209,7 @@ export class PhoneService {
         profileImageUrl: true,
         ratePerMinute: true,
         isOnline: true,
+        queueCallingEnabled: true,
       },
     });
     if (!advisor) throw new NotFoundException('Advisor not found');

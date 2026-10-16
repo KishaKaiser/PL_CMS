@@ -278,6 +278,7 @@ export class AccountService {
           ? { ratePerMinute: new Decimal(dto.ratePerMinute) }
           : {}),
         ...(dto.isOnline !== undefined ? { isOnline: dto.isOnline } : {}),
+        ...(dto.queueCallingEnabled !== undefined ? { queueCallingEnabled: dto.queueCallingEnabled } : {}),
       },
     });
   }

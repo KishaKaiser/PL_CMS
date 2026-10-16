@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { CallbackQueueStatus } from '../../../components/phone/callback-queue-status';
 
 interface ActiveSession {
   id: string;
@@ -138,6 +139,9 @@ export default function ClientSessionPage() {
   if (!session) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
+        <div className="w-full max-w-sm text-left">
+          <CallbackQueueStatus />
+        </div>
         <div className="rounded-xl border bg-white p-8 shadow-md text-center max-w-sm w-full">
           <h1 className="mb-2 text-2xl font-bold text-gray-800">{callEnded ? 'Call Ended' : 'No Active Call'}</h1>
           <p className="text-gray-500 mb-6">
