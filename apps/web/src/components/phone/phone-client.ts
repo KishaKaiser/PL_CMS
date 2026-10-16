@@ -50,3 +50,17 @@ export async function startCallRequest(advisorId: string): Promise<void> {
 export function loginUrl(next: string): string {
   return `/login?next=${encodeURIComponent(next)}`;
 }
+
+/** Fired after joining or leaving a queue so the "your place in line" notice refreshes right away. */
+export const QUEUE_CHANGED_EVENT = 'callback-queue-changed';
+
+/** Puts the client in line for a busy advisor; we ring them when it is their turn. Throws with the server's message on failure. */
+export async function joinQueueRequest(advisorId: string, maxWaitMinutes: number): Promise<void> {
+  const res = await fetch('/api/proxy/callbacks/join', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ advisorId, maxWaitMinutes }),
+  });
+  if (!res.ok) throw new Error(await readMessage(res, 'Could not join the line'));
+  window.dispatchEvent(new Event(QUEUE_CHANGED_EVENT));
+}

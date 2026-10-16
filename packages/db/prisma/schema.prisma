@@ -231,6 +231,7 @@ model CallSession {
   client  ClientProfile  @relation("ClientSessions", fields: [clientId], references: [id])
   walletTransactions WalletTransaction[]
   appointment Appointment?
+  queueAssignment QueueAssignment?
 
   @@map("call_sessions")
 }
@@ -263,12 +264,22 @@ model QueueAssignment {
   // Computed at join time as joinedAt + maxWaitMinutes; a sweep expires any
   // still-WAITING assignment past this time.
   expiresAt      DateTime
-  status         String   @default("WAITING") // WAITING | CALLED | CANCELLED | EXPIRED
+  // WAITING → CALLING (the callback is being placed) → COMPLETED | MISSED.
+  // Or CANCELLED (the client left) / EXPIRED (waited too long, the advisor went
+  // offline or stopped the queue, or the wallet ran short).
+  status         String   @default("WAITING")
+  // Why a spot ended without a call, shown to the client.
+  note           String?
+  // The callback placed for this spot; set when the system starts dialing.
+  callSessionId  String?  @unique
+  updatedAt      DateTime @default(now()) @updatedAt
 
-  queue  CallQueue     @relation(fields: [queueId], references: [id], onDelete: Cascade)
-  client ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  queue       CallQueue     @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  client      ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  callSession CallSession?  @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
 
   @@index([queueId, status])
+  @@index([clientId, status])
   @@map("queue_assignments")
 }
 

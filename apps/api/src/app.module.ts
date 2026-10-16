@@ -13,6 +13,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { WalletModule } from './wallet/wallet.module';
 import { BillingModule } from './billing/billing.module';
 import { AppointmentsModule } from './appointments/appointments.module';
+import { CallbacksModule } from './callbacks/callbacks.module';
 import { ShippingModule } from './shipping/shipping.module';
 import { FulfillmentModule } from './fulfillment/fulfillment.module';
 import { AdminModule } from './admin/admin.module';
@@ -48,6 +49,7 @@ import { IdentityModule } from './identity/identity.module';
     WalletModule,
     BillingModule,
     AppointmentsModule,
+    CallbacksModule,
     ShippingModule,
     FulfillmentModule,
     AdminModule,

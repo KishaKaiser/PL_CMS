@@ -81,6 +81,7 @@ interface AdvisorProfile {
   profileImageUrl?: string | null;
   ratePerMinute: number | string;
   isOnline: boolean;
+  queueCallingEnabled?: boolean;
   phoneNumber?: string | null;
   slug?: string | null;
 }
@@ -176,6 +177,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
   const [addressForm, setAddressForm] = useState(emptyAddress);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentMethod);
   const [advisorForm, setAdvisorForm] = useState({
+    queueCallingEnabled: false,
     bio: '',
     ratePerMinute: '0',
     phoneNumber: '',
@@ -198,6 +200,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
       setAccountName(nextData.user.name);
       if (nextData.advisor?.profile) {
         setAdvisorForm({
+          queueCallingEnabled: nextData.advisor.profile.queueCallingEnabled ?? false,
           bio: nextData.advisor.profile.bio ?? '',
           ratePerMinute: String(nextData.advisor.profile.ratePerMinute ?? 0),
           phoneNumber: nextData.advisor.profile.phoneNumber ?? '',
@@ -662,6 +665,15 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                 <textarea value={advisorForm.bio} onChange={(event) => setAdvisorForm((f) => ({ ...f, bio: event.target.value }))} rows={5} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100" />
               </label>
               <Checkbox checked={advisorForm.isOnline} label="Available online" onChange={(isOnline) => setAdvisorForm((f) => ({ ...f, isOnline }))} />
+              <Checkbox
+                checked={advisorForm.queueCallingEnabled}
+                label="Let clients wait in line while I am on a call"
+                onChange={(queueCallingEnabled) => setAdvisorForm((f) => ({ ...f, queueCallingEnabled }))}
+              />
+              <p className="-mt-2 text-xs text-gray-500">
+                When you finish a call, we ring the client who has waited longest and then ring you to connect. Clients who do not
+                pick up lose their turn.
+              </p>
               <PrimaryButton disabled={saving === 'advisor'}>Save Advisor Profile</PrimaryButton>
             </form>
             {data.advisor && <AdvisorScheduleEditor initialSlots={data.advisor.schedule ?? []} />}

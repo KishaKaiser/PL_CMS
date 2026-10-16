@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fundsNotice, loginUrl, startCallRequest, usePhoneProfile, type PhoneProfile } from './phone-client';
+import { CallbackQueueStatus } from './callback-queue-status';
+import { JoinQueueDialog } from './join-queue-dialog';
+import { fundsNotice, joinQueueRequest, loginUrl, startCallRequest, usePhoneProfile, type PhoneProfile } from './phone-client';
 import { PhonePromptDialog } from './phone-prompt-dialog';
 import { formatDollars } from './phone-format';
 import { ScheduleDialog } from './schedule-dialog';
@@ -15,15 +17,24 @@ interface Advisor {
   ratePerMinute: number | string;
   isOnline: boolean;
   busy: boolean;
+  queueEnabled: boolean;
+  queueLength: number;
 }
 
 /** Call Now and Schedule a Call for one advisor, shown on their public profile page. */
 export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; primaryColor: string }) {
   const { profile, setProfile } = usePhoneProfile();
-  const [status, setStatus] = useState({ isOnline: advisor.isOnline, busy: advisor.busy });
+  const [status, setStatus] = useState({
+    isOnline: advisor.isOnline,
+    busy: advisor.busy,
+    queueEnabled: advisor.queueEnabled,
+    queueLength: advisor.queueLength,
+  });
   const [calling, setCalling] = useState(false);
   const [notice, setNotice] = useState<{ text: string; suggestedDollars?: number } | null>(null);
   const [askPhone, setAskPhone] = useState(false);
+  const [phoneIntent, setPhoneIntent] = useState<'call' | 'queue'>('call');
+  const [joiningQueue, setJoiningQueue] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [confirmation, setConfirmation] = useState('');
 
@@ -31,9 +42,16 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
   useEffect(() => {
     const refresh = setInterval(() => {
       fetch(`/api/proxy/phone/advisors/${encodeURIComponent(advisor.slug)}`)
-        .then((res) => (res.ok ? (res.json() as Promise<{ isOnline: boolean; busy: boolean }>) : null))
+        .then((res) => (res.ok ? (res.json() as Promise<typeof status>) : null))
         .then((fresh) => {
-          if (fresh) setStatus({ isOnline: fresh.isOnline, busy: fresh.busy });
+          if (fresh) {
+            setStatus({
+              isOnline: fresh.isOnline,
+              busy: fresh.busy,
+              queueEnabled: fresh.queueEnabled,
+              queueLength: fresh.queueLength,
+            });
+          }
         })
         .catch(() => undefined);
     }, STATUS_REFRESH_MS);
@@ -42,6 +60,7 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
 
   const returnTo = `/advisors/${advisor.slug}`;
   const unavailable = !status.isOnline || status.busy;
+  const canQueue = status.isOnline && status.busy && status.queueEnabled;
 
   async function startCall(current: PhoneProfile) {
     const shortfall = fundsNotice(advisor.displayName, advisor.ratePerMinute, current);
@@ -68,10 +87,35 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
       return;
     }
     if (!profile.phoneNumber) {
+      setPhoneIntent('call');
       setAskPhone(true);
       return;
     }
     void startCall(profile);
+  }
+
+  function openQueue(current: PhoneProfile) {
+    const shortfall = fundsNotice(advisor.displayName, advisor.ratePerMinute, current);
+    if (shortfall) {
+      setNotice(shortfall);
+      return;
+    }
+    setNotice(null);
+    setJoiningQueue(true);
+  }
+
+  function handleJoinQueue() {
+    setConfirmation('');
+    if (!profile) {
+      window.location.href = loginUrl(returnTo);
+      return;
+    }
+    if (!profile.phoneNumber) {
+      setPhoneIntent('queue');
+      setAskPhone(true);
+      return;
+    }
+    openQueue(profile);
   }
 
   function handleSchedule() {
@@ -88,6 +132,8 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
 
   return (
     <div className="grid gap-3">
+      <CallbackQueueStatus />
+
       {profile && (
         <p className="text-sm text-gray-600">
           Wallet balance: <span className="font-semibold">{formatDollars(profile.balanceCents)}</span>{' '}
@@ -97,14 +143,24 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
         </p>
       )}
 
-      <button
-        onClick={handleCallNow}
-        disabled={unavailable || calling}
-        className="w-full rounded-lg py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-        style={{ backgroundColor: primaryColor }}
-      >
-        {label}
-      </button>
+      {canQueue ? (
+        <button
+          onClick={handleJoinQueue}
+          className="w-full rounded-lg py-3 text-base font-semibold text-white"
+          style={{ backgroundColor: primaryColor }}
+        >
+          Join the line{status.queueLength > 0 ? ` (${status.queueLength} waiting)` : ''}
+        </button>
+      ) : (
+        <button
+          onClick={handleCallNow}
+          disabled={unavailable || calling}
+          className="w-full rounded-lg py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ backgroundColor: primaryColor }}
+        >
+          {label}
+        </button>
+      )}
 
       <button
         onClick={handleSchedule}
@@ -147,8 +203,22 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
           onSaved={(saved) => {
             setProfile(saved);
             setAskPhone(false);
-            void startCall(saved);
+            if (phoneIntent === 'queue') openQueue(saved);
+            else void startCall(saved);
           }}
+        />
+      )}
+
+      {joiningQueue && (
+        <JoinQueueDialog
+          advisorName={advisor.displayName}
+          queueLength={status.queueLength}
+          primaryColor={primaryColor}
+          onJoin={async (maxWaitMinutes) => {
+            await joinQueueRequest(advisor.id, maxWaitMinutes);
+            setJoiningQueue(false);
+          }}
+          onClose={() => setJoiningQueue(false)}
         />
       )}
 

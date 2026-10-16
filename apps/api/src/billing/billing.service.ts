@@ -35,6 +35,9 @@ const ADVISOR_PROMPT = 'You have a call from The Psychic Link. Press 1 to accept
 const scheduledClientPrompt = (advisorName: string) =>
   `Welcome to The Psychic Link. This is your scheduled call with ${advisorName}. To begin your call, press 1 now.`;
 const SCHEDULED_ADVISOR_PROMPT = 'You have a scheduled call from The Psychic Link. Press 1 to accept this call.';
+const queuedClientPrompt = (advisorName: string) =>
+  `Welcome to The Psychic Link. ${advisorName} is ready to take your call now. To begin your call, press 1 now.`;
+const QUEUED_ADVISOR_PROMPT = 'The next client in your queue is ready. Press 1 to accept this call.';
 const CLIENT_UNAVAILABLE_MESSAGE =
   'We are sorry, your advisor is unavailable right now. You have not been charged. Goodbye.';
 const CLIENT_LOW_BALANCE_WARNING =
@@ -108,10 +111,24 @@ export class BillingService {
     return this.placeCall(client, advisor, { requireOnline: false, appointmentId: appointment.id });
   }
 
+  /**
+   * Places the callback for a client who was waiting in the advisor's queue. Same checks and press-1 flow as a live
+   * call, and the advisor must still be online.
+   */
+  async startQueuedCall(assignment: { id: string; clientId: string; advisorId: string }) {
+    const client = await this.prisma.clientProfile.findUnique({ where: { id: assignment.clientId } });
+    if (!client) throw new NotFoundException('Client profile not found');
+
+    const advisor = await this.prisma.advisorProfile.findUnique({ where: { id: assignment.advisorId } });
+    if (!advisor) throw new NotFoundException('Advisor not found');
+
+    return this.placeCall(client, advisor, { requireOnline: true, queueAssignmentId: assignment.id });
+  }
+
   private async placeCall(
     client: ClientProfile,
     advisor: AdvisorProfile,
-    options: { requireOnline: boolean; appointmentId?: string },
+    options: { requireOnline: boolean; appointmentId?: string; queueAssignmentId?: string },
   ) {
     if (!client.phoneNumber) {
       throw new BadRequestException('Add your phone number so we know where to call you.');
@@ -129,6 +146,21 @@ export class BillingService {
       throw new BadRequestException(
         `You need at least $${(requiredCents / 100).toFixed(2)} (${MIN_CALL_MINUTES} minutes) in your wallet to call this advisor.`,
       );
+    }
+
+    // Clients waiting in this advisor's queue go first: nobody can jump the line with Call Now.
+    // (Appointments and the queue's own callbacks are exempt.)
+    if (options.requireOnline && !options.queueAssignmentId) {
+      const ahead = await this.prisma.queueAssignment.count({
+        where: {
+          status: { in: ['WAITING', 'CALLING'] },
+          clientId: { not: client.id },
+          queue: { advisorId: advisor.id },
+        },
+      });
+      if (ahead > 0) {
+        throw new ConflictException('Other clients are waiting for this advisor. Please join the queue.');
+      }
     }
 
     const busy = await this.prisma.callSession.findFirst({
@@ -152,6 +184,20 @@ export class BillingService {
       await this.prisma.appointment.update({
         where: { id: options.appointmentId },
         data: { callSessionId: session.id },
+      });
+    }
+
+    // Same for a queued callback.
+    if (options.queueAssignmentId) {
+      await this.prisma.queueAssignment.update({
+        where: { id: options.queueAssignmentId },
+        data: { callSessionId: session.id },
+      });
+    } else if (options.requireOnline) {
+      // Calling this advisor directly settles any spot this client had in their queue.
+      await this.prisma.queueAssignment.updateMany({
+        where: { clientId: client.id, status: 'WAITING', queue: { advisorId: advisor.id } },
+        data: { status: 'CANCELLED' },
       });
     }
 
@@ -257,6 +303,7 @@ export class BillingService {
         status: true,
         advisor: { select: { displayName: true } },
         appointment: { select: { id: true } },
+        queueAssignment: { select: { id: true } },
       },
     });
     if (!session || session.status.startsWith('ENDED')) {
@@ -274,7 +321,11 @@ export class BillingService {
     try {
       await this.telnyx.promptToPressOne(
         clientCallControlId,
-        session.appointment ? scheduledClientPrompt(session.advisor?.displayName ?? 'your advisor') : CLIENT_PROMPT,
+        session.appointment
+          ? scheduledClientPrompt(session.advisor?.displayName ?? 'your advisor')
+          : session.queueAssignment
+            ? queuedClientPrompt(session.advisor?.displayName ?? 'your advisor')
+            : CLIENT_PROMPT,
         { sessionId, leg: 'client', step: 'consent' },
       );
     } catch (error) {
@@ -292,7 +343,7 @@ export class BillingService {
   private async onAdvisorAnswered(sessionId: string, advisorCallControlId: string) {
     const session = await this.prisma.callSession.findUnique({
       where: { id: sessionId },
-      select: { status: true, appointment: { select: { id: true } } },
+      select: { status: true, appointment: { select: { id: true } }, queueAssignment: { select: { id: true } } },
     });
     if (!session || session.status !== 'DIALING_ADVISOR') {
       await this.telnyx.hangup(advisorCallControlId);
@@ -302,7 +353,7 @@ export class BillingService {
     try {
       await this.telnyx.promptToPressOne(
         advisorCallControlId,
-        session.appointment ? SCHEDULED_ADVISOR_PROMPT : ADVISOR_PROMPT,
+        session.appointment ? SCHEDULED_ADVISOR_PROMPT : session.queueAssignment ? QUEUED_ADVISOR_PROMPT : ADVISOR_PROMPT,
         { sessionId, leg: 'advisor', step: 'consent' },
       );
     } catch (error) {

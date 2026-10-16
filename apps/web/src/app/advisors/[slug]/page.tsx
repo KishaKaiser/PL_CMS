@@ -22,6 +22,8 @@ interface AdvisorProfile {
   ratePerMinute: number | string;
   isOnline: boolean;
   busy: boolean;
+  queueEnabled: boolean;
+  queueLength: number;
   schedule: {
     timezone: string | null;
     slots: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
@@ -137,6 +139,8 @@ export default async function AdvisorProfilePage({ params }: Props) {
                     ratePerMinute: advisor.ratePerMinute,
                     isOnline: advisor.isOnline,
                     busy: advisor.busy,
+                    queueEnabled: advisor.queueEnabled,
+                    queueLength: advisor.queueLength,
                   }}
                   primaryColor={primaryColor}
                 />

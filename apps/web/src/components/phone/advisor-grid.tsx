@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { fundsNotice, loginUrl, startCallRequest, usePhoneProfile, type PhoneProfile } from './phone-client';
+import { CallbackQueueStatus } from './callback-queue-status';
+import { JoinQueueDialog } from './join-queue-dialog';
+import { fundsNotice, joinQueueRequest, loginUrl, startCallRequest, usePhoneProfile, type PhoneProfile } from './phone-client';
 import { PhonePromptDialog } from './phone-prompt-dialog';
 import { formatDollars, readMessage, toCents } from './phone-format';
 
@@ -13,6 +15,8 @@ interface AdvisorCard {
   profileImageUrl: string | null;
   ratePerMinute: number | string;
   busy: boolean;
+  queueEnabled: boolean;
+  queueLength: number;
 }
 
 const REFRESH_INTERVAL_MS = 15_000;
@@ -24,6 +28,9 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
   const [callingId, setCallingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ advisorId: string; text: string; needsFunds?: boolean; suggestedDollars?: number } | null>(null);
   const [phoneFor, setPhoneFor] = useState<AdvisorCard | null>(null);
+  // What to do once the client has given their phone number: call now, or join the line.
+  const [phoneIntent, setPhoneIntent] = useState<'call' | 'queue'>('call');
+  const [queueFor, setQueueFor] = useState<AdvisorCard | null>(null);
 
   const loadAdvisors = useCallback(async () => {
     try {
@@ -67,14 +74,46 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
       return;
     }
     if (!profile.phoneNumber) {
+      setPhoneIntent('call');
       setPhoneFor(advisor);
       return;
     }
     void startCall(advisor, profile);
   }
 
+  function openQueue(advisor: AdvisorCard, current: PhoneProfile) {
+    const shortfall = fundsNotice(advisor.displayName, advisor.ratePerMinute, current);
+    if (shortfall) {
+      setNotice({ advisorId: advisor.id, text: shortfall.text, needsFunds: true, suggestedDollars: shortfall.suggestedDollars });
+      return;
+    }
+    setNotice(null);
+    setQueueFor(advisor);
+  }
+
+  function handleJoinQueue(advisor: AdvisorCard) {
+    if (!profile) {
+      window.location.href = loginUrl('/phone-readings');
+      return;
+    }
+    if (!profile.phoneNumber) {
+      setPhoneIntent('queue');
+      setPhoneFor(advisor);
+      return;
+    }
+    openQueue(advisor, profile);
+  }
+
+  async function joinQueue(advisor: AdvisorCard, maxWaitMinutes: number) {
+    await joinQueueRequest(advisor.id, maxWaitMinutes);
+    setQueueFor(null);
+    void loadAdvisors();
+  }
+
   return (
     <div>
+      <CallbackQueueStatus />
+
       {profile && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white px-4 py-3 text-sm">
           <p>
@@ -121,7 +160,9 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
                     <p className="text-sm text-gray-600">{formatDollars(toCents(advisor.ratePerMinute))} / min</p>
                     <p className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${advisor.busy ? 'text-amber-700' : 'text-green-700'}`}>
                       <span className={`h-2 w-2 rounded-full ${advisor.busy ? 'bg-amber-500' : 'bg-green-500'}`} />
-                      {advisor.busy ? 'On another call' : 'Available now'}
+                      {advisor.busy
+                        ? `On another call${advisor.queueLength > 0 ? ` · ${advisor.queueLength} waiting` : ''}`
+                        : 'Available now'}
                     </p>
                   </div>
                 </a>
@@ -129,14 +170,25 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
                 {advisor.bio && <p className="mt-4 line-clamp-3 text-sm text-gray-600">{advisor.bio}</p>}
 
                 <div className="mt-auto grid gap-2 pt-5">
-                  <button
-                    onClick={() => handleCallNow(advisor)}
-                    disabled={advisor.busy || callingId !== null}
-                    className="w-full rounded-lg py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ backgroundColor: primaryColor }}
-                  >
-                    {calling ? 'Calling…' : advisor.busy ? 'Unavailable' : 'Call Now'}
-                  </button>
+                  {advisor.busy && advisor.queueEnabled ? (
+                    <button
+                      onClick={() => handleJoinQueue(advisor)}
+                      disabled={callingId !== null}
+                      className="w-full rounded-lg py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{ backgroundColor: primaryColor }}
+                    >
+                      Join the line
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleCallNow(advisor)}
+                      disabled={advisor.busy || callingId !== null}
+                      className="w-full rounded-lg py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{ backgroundColor: primaryColor }}
+                    >
+                      {calling ? 'Calling…' : advisor.busy ? 'Unavailable' : 'Call Now'}
+                    </button>
+                  )}
                   <a
                     href={profileHref}
                     className="text-center text-sm font-medium underline"
@@ -173,8 +225,19 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
             const advisor = phoneFor;
             setProfile(saved);
             setPhoneFor(null);
-            void startCall(advisor, saved);
+            if (phoneIntent === 'queue') openQueue(advisor, saved);
+            else void startCall(advisor, saved);
           }}
+        />
+      )}
+
+      {queueFor && (
+        <JoinQueueDialog
+          advisorName={queueFor.displayName}
+          queueLength={queueFor.queueLength}
+          primaryColor={primaryColor}
+          onJoin={(maxWaitMinutes) => joinQueue(queueFor, maxWaitMinutes)}
+          onClose={() => setQueueFor(null)}
         />
       )}
     </div>
