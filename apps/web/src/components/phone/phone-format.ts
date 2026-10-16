@@ -13,6 +13,12 @@ export async function readMessage(res: Response, fallback: string): Promise<stri
   return data.message ?? fallback;
 }
 
+/** "+18885550100" becomes "1-888-555-0100"; anything else is shown as it was given. */
+export function formatPhoneForDisplay(e164: string): string {
+  const match = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164);
+  return match ? `1-${match[1]}-${match[2]}-${match[3]}` : e164;
+}
+
 /** Index 0 is Sunday, matching the API. */
 export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 

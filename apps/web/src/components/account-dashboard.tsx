@@ -82,6 +82,7 @@ interface AdvisorProfile {
   ratePerMinute: number | string;
   isOnline: boolean;
   queueCallingEnabled?: boolean;
+  sipExtension?: string | null;
   phoneNumber?: string | null;
   slug?: string | null;
 }
@@ -134,6 +135,7 @@ interface DashboardData {
     payoutMethods: PayoutMethod[];
     callTransactions: CallTransaction[];
     schedule: ScheduleSlot[];
+    hotlineNumber?: string | null;
   };
 }
 
@@ -650,7 +652,11 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
 
           {activeSection === 'advisor-profile' && isAdvisor && (
             <div className="space-y-10">
-            <AdvisorPublicLink slug={data.advisor?.profile.slug ?? null} />
+            <AdvisorPublicLink
+              slug={data.advisor?.profile.slug ?? null}
+              extension={data.advisor?.profile.sipExtension ?? null}
+              hotlineNumber={data.advisor?.hotlineNumber ?? null}
+            />
             <form onSubmit={handleAdvisorSave} className="max-w-2xl space-y-4">
               <ReadOnly label="Public name" value={data.user.publicName ?? data.advisor?.profile.displayName ?? ''} />
               <Input label="Rate per minute" value={advisorForm.ratePerMinute} onChange={(ratePerMinute) => setAdvisorForm((f) => ({ ...f, ratePerMinute }))} type="number" />

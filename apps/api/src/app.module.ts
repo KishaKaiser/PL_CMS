@@ -14,6 +14,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { BillingModule } from './billing/billing.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { CallbacksModule } from './callbacks/callbacks.module';
+import { HotlineModule } from './hotline/hotline.module';
 import { ShippingModule } from './shipping/shipping.module';
 import { FulfillmentModule } from './fulfillment/fulfillment.module';
 import { AdminModule } from './admin/admin.module';
@@ -50,6 +51,7 @@ import { IdentityModule } from './identity/identity.module';
     BillingModule,
     AppointmentsModule,
     CallbacksModule,
+    HotlineModule,
     ShippingModule,
     FulfillmentModule,
     AdminModule,

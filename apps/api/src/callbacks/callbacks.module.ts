@@ -7,5 +7,6 @@ import { CallbacksService } from './callbacks.service';
   imports: [BillingModule],
   controllers: [CallbacksController],
   providers: [CallbacksService],
+  exports: [CallbacksService],
 })
 export class CallbacksModule {}

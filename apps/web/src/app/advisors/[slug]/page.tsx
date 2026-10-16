@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { AdvisorActions } from '../../../components/phone/advisor-actions';
-import { formatDollars, formatTimeOfDay, toCents, WEEK_ORDER, WEEKDAYS } from '../../../components/phone/phone-format';
+import { formatDollars, formatPhoneForDisplay, formatTimeOfDay, toCents, WEEK_ORDER, WEEKDAYS } from '../../../components/phone/phone-format';
 import { ReviewForm } from '../../../components/phone/review-form';
 import { StarRating } from '../../../components/phone/star-rating';
 import { PublicSiteShell } from '../../../components/public-site-shell';
@@ -24,6 +24,7 @@ interface AdvisorProfile {
   busy: boolean;
   queueEnabled: boolean;
   queueLength: number;
+  hotline: { number: string; extension: string } | null;
   schedule: {
     timezone: string | null;
     slots: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
@@ -145,6 +146,17 @@ export default async function AdvisorProfilePage({ params }: Props) {
                   primaryColor={primaryColor}
                 />
               </div>
+
+              {advisor.hotline && (
+                <p className="mt-5 border-t pt-4 text-center text-sm text-gray-600">
+                  Prefer to phone in? Call{' '}
+                  <a href={`tel:${advisor.hotline.number}`} className="font-semibold underline" style={{ color: primaryColor }}>
+                    {formatPhoneForDisplay(advisor.hotline.number)}
+                  </a>{' '}
+                  and enter extension <span className="font-semibold text-gray-900">{advisor.hotline.extension}</span>. Call from the phone
+                  number saved in your account.
+                </p>
+              )}
             </div>
           </aside>
 

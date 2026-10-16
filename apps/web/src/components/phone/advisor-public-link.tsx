@@ -1,9 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatPhoneForDisplay } from './phone-format';
 
 /** The advisor's own public profile link, with a copy button, shown in their dashboard. */
-export function AdvisorPublicLink({ slug }: { slug: string | null }) {
+export function AdvisorPublicLink({
+  slug,
+  extension,
+  hotlineNumber,
+}: {
+  slug: string | null;
+  extension?: string | null;
+  hotlineNumber?: string | null;
+}) {
   const [origin, setOrigin] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -48,6 +57,12 @@ export function AdvisorPublicLink({ slug }: { slug: string | null }) {
           View
         </a>
       </div>
+      {extension && hotlineNumber && (
+        <p className="mt-4 text-sm text-gray-700">
+          Clients can also phone in: they call <span className="font-semibold">{formatPhoneForDisplay(hotlineNumber)}</span> and
+          enter your extension, <span className="font-semibold">{extension}</span>.
+        </p>
+      )}
     </div>
   );
 }
