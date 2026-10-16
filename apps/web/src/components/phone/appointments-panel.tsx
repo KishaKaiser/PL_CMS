@@ -177,8 +177,8 @@ export function AppointmentsPanel({ mode }: { mode: Mode }) {
 
       {mode === 'advisor' && queueWaiting > 0 && (
         <p className="mb-3 rounded-lg bg-purple-50 px-4 py-3 text-sm text-purple-900">
-          {queueWaiting} {queueWaiting === 1 ? 'client is' : 'clients are'} waiting in your callback line. We ring each one when your
-          current call ends, then ring you.
+          {queueWaiting} {queueWaiting === 1 ? 'client is' : 'clients are'} waiting in your callback line. We ring each one in turn when
+          you are online and free, then ring you to connect. If you are offline, they start as soon as you go online.
         </p>
       )}
 

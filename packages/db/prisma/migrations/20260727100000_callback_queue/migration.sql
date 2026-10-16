@@ -3,6 +3,8 @@
 
 ALTER TABLE "queue_assignments" ADD COLUMN IF NOT EXISTS "note" TEXT;
 ALTER TABLE "queue_assignments" ADD COLUMN IF NOT EXISTS "callSessionId" TEXT;
+ALTER TABLE "queue_assignments" ADD COLUMN IF NOT EXISTS "attempts" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "queue_assignments" ADD COLUMN IF NOT EXISTS "nextAttemptAt" TIMESTAMP(3);
 ALTER TABLE "queue_assignments" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "queue_assignments_callSessionId_key" ON "queue_assignments"("callSessionId");

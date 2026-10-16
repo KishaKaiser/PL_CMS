@@ -60,7 +60,10 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
 
   const returnTo = `/advisors/${advisor.slug}`;
   const unavailable = !status.isOnline || status.busy;
-  const canQueue = status.isOnline && status.busy && status.queueEnabled;
+  // Online but busy: wait in line (open while the advisor allows it, or while a line already exists).
+  const canQueue = status.isOnline && status.busy && (status.queueEnabled || status.queueLength > 0);
+  // Offline: ask for a callback that starts when the advisor comes online.
+  const canRequestCallback = !status.isOnline;
 
   async function startCall(current: PhoneProfile) {
     const shortfall = fundsNotice(advisor.displayName, advisor.ratePerMinute, current);
@@ -143,13 +146,14 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
         </p>
       )}
 
-      {canQueue ? (
+      {canQueue || canRequestCallback ? (
         <button
           onClick={handleJoinQueue}
           className="w-full rounded-lg py-3 text-base font-semibold text-white"
           style={{ backgroundColor: primaryColor }}
         >
-          Join the line{status.queueLength > 0 ? ` (${status.queueLength} waiting)` : ''}
+          {canRequestCallback ? 'Offline: request a callback' : 'Join the line'}
+          {status.queueLength > 0 ? ` (${status.queueLength} waiting)` : ''}
         </button>
       ) : (
         <button
@@ -172,7 +176,10 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
       </button>
 
       {!status.isOnline && (
-        <p className="text-sm text-gray-500">{advisor.displayName} is not taking calls right now. You can schedule a call for later.</p>
+        <p className="text-sm text-gray-500">
+          {advisor.displayName} is not taking calls right now. Request a callback and we will ring you as soon as they come online, or
+          schedule a call for later.
+        </p>
       )}
 
       {notice && (
@@ -212,6 +219,7 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
       {joiningQueue && (
         <JoinQueueDialog
           advisorName={advisor.displayName}
+          offline={!status.isOnline}
           queueLength={status.queueLength}
           primaryColor={primaryColor}
           onJoin={async (maxWaitMinutes) => {

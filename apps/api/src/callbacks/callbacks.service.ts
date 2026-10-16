@@ -18,9 +18,12 @@ const MINUTE_MS = 60_000;
 export const ACTIVE_QUEUE_STATUSES = ['WAITING', 'CALLING'];
 
 /**
- * Nobody is waited on: a client who does not pick up loses their turn and the next client is called.
- * The call to a client is a single try.
+ * Each client gets two tries: if the first call does not connect (the client did not pick up, or the advisor did not
+ * take it) the same client is called again REDIAL_DELAY_SECONDS later, before the line moves on. A client who misses
+ * both loses their turn. If the advisor missed both, the client keeps their place and the advisor is set offline.
  */
+const MAX_ATTEMPTS = 2;
+const REDIAL_DELAY_SECONDS = 30;
 
 /** Hold the queue while an appointment is this close, so a queued callback never runs into a booked call. */
 const APPOINTMENT_BUFFER_MINUTES = 10;
@@ -50,12 +53,7 @@ export class CallbacksService {
 
     const advisor = await this.prisma.advisorProfile.findUnique({ where: { id: dto.advisorId } });
     if (!advisor) throw new NotFoundException('Advisor not found');
-    if (!advisor.isOnline || !advisor.phoneNumber) {
-      throw new BadRequestException('This advisor is not taking calls right now.');
-    }
-    if (!advisor.queueCallingEnabled) {
-      throw new BadRequestException('This advisor is not taking a callback queue right now.');
-    }
+    if (!advisor.phoneNumber) throw new BadRequestException('This advisor is not set up for phone calls yet.');
 
     const rateCents = toCents(advisor.ratePerMinute);
     if (rateCents <= 0) throw new BadRequestException('This advisor has not set a rate yet.');
@@ -91,8 +89,15 @@ export class CallbacksService {
         where: { status: { in: ACTIVE_QUEUE_STATUSES }, queue: { advisorId: advisor.id } },
       }),
     ]);
-    if (!onCall && ahead === 0) {
-      throw new ConflictException('This advisor is available right now. Press Call Now instead.');
+    // An offline advisor can always be asked for a callback: the line starts when they come online.
+    // An online advisor is only worth waiting for while they are busy.
+    if (advisor.isOnline) {
+      if (!onCall && ahead === 0) {
+        throw new ConflictException('This advisor is available right now. Press Call Now instead.');
+      }
+      if (!advisor.queueCallingEnabled && ahead === 0) {
+        throw new BadRequestException('This advisor is not taking a callback line right now.');
+      }
     }
 
     const queue = await this.ensureQueue(advisor.id, advisor.displayName);
@@ -154,7 +159,7 @@ export class CallbacksService {
       note: true,
       joinedAt: true,
       expiresAt: true,
-      queue: { select: { advisor: { select: { id: true, displayName: true, slug: true } } } },
+      queue: { select: { advisor: { select: { id: true, displayName: true, slug: true, isOnline: true } } } },
     } as const;
 
     const active = await this.prisma.queueAssignment.findFirst({
@@ -181,6 +186,7 @@ export class CallbacksService {
             id: active.queue.advisor.id,
             displayName: active.queue.advisor.displayName,
             slug: active.queue.advisor.slug,
+            isOnline: active.queue.advisor.isOnline,
           },
         },
         recent: null,
@@ -223,6 +229,10 @@ export class CallbacksService {
     }
   }
 
+  /**
+   * Closes spots whose chosen wait has run out. A line is never closed because the advisor is offline: clients may
+   * be waiting for them to come online, and they are called as soon as the advisor does.
+   */
   private async expireSpots() {
     const now = new Date();
 
@@ -231,17 +241,6 @@ export class CallbacksService {
       data: {
         status: 'EXPIRED',
         note: 'You waited as long as you chose, so we took you out of the line. Join again whenever you like.',
-      },
-    });
-
-    await this.prisma.queueAssignment.updateMany({
-      where: {
-        status: 'WAITING',
-        OR: [{ queue: { advisor: { isOnline: false } } }, { queue: { advisor: { queueCallingEnabled: false } } }],
-      },
-      data: {
-        status: 'EXPIRED',
-        note: 'The advisor is no longer taking callbacks, so the line has closed. You have not been charged.',
       },
     });
   }
@@ -253,8 +252,10 @@ export class CallbacksService {
       select: {
         id: true,
         updatedAt: true,
+        attempts: true,
         callSessionId: true,
-        callSession: { select: { status: true, connectedAt: true } },
+        queue: { select: { advisorId: true } },
+        callSession: { select: { status: true, connectedAt: true, endedAt: true, advisorCallControlId: true } },
       },
     });
 
@@ -266,7 +267,7 @@ export class CallbacksService {
         if (Date.now() - spot.updatedAt.getTime() > STUCK_DIALING_MINUTES * MINUTE_MS) {
           await this.prisma.queueAssignment.updateMany({
             where: { id: spot.id, status: 'CALLING', callSessionId: null },
-            data: { status: 'WAITING' },
+            data: { status: 'WAITING', attempts: { decrement: 1 } },
           });
         }
         continue;
@@ -279,12 +280,33 @@ export class CallbacksService {
           where: { id: spot.id, status: 'CALLING' },
           data: { status: 'COMPLETED', note: null },
         });
+      } else if (spot.attempts < MAX_ATTEMPTS) {
+        // First miss: the same client is called once more shortly, before anyone else.
+        const endedAt = session.endedAt ?? new Date();
+        await this.prisma.queueAssignment.updateMany({
+          where: { id: spot.id, status: 'CALLING' },
+          data: {
+            status: 'WAITING',
+            callSessionId: null,
+            nextAttemptAt: new Date(endedAt.getTime() + REDIAL_DELAY_SECONDS * 1000),
+          },
+        });
+      } else if (session.advisorCallControlId) {
+        // The client pressed 1 and we rang the advisor twice, but the advisor did not take the call. That is not the
+        // client's miss: they keep their place. The advisor goes offline so the callbacks do not keep ringing clients
+        // while nobody is there; the line starts again the next time they come online.
+        this.logger.warn(`The advisor did not take the queued call for spot ${spot.id} twice; setting them offline`);
+        await this.prisma.queueAssignment.updateMany({
+          where: { id: spot.id, status: 'CALLING' },
+          data: { status: 'WAITING', callSessionId: null, attempts: 0, nextAttemptAt: null },
+        });
+        await this.prisma.advisorProfile.update({ where: { id: spot.queue.advisorId }, data: { isOnline: false } });
       } else {
         await this.prisma.queueAssignment.updateMany({
           where: { id: spot.id, status: 'CALLING' },
           data: {
             status: 'MISSED',
-            note: 'We called but the call did not connect, so your turn passed. You have not been charged. Join the line again if you would still like to talk.',
+            note: 'We called twice but the call did not connect, so your turn passed. You have not been charged. Join the line again if you would still like to talk.',
           },
         });
       }
@@ -295,15 +317,15 @@ export class CallbacksService {
   private async dispatch() {
     const waiting = await this.prisma.queueAssignment.findMany({
       where: { status: 'WAITING' },
-      select: { id: true, clientId: true, queue: { select: { advisorId: true } } },
+      select: { id: true, clientId: true, nextAttemptAt: true, queue: { select: { advisorId: true } } },
       orderBy: { joinedAt: 'asc' },
     });
 
-    const byAdvisor = new Map<string, Array<{ id: string; clientId: string; advisorId: string }>>();
+    const byAdvisor = new Map<string, Array<{ id: string; clientId: string; advisorId: string; nextAttemptAt: Date | null }>>();
     for (const spot of waiting) {
       const advisorId = spot.queue.advisorId;
       const list = byAdvisor.get(advisorId) ?? [];
-      list.push({ id: spot.id, clientId: spot.clientId, advisorId });
+      list.push({ id: spot.id, clientId: spot.clientId, advisorId, nextAttemptAt: spot.nextAttemptAt });
       byAdvisor.set(advisorId, list);
     }
 
@@ -311,13 +333,18 @@ export class CallbacksService {
       if (!(await this.advisorIsFree(advisorId))) continue;
 
       for (const spot of spots) {
-        if ((await this.callSpot(spot)) === 'placed') break;
+        // A client waiting for their redial goes before everyone behind them: hold the line until it is due.
+        if (spot.nextAttemptAt && spot.nextAttemptAt > new Date()) break;
+
+        const outcome = await this.callSpot(spot);
+        if (outcome !== 'skipped') break;
       }
     }
   }
 
   private async advisorIsFree(advisorId: string): Promise<boolean> {
-    const [ringing, onCall, appointmentSoon] = await Promise.all([
+    const [advisor, ringing, onCall, appointmentSoon] = await Promise.all([
+      this.prisma.advisorProfile.findUnique({ where: { id: advisorId }, select: { isOnline: true } }),
       this.prisma.queueAssignment.count({ where: { status: 'CALLING', queue: { advisorId } } }),
       this.prisma.callSession.findFirst({
         where: { advisorId, status: { in: LIVE_STATUSES } },
@@ -332,14 +359,14 @@ export class CallbacksService {
         select: { id: true },
       }),
     ]);
-    return ringing === 0 && onCall === null && appointmentSoon === null;
+    return advisor?.isOnline === true && ringing === 0 && onCall === null && appointmentSoon === null;
   }
 
-  private async callSpot(spot: { id: string; clientId: string; advisorId: string }): Promise<'placed' | 'skipped'> {
+  private async callSpot(spot: { id: string; clientId: string; advisorId: string }): Promise<'placed' | 'skipped' | 'stop'> {
     // Claim it so an overlapping run (or a second server) can't dial the same spot twice.
     const claim = await this.prisma.queueAssignment.updateMany({
       where: { id: spot.id, status: 'WAITING' },
-      data: { status: 'CALLING' },
+      data: { status: 'CALLING', attempts: { increment: 1 }, nextAttemptAt: null },
     });
     if (claim.count === 0) return 'skipped';
 
@@ -368,22 +395,18 @@ export class CallbacksService {
       if (error instanceof ConflictException) {
         await this.prisma.queueAssignment.updateMany({
           where: { id: spot.id, status: 'CALLING' },
-          data: { status: 'WAITING', callSessionId: null },
+          data: { status: 'WAITING', callSessionId: null, attempts: { decrement: 1 } },
         });
         return 'skipped';
       }
 
-      // The phone service had a problem. That uses up this turn rather than retrying every few seconds.
+      // The phone service had a problem. Nobody loses their place over it: try again on the next pass.
       this.logger.error(`Queue spot ${spot.id} could not be dialed: ${message}`);
       await this.prisma.queueAssignment.updateMany({
         where: { id: spot.id, status: 'CALLING' },
-        data: {
-          status: 'MISSED',
-          callSessionId: null,
-          note: 'We could not place the call because of a phone service problem. You have not been charged. Please join the line again.',
-        },
+        data: { status: 'WAITING', callSessionId: null, attempts: { decrement: 1 } },
       });
-      return 'skipped';
+      return 'stop';
     }
   }
 

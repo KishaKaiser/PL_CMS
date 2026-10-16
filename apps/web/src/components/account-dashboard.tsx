@@ -671,8 +671,10 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                 onChange={(queueCallingEnabled) => setAdvisorForm((f) => ({ ...f, queueCallingEnabled }))}
               />
               <p className="-mt-2 text-xs text-gray-500">
-                When you finish a call, we ring the client who has waited longest and then ring you to connect. Clients who do not
-                pick up lose their turn.
+                Clients can always request a callback while you are offline, and they are called as soon as you go online. This option
+                also lets new clients join the line while you are on a call. After each call, we ring the client who has waited longest, then
+                ring you to connect. Each client is called up to twice, 30 seconds apart. A client who misses both loses their turn; if you miss both, you
+                are set offline and they keep their place.
               </p>
               <PrimaryButton disabled={saving === 'advisor'}>Save Advisor Profile</PrimaryButton>
             </form>

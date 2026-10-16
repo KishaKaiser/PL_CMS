@@ -170,7 +170,7 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
                 {advisor.bio && <p className="mt-4 line-clamp-3 text-sm text-gray-600">{advisor.bio}</p>}
 
                 <div className="mt-auto grid gap-2 pt-5">
-                  {advisor.busy && advisor.queueEnabled ? (
+                  {advisor.busy && (advisor.queueEnabled || advisor.queueLength > 0) ? (
                     <button
                       onClick={() => handleJoinQueue(advisor)}
                       disabled={callingId !== null}
@@ -234,6 +234,7 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
       {queueFor && (
         <JoinQueueDialog
           advisorName={queueFor.displayName}
+          offline={false}
           queueLength={queueFor.queueLength}
           primaryColor={primaryColor}
           onJoin={(maxWaitMinutes) => joinQueue(queueFor, maxWaitMinutes)}

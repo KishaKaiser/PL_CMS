@@ -272,6 +272,11 @@ model QueueAssignment {
   note           String?
   // The callback placed for this spot; set when the system starts dialing.
   callSessionId  String?  @unique
+  // How many calls have been placed for this turn. A call that does not connect is
+  // redialed once, shortly after, before the line moves on to the next client.
+  attempts       Int      @default(0)
+  // When the redial is due; empty means the spot is simply waiting its turn.
+  nextAttemptAt  DateTime?
   updatedAt      DateTime @default(now()) @updatedAt
 
   queue       CallQueue     @relation(fields: [queueId], references: [id], onDelete: Cascade)

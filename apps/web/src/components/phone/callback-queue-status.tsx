@@ -9,7 +9,7 @@ interface QueueEntry {
   status: 'WAITING' | 'CALLING';
   position: number;
   expiresAt: string;
-  advisor: { id: string; displayName: string; slug: string | null };
+  advisor: { id: string; displayName: string; slug: string | null; isOnline: boolean };
 }
 
 interface RecentOutcome {
@@ -84,7 +84,10 @@ export function CallbackQueueStatus() {
               <span className="font-semibold">
                 You are #{entry.position} in line for {entry.advisor.displayName}.
               </span>{' '}
-              We will ring your phone when it is your turn. Keep your wallet funded and your phone nearby.
+              {entry.advisor.isOnline
+                ? 'We will ring your phone when it is your turn.'
+                : `We will ring your phone as soon as ${entry.advisor.displayName} comes online.`}{' '}
+              Keep your wallet funded and your phone nearby.
             </p>
             <button
               type="button"
@@ -92,7 +95,7 @@ export function CallbackQueueStatus() {
               disabled={leaving}
               className="rounded-lg border border-purple-300 bg-white px-3 py-1.5 font-medium hover:bg-purple-100 disabled:opacity-50"
             >
-              {leaving ? 'Leaving…' : 'Leave the line'}
+              {leaving ? 'Leaving…' : entry.advisor.isOnline ? 'Leave the line' : 'Cancel request'}
             </button>
           </div>
         )}
