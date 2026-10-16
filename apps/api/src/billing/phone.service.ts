@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhoneNumber } from '../telephony/phone-number';
 import { publicName } from '../common/public-identity';
@@ -136,7 +136,10 @@ export class PhoneService {
     return { eligible, review };
   }
 
-  /** Saves the client's star rating and comment. Only clients who have actually spoken with the advisor can. */
+  /**
+   * Saves the client's star rating and comment. Only clients who have actually spoken with the advisor can, and a
+   * review cannot be changed once it is posted (an admin can remove it, after which the client may post a new one).
+   */
   async submitReview(userId: string, slugOrId: string, dto: SubmitReviewDto) {
     const advisor = await this.findPublicAdvisor(slugOrId);
     if (advisor.userId === userId) throw new ForbiddenException('You cannot review yourself.');
@@ -144,14 +147,24 @@ export class PhoneService {
       throw new ForbiddenException('You can review an advisor after you have spoken with them.');
     }
 
-    const comment = dto.comment?.trim() || null;
-    const review = await this.prisma.advisorReview.upsert({
+    const alreadyReviewed = new ConflictException('You have already reviewed this advisor. Reviews cannot be changed once posted.');
+    const existing = await this.prisma.advisorReview.findUnique({
       where: { advisorId_userId: { advisorId: advisor.id, userId } },
-      create: { advisorId: advisor.id, userId, rating: dto.rating, comment },
-      update: { rating: dto.rating, comment },
-      select: { rating: true, comment: true },
+      select: { id: true },
     });
-    return review;
+    if (existing) throw alreadyReviewed;
+
+    const comment = dto.comment?.trim() || null;
+    try {
+      return await this.prisma.advisorReview.create({
+        data: { advisorId: advisor.id, userId, rating: dto.rating, comment },
+        select: { rating: true, comment: true },
+      });
+    } catch (error) {
+      // Two submissions at once: the unique constraint lets only the first one in.
+      if ((error as { code?: string }).code === 'P2002') throw alreadyReviewed;
+      throw error;
+    }
   }
 
   async getMyPhoneProfile(userId: string) {
