@@ -32,10 +32,36 @@ export class PhonePromptService {
     private readonly config: ConfigService,
   ) {}
 
-  /** The public address Telnyx uses to fetch recordings (this server as the internet sees it), or null if not set. */
+  /**
+   * The public address Telnyx uses to fetch recordings (this server as the internet sees it), or null if not set.
+   * Only the web address itself is used: if the setting also holds a path (the webhook address pasted in whole, say),
+   * the path is ignored.
+   */
   get publicBaseUrl(): string | null {
-    const configured = this.config.get<string>('TELNYX_AUDIO_BASE_URL')?.trim().replace(/\/+$/, '');
-    return configured || null;
+    const configured = this.config.get<string>('TELNYX_AUDIO_BASE_URL')?.trim();
+    if (!configured) return null;
+    try {
+      const url = new URL(configured);
+      if (url.protocol === 'http:' || url.protocol === 'https:') return url.origin;
+    } catch {
+      // not a web address: the address check below explains what is wrong
+    }
+    return configured.replace(/\/+$/, '');
+  }
+
+  /** A note for the admin when the setting holds more than the web address, which is ignored. */
+  get addressNote(): string | null {
+    const configured = this.config.get<string>('TELNYX_AUDIO_BASE_URL')?.trim();
+    if (!configured) return null;
+    try {
+      const url = new URL(configured);
+      if ((url.pathname !== '/' && url.pathname !== '') || url.search || url.hash) {
+        return `TELNYX_AUDIO_BASE_URL also contains "${url.pathname}". Only ${url.origin} is used, so recordings are fetched from ${url.origin}/api/phone-audio/…`;
+      }
+    } catch {
+      // handled by the address check
+    }
+    return null;
   }
 
   /** The URL Telnyx should play for this line, or null to use the computer voice. */
@@ -63,6 +89,7 @@ export class PhonePromptService {
       // Telnyx cannot play recordings until it knows this server's public address.
       audioAddressConfigured: this.publicBaseUrl !== null,
       addressProblem: await this.addressProblem(),
+      addressNote: this.addressNote,
       note: COMPUTER_VOICE_ONLY_NOTE,
       prompts: PROMPT_DEFINITIONS.map((definition) => {
         const recording = byKey.get(definition.key);

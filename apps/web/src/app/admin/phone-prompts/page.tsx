@@ -23,6 +23,7 @@ interface Prompt {
 interface PromptList {
   audioAddressConfigured: boolean;
   addressProblem: string | null;
+  addressNote: string | null;
   note: string;
   prompts: Prompt[];
 }
@@ -131,6 +132,10 @@ export default function AdminPhonePromptsPage() {
             <p className="mt-1">{data.addressProblem}</p>
             <p className="mt-1">Until it is fixed, callers hear the computer voice. Correct <code className="rounded bg-red-100 px-1">TELNYX_AUDIO_BASE_URL</code> in the API&apos;s environment and update.</p>
           </div>
+        )}
+
+        {data && data.audioAddressConfigured && !data.addressProblem && data.addressNote && (
+          <div className="rounded border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">{data.addressNote}</div>
         )}
 
         {data && !data.audioAddressConfigured && (

@@ -114,7 +114,7 @@ export class TelnyxService {
         client_state: encodeState({ ...state, audioKey: (say as { key: PromptKey }).key }),
       });
       if (played.ok) {
-        this.logger.log(`Playing the recording for ${(say as { key: string }).key}`);
+        this.logger.log(`Playing the recording for ${(say as { key: string }).key} from ${audioUrl}`);
         return;
       }
       this.logger.warn(`Telnyx could not play the recording (${played.status}): ${await played.text()}. Using the computer voice.`);
@@ -199,7 +199,7 @@ export class TelnyxService {
         client_state: encodeState({ ...state, audioKey: (say as { key: PromptKey }).key }),
       });
       if (played.ok) {
-        this.logger.log(`Playing the recording for ${(say as { key: string }).key}`);
+        this.logger.log(`Playing the recording for ${(say as { key: string }).key} from ${audioUrl}`);
         return;
       }
       this.logger.warn(`Telnyx could not play the recording (${played.status}): ${await played.text()}. Using the computer voice.`);
