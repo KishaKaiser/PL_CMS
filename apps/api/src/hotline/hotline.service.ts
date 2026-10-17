@@ -10,6 +10,7 @@ import {
 import { CallbacksService } from '../callbacks/callbacks.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhoneNumber } from '../telephony/phone-number';
+import type { Say, Spoken } from '../telephony/phone-prompts';
 import { HotlineState, TelnyxService, decodeHotlineState } from '../telephony/telnyx.service';
 
 /** The longest extension a caller can key in. */
@@ -25,11 +26,39 @@ const BUSY_WAIT_MINUTES = 120;
 const GREETING = 'Welcome to The Psychic Link.';
 const MENU_PROMPT =
   "Please enter your advisor's extension, followed by the pound key. Or press 0 to be connected with the first available advisor.";
-const NO_ACCOUNT_MESSAGE =
-  'We could not find an account for the phone number you are calling from. Please sign in to The Psychic Link website and save this phone number to your account, then call again. Goodbye.';
-const NOTHING_ENTERED_MESSAGE = 'We did not receive a selection. Please call again. Goodbye.';
-const UNAVAILABLE_MESSAGE = 'We are sorry, the hotline is not available right now. Please try again later. Goodbye.';
-const GENERIC_FAILURE_MESSAGE = 'We are sorry, we could not connect your call. You have not been charged. Please try again later. Goodbye.';
+
+// Each fixed line carries its key, so an uploaded recording is played instead of the computer voice when there is one.
+const MENU: Spoken = { key: 'hotline.menu', text: `${GREETING} ${MENU_PROMPT}` };
+const MENU_RETRY: Spoken = { key: 'hotline.menu-retry', text: `We could not find that extension. ${MENU_PROMPT}` };
+const NO_ACCOUNT_MESSAGE: Spoken = {
+  key: 'hotline.no-account',
+  text: 'We could not find an account for the phone number you are calling from. Please sign in to The Psychic Link website and save this phone number to your account, then call again. Goodbye.',
+};
+const NOTHING_ENTERED_MESSAGE: Spoken = {
+  key: 'hotline.nothing-entered',
+  text: 'We did not receive a selection. Please call again. Goodbye.',
+};
+const EXTENSION_NOT_FOUND_MESSAGE: Spoken = {
+  key: 'hotline.extension-not-found',
+  text: 'We could not find that extension. Please check it and call again. Goodbye.',
+};
+const NO_ADVISORS_MESSAGE: Spoken = {
+  key: 'hotline.no-advisors',
+  text: 'We are sorry, no advisors are available right now. Please try again later. Goodbye.',
+};
+const ALL_BUSY_MESSAGE: Spoken = {
+  key: 'hotline.all-busy',
+  text: 'We are sorry, all of our advisors are with other callers right now. Please try again in a few minutes. Goodbye.',
+};
+const BALANCE_TOO_LOW_MESSAGE: Spoken = {
+  key: 'hotline.balance-too-low',
+  text: 'Your wallet balance is too low for the advisors who are available. Please add funds on The Psychic Link website and call again. Goodbye.',
+};
+const GOODBYE: Spoken = { key: 'hotline.goodbye', text: 'Goodbye.' };
+const GENERIC_FAILURE_MESSAGE: Spoken = {
+  key: 'hotline.generic-failure',
+  text: 'We are sorry, we could not connect your call. You have not been charged. Please try again later. Goodbye.',
+};
 
 /**
  * The dial-in hotline. A caller phones the toll-free number, is recognised by the phone number they are calling
@@ -81,6 +110,7 @@ export class HotlineService implements OnModuleInit {
           await this.onGatherEnded(callControlId, state, payload.digits);
           break;
         case 'call.speak.ended':
+        case 'call.playback.ended':
           if (state.step === 'goodbye') await this.telnyx.hangup(callControlId);
           break;
         default:
@@ -118,11 +148,11 @@ export class HotlineService implements OnModuleInit {
       return;
     }
 
-    await this.playMenu(callControlId, { hotline: true, step: 'menu', clientId: matches[0].id, tries: 1 }, GREETING);
+    await this.playMenu(callControlId, { hotline: true, step: 'menu', clientId: matches[0].id, tries: 1 }, false);
   }
 
-  private async playMenu(callControlId: string, state: HotlineState, lead: string) {
-    await this.telnyx.gatherDigits(callControlId, `${lead} ${MENU_PROMPT}`, { ...state, step: 'menu' }, MAX_EXTENSION_DIGITS);
+  private async playMenu(callControlId: string, state: HotlineState, retry: boolean) {
+    await this.telnyx.gatherDigits(callControlId, retry ? MENU_RETRY : MENU, { ...state, step: 'menu' }, MAX_EXTENSION_DIGITS);
   }
 
   private async onGatherEnded(callControlId: string, state: HotlineState, digits: string | undefined) {
@@ -144,9 +174,9 @@ export class HotlineService implements OnModuleInit {
     if (!advisor) {
       const tries = state.tries ?? 1;
       if (tries >= MAX_MENU_TRIES) {
-        return this.finish(callControlId, 'We could not find that extension. Please check it and call again. Goodbye.');
+        return this.finish(callControlId, EXTENSION_NOT_FOUND_MESSAGE);
       }
-      return this.playMenu(callControlId, { ...state, tries: tries + 1 }, 'We could not find that extension.');
+      return this.playMenu(callControlId, { ...state, tries: tries + 1 }, true);
     }
 
     return this.connect(callControlId, state, advisor.id);
@@ -165,7 +195,7 @@ export class HotlineService implements OnModuleInit {
       select: { id: true, ratePerMinute: true },
     });
     if (online.length === 0) {
-      return this.finish(callControlId, 'We are sorry, no advisors are available right now. Please try again later. Goodbye.');
+      return this.finish(callControlId, NO_ADVISORS_MESSAGE);
     }
     const ids = online.map((advisor) => advisor.id);
 
@@ -188,15 +218,12 @@ export class HotlineService implements OnModuleInit {
     const taken = new Set([...onCall.map((s) => s.advisorId), ...waiting.map((w) => w.queue.advisorId)]);
     const free = online.filter((advisor) => !taken.has(advisor.id));
     if (free.length === 0) {
-      return this.finish(callControlId, 'We are sorry, all of our advisors are with other callers right now. Please try again in a few minutes. Goodbye.');
+      return this.finish(callControlId, ALL_BUSY_MESSAGE);
     }
 
     const affordable = free.filter((advisor) => client.balanceCents >= toCents(advisor.ratePerMinute) * MIN_CALL_MINUTES);
     if (affordable.length === 0) {
-      return this.finish(
-        callControlId,
-        'Your wallet balance is too low for the advisors who are available. Please add funds on The Psychic Link website and call again. Goodbye.',
-      );
+      return this.finish(callControlId, BALANCE_TOO_LOW_MESSAGE);
     }
 
     // Never-called advisors first, then whoever has been quiet the longest.
@@ -226,7 +253,10 @@ export class HotlineService implements OnModuleInit {
         const reason = advisor.isOnline ? 'with another caller' : 'not available';
         await this.telnyx.promptToPressOne(
           callControlId,
-          `${advisor.displayName} is ${reason} right now. To have us call you back at this number as soon as they are free, press 1. Otherwise, you can hang up.`,
+          {
+            key: 'hotline.callback-offer',
+            text: `${advisor.displayName} is ${reason} right now. To have us call you back at this number as soon as they are free, press 1. Otherwise, you can hang up.`,
+          },
           { hotline: true, step: 'queue-offer', clientId: state.clientId, advisorId },
         );
         return;
@@ -239,7 +269,7 @@ export class HotlineService implements OnModuleInit {
 
   private async onQueueOffer(callControlId: string, state: HotlineState, digits: string | undefined) {
     if (digits !== '1' || !state.clientId || !state.advisorId) {
-      return this.finish(callControlId, 'Goodbye.');
+      return this.finish(callControlId, GOODBYE);
     }
 
     const [client, advisor] = await Promise.all([
@@ -267,8 +297,8 @@ export class HotlineService implements OnModuleInit {
   }
 
   /** Says a last message and hangs up when it has finished. */
-  private async finish(callControlId: string, text: string) {
-    const spoke = await this.telnyx.speak(callControlId, text, { hotline: true, step: 'goodbye' });
+  private async finish(callControlId: string, say: Say) {
+    const spoke = await this.telnyx.speak(callControlId, say, { hotline: true, step: 'goodbye' });
     if (!spoke) await this.telnyx.hangup(callControlId);
   }
 }
@@ -281,5 +311,5 @@ function errorMessage(error: unknown): string {
     if (Array.isArray(message)) return message.join(' ');
     if (message) return message;
   }
-  return error instanceof Error ? error.message : GENERIC_FAILURE_MESSAGE;
+  return error instanceof Error ? error.message : GENERIC_FAILURE_MESSAGE.text;
 }
