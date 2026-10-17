@@ -213,7 +213,7 @@ export class BillingService {
     await this.assertCanCall(client, advisor, { requireOnline: true });
 
     const session = await this.prisma.callSession.create({
-      data: { advisorId: advisor.id, clientId: client.id, status: 'AWAITING_CLIENT', clientCallControlId },
+      data: { advisorId: advisor.id, clientId: client.id, status: 'AWAITING_CLIENT', clientCallControlId, source: 'HOTLINE' },
     });
     await this.settleQueueSpots(client.id, advisor.id);
 
@@ -278,6 +278,19 @@ export class BillingService {
           : 'This advisor is on another call right now.',
       );
     }
+  }
+
+  /** An admin ends a call that is stuck or has gone wrong. Billing stops and both phone lines are dropped. */
+  async endSessionAsAdmin(sessionId: string) {
+    const ended = await this.endSession(sessionId, 'ENDED_BY_ADMIN');
+    if (!ended) throw new BadRequestException('That call has already ended, or does not exist.');
+    await this.terminateCall(sessionId);
+    return {
+      id: ended.id,
+      durationSeconds: ended.durationSeconds ?? 0,
+      billedMinutes: ended.billedMinutes ?? 0,
+      billedAmountCents: ended.billedAmountCents ?? 0,
+    };
   }
 
   /** Calling an advisor directly settles any spot this client had in their queue. */
