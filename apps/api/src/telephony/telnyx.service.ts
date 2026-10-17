@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createPublicKey, verify } from 'crypto';
 import { PhonePromptService } from './phone-prompt.service';
-import { Say, textOf } from './phone-prompts';
+import { PROMPT_DEFINITIONS, PROMPT_KEYS, PromptKey, Say, textOf } from './phone-prompts';
 
 const TELNYX_API_BASE = 'https://api.telnyx.com/v2';
 
@@ -28,6 +28,8 @@ export interface CallState {
   sessionId: string;
   leg: CallLeg;
   step?: CallStep;
+  /** Set when this prompt was played as a recording, so a prompt that produced no key press can be repeated aloud. */
+  audioKey?: PromptKey;
 }
 
 /** Where an incoming hotline call is in the menu, before it has become a billed session. */
@@ -45,6 +47,8 @@ export interface HotlineState {
   advisorId?: string;
   /** How many times the menu has been played, so a caller cannot be stuck in it forever. */
   tries?: number;
+  /** Set when this prompt was played as a recording, so a prompt that produced no key press can be repeated aloud. */
+  audioKey?: PromptKey;
 }
 
 /** Either kind of state a call leg can carry. */
@@ -107,9 +111,12 @@ export class TelnyxService {
         valid_digits: '1',
         maximum_tries: 2,
         timeout_millis: 10_000,
-        client_state: encodeState(state),
+        client_state: encodeState({ ...state, audioKey: (say as { key: PromptKey }).key }),
       });
-      if (played.ok) return;
+      if (played.ok) {
+        this.logger.log(`Playing the recording for ${(say as { key: string }).key}`);
+        return;
+      }
       this.logger.warn(`Telnyx could not play the recording (${played.status}): ${await played.text()}. Using the computer voice.`);
     }
 
@@ -189,9 +196,12 @@ export class TelnyxService {
         maximum_tries: 1,
         timeout_millis: 15_000,
         inter_digit_timeout_millis: 6_000,
-        client_state: encodeState(state),
+        client_state: encodeState({ ...state, audioKey: (say as { key: PromptKey }).key }),
       });
-      if (played.ok) return;
+      if (played.ok) {
+        this.logger.log(`Playing the recording for ${(say as { key: string }).key}`);
+        return;
+      }
       this.logger.warn(`Telnyx could not play the recording (${played.status}): ${await played.text()}. Using the computer voice.`);
     }
 
@@ -211,6 +221,22 @@ export class TelnyxService {
     if (!response.ok) {
       this.logger.error(`Telnyx gather failed (${response.status}): ${await response.text()}`);
       throw new BadGatewayException('The phone service could not play the menu.');
+    }
+  }
+
+  /**
+   * A recording was played but nothing was pressed, which is what a recording Telnyx could not fetch or play looks
+   * like. Say the same line in the computer voice, once.
+   */
+  async repeatInComputerVoice(callControlId: string, state: LegState, maxDigits = 6): Promise<void> {
+    const key = state.audioKey;
+    const definition = PROMPT_DEFINITIONS.find((candidate) => candidate.key === key);
+    const { audioKey: _played, ...plain } = state;
+    const text = definition?.recordingText ?? 'Please make your selection now.';
+    if ('hotline' in plain && plain.step === 'menu') {
+      await this.gatherDigits(callControlId, text, plain, maxDigits);
+    } else {
+      await this.promptToPressOne(callControlId, text, plain);
     }
   }
 
@@ -316,7 +342,8 @@ export function decodeState(encoded: string | undefined): CallState | null {
     const parsed = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8')) as Partial<CallState>;
     if (typeof parsed.sessionId === 'string' && (parsed.leg === 'client' || parsed.leg === 'advisor')) {
       const step = parsed.step === 'consent' || parsed.step === 'goodbye' ? parsed.step : undefined;
-      return { sessionId: parsed.sessionId, leg: parsed.leg, ...(step ? { step } : {}) };
+      const audioKey = typeof parsed.audioKey === 'string' && PROMPT_KEYS.has(parsed.audioKey) ? (parsed.audioKey as PromptKey) : undefined;
+      return { sessionId: parsed.sessionId, leg: parsed.leg, ...(step ? { step } : {}), ...(audioKey ? { audioKey } : {}) };
     }
   } catch {
     // fall through
@@ -338,6 +365,7 @@ export function decodeHotlineState(encoded: string | undefined): HotlineState | 
         ...(typeof parsed.clientId === 'string' ? { clientId: parsed.clientId } : {}),
         ...(typeof parsed.advisorId === 'string' ? { advisorId: parsed.advisorId } : {}),
         ...(typeof parsed.tries === 'number' ? { tries: parsed.tries } : {}),
+        ...(typeof parsed.audioKey === 'string' && PROMPT_KEYS.has(parsed.audioKey) ? { audioKey: parsed.audioKey as PromptKey } : {}),
       };
     }
   } catch {

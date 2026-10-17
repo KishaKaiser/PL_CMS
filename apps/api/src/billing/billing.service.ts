@@ -119,6 +119,7 @@ export interface TelnyxWebhookPayload {
   sip_hangup_cause?: string;
   digits?: string;
   status?: string;
+  reason?: string;
 }
 
 /** Handles webhooks for calls that are not part of a billing session (the dial-in hotline). */
@@ -386,7 +387,9 @@ export class BillingService {
         `${eventType} session=${state.sessionId} leg=${state.leg} digits=${payload.digits ?? ''} status=${payload.status ?? '?'}`,
       );
     } else if (eventType === 'call.answered' || eventType === 'call.speak.ended' || eventType === 'call.playback.ended') {
-      this.logger.log(`${eventType} session=${state.sessionId} leg=${state.leg}`);
+      this.logger.log(
+        `${eventType} session=${state.sessionId} leg=${state.leg}${payload.status ? ` status=${payload.status}` : ''}${payload.reason ? ` reason=${payload.reason}` : ''}`,
+      );
     }
 
     switch (eventType) {
@@ -396,6 +399,15 @@ export class BillingService {
           : this.onAdvisorAnswered(state.sessionId, callControlId);
 
       case 'call.gather.ended':
+        // A recording that produced no key press may simply not have played: say it again in the computer voice before
+        // treating the silence as the person declining.
+        if (state.audioKey && !payload.digits && payload.status !== 'call_hangup') {
+          this.logger.warn(
+            `No key was pressed after the recording for ${state.audioKey} (status=${payload.status ?? '?'}); repeating it in the computer voice`,
+          );
+          await this.telnyx.repeatInComputerVoice(callControlId, state);
+          return { ok: true };
+        }
         return this.onGatherEnded(state.sessionId, state.leg, callControlId, payload.digits);
 
       case 'call.speak.ended':
