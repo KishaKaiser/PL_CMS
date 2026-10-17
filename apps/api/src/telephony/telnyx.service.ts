@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createPublicKey, verify } from 'crypto';
+import { PhonePromptService } from './phone-prompt.service';
+import { Say, textOf } from './phone-prompts';
 
 const TELNYX_API_BASE = 'https://api.telnyx.com/v2';
 
@@ -61,7 +63,10 @@ const DEFAULT_TTS_VOICE = 'AWS.Polly.Joanna';
 export class TelnyxService {
   private readonly logger = new Logger(TelnyxService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly prompts: PhonePromptService,
+  ) {}
 
   /** Places an outbound call and returns the new leg's call-control id. */
   async dial(options: DialOptions): Promise<{ callControlId: string }> {
@@ -90,7 +95,25 @@ export class TelnyxService {
   }
 
   /** Plays a spoken prompt and waits for the caller to press 1; the result arrives as a call.gather.ended webhook. */
-  async promptToPressOne(callControlId: string, text: string, state: LegState): Promise<void> {
+  async promptToPressOne(callControlId: string, say: Say, state: LegState): Promise<void> {
+    const audioUrl = await this.recordingFor(say);
+    if (audioUrl) {
+      const invalidAudioUrl = await this.recordingFor({ key: 'call.invalid-choice', text: '' });
+      const played = await this.command(callControlId, 'gather_using_audio', {
+        audio_url: audioUrl,
+        ...(invalidAudioUrl ? { invalid_audio_url: invalidAudioUrl } : {}),
+        minimum_digits: 1,
+        maximum_digits: 1,
+        valid_digits: '1',
+        maximum_tries: 2,
+        timeout_millis: 10_000,
+        client_state: encodeState(state),
+      });
+      if (played.ok) return;
+      this.logger.warn(`Telnyx could not play the recording (${played.status}): ${await played.text()}. Using the computer voice.`);
+    }
+
+    const text = textOf(say);
     const response = await this.command(callControlId, 'gather_using_speak', {
       payload: text,
       voice: this.config.get<string>('TELNYX_TTS_VOICE') || DEFAULT_TTS_VOICE,
@@ -109,8 +132,23 @@ export class TelnyxService {
   }
 
   /** Speaks a message to one leg; a call.speak.ended webhook follows when it finishes. */
-  async speak(callControlId: string, text: string, state: LegState): Promise<boolean> {
+  async speak(callControlId: string, say: Say, state: LegState): Promise<boolean> {
     try {
+      const audioUrl = await this.recordingFor(say);
+      if (audioUrl) {
+        const played = await this.command(callControlId, 'playback_start', {
+          audio_url: audioUrl,
+          client_state: encodeState(state),
+        });
+        if (played.ok) return true;
+        if (played.status === 404 || played.status === 422) {
+          // The leg is already gone; there is nobody to speak to.
+          return false;
+        }
+        this.logger.warn(`Telnyx could not play the recording (${played.status}): ${await played.text()}. Using the computer voice.`);
+      }
+
+      const text = textOf(say);
       const response = await this.command(callControlId, 'speak', {
         payload: text,
         voice: this.config.get<string>('TELNYX_TTS_VOICE') || DEFAULT_TTS_VOICE,
@@ -139,7 +177,25 @@ export class TelnyxService {
    * Plays a prompt and collects digits (ended with #, or after a short pause). The result arrives as a
    * call.gather.ended webhook; no digits means the caller pressed nothing.
    */
-  async gatherDigits(callControlId: string, text: string, state: HotlineState, maxDigits: number): Promise<void> {
+  async gatherDigits(callControlId: string, say: Say, state: HotlineState, maxDigits: number): Promise<void> {
+    const audioUrl = await this.recordingFor(say);
+    if (audioUrl) {
+      const played = await this.command(callControlId, 'gather_using_audio', {
+        audio_url: audioUrl,
+        minimum_digits: 1,
+        maximum_digits: maxDigits,
+        terminating_digit: '#',
+        valid_digits: '0123456789',
+        maximum_tries: 1,
+        timeout_millis: 15_000,
+        inter_digit_timeout_millis: 6_000,
+        client_state: encodeState(state),
+      });
+      if (played.ok) return;
+      this.logger.warn(`Telnyx could not play the recording (${played.status}): ${await played.text()}. Using the computer voice.`);
+    }
+
+    const text = textOf(say);
     const response = await this.command(callControlId, 'gather_using_speak', {
       payload: text,
       voice: this.config.get<string>('TELNYX_TTS_VOICE') || DEFAULT_TTS_VOICE,
@@ -212,6 +268,16 @@ export class TelnyxService {
     }
     if (!valid) {
       throw new UnauthorizedException('Invalid Telnyx webhook signature');
+    }
+  }
+
+  /** The recording to play for this line, if one has been uploaded and Telnyx can fetch it. */
+  private async recordingFor(say: Say): Promise<string | null> {
+    if (typeof say === 'string') return null;
+    try {
+      return await this.prompts.audioUrl(say.key);
+    } catch {
+      return null;
     }
   }
 

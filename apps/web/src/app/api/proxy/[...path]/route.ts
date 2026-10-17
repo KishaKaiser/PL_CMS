@@ -22,6 +22,7 @@ const ALLOWED_PATH_PREFIXES = [
   'phone',
   'appointments',
   'callbacks',
+  'phone-audio',
   'account',
   'dashboard',
   'modules',

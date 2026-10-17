@@ -862,6 +862,21 @@ model ProductReview {
 // A client's star rating and comment for an advisor, shown on the advisor's public
 // profile. Only clients who have actually spoken with the advisor can leave one,
 // and each client has a single review per advisor that they can edit.
+// Recorded versions of the lines callers hear on the phone. Kept in the database so they
+// survive redeploys; Telnyx plays them from a public address.
+model PhonePromptAudio {
+  key       String   @id
+  fileToken String   @unique
+  format    String   // mp3 | wav
+  fileName  String
+  sizeBytes Int
+  data      Bytes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("phone_prompt_audio")
+}
+
 model AdvisorReview {
   id        String   @id @default(cuid())
   advisorId String

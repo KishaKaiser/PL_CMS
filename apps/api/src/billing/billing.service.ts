@@ -9,6 +9,7 @@ import {
 import { Cron } from '@nestjs/schedule';
 import type { AdvisorProfile, ClientProfile } from '@pl-cms/db';
 import { PrismaService } from '../prisma/prisma.service';
+import type { Spoken } from '../telephony/phone-prompts';
 import { CallLeg, TelnyxService, decodeState } from '../telephony/telnyx.service';
 import { StartSessionDto } from './billing.dto';
 
@@ -30,14 +31,31 @@ const MAX_BILLING_DELAY_SECONDS = 300;
 const TELEPHONY_SETTINGS_KEY = 'telephony_settings';
 
 // What each party hears. Spoken with a text-to-speech voice.
-const CLIENT_PROMPT = 'Welcome to The Psychic Link. To begin your call, press 1 now.';
-const ADVISOR_PROMPT = 'You have a call from The Psychic Link. Press 1 to accept this call.';
-const scheduledClientPrompt = (advisorName: string) =>
-  `Welcome to The Psychic Link. This is your scheduled call with ${advisorName}. To begin your call, press 1 now.`;
-const SCHEDULED_ADVISOR_PROMPT = 'You have a scheduled call from The Psychic Link. Press 1 to accept this call.';
-const queuedClientPrompt = (advisorName: string) =>
-  `Welcome to The Psychic Link. ${advisorName} is ready to take your call now. To begin your call, press 1 now.`;
-const QUEUED_ADVISOR_PROMPT = 'The next client in your queue is ready. Press 1 to accept this call.';
+// Each fixed line carries its key, so an uploaded recording is played instead of the computer voice when there is one.
+const CLIENT_PROMPT: Spoken = {
+  key: 'call.client-press1',
+  text: 'Welcome to The Psychic Link. To begin your call, press 1 now.',
+};
+const ADVISOR_PROMPT: Spoken = {
+  key: 'call.advisor-press1',
+  text: 'You have a call from The Psychic Link. Press 1 to accept this call.',
+};
+const scheduledClientPrompt = (advisorName: string): Spoken => ({
+  key: 'call.client-press1-scheduled',
+  text: `Welcome to The Psychic Link. This is your scheduled call with ${advisorName}. To begin your call, press 1 now.`,
+});
+const SCHEDULED_ADVISOR_PROMPT: Spoken = {
+  key: 'call.advisor-press1-scheduled',
+  text: 'You have a scheduled call from The Psychic Link. Press 1 to accept this call.',
+};
+const queuedClientPrompt = (advisorName: string): Spoken => ({
+  key: 'call.client-press1-callback',
+  text: `Welcome to The Psychic Link. ${advisorName} is ready to take your call now. To begin your call, press 1 now.`,
+});
+const QUEUED_ADVISOR_PROMPT: Spoken = {
+  key: 'call.advisor-press1-callback',
+  text: 'The next client in your queue is ready. Press 1 to accept this call.',
+};
 /** "2 dollars", "2 dollars and 50 cents": amounts read out by the voice. */
 function spokenAmount(cents: number): string {
   const dollars = Math.floor(cents / 100);
@@ -47,13 +65,26 @@ function spokenAmount(cents: number): string {
 }
 const inboundClientPrompt = (advisorName: string, rateCents: number) =>
   `You have chosen ${advisorName}, at ${spokenAmount(rateCents)} per minute. To connect now, press 1.`;
-const CLIENT_UNAVAILABLE_MESSAGE =
-  'We are sorry, your advisor is unavailable right now. You have not been charged. Goodbye.';
-const CLIENT_LOW_BALANCE_WARNING =
-  'Your balance is running low. This call will end in about one minute unless you add funds to your wallet on the website.';
-const ADVISOR_LOW_BALANCE_WARNING = "The client's balance is running low. This call will end in about one minute.";
-const CLIENT_OUT_OF_FUNDS_MESSAGE = 'Your balance has run out, so this call is ending. Goodbye.';
-const ADVISOR_OUT_OF_FUNDS_MESSAGE = "The client's balance has run out, so this call is ending. Goodbye.";
+const CLIENT_UNAVAILABLE_MESSAGE: Spoken = {
+  key: 'call.advisor-unavailable',
+  text: 'We are sorry, your advisor is unavailable right now. You have not been charged. Goodbye.',
+};
+const CLIENT_LOW_BALANCE_WARNING: Spoken = {
+  key: 'call.low-balance-client',
+  text: 'Your balance is running low. This call will end in about one minute unless you add funds to your wallet on the website.',
+};
+const ADVISOR_LOW_BALANCE_WARNING: Spoken = {
+  key: 'call.low-balance-advisor',
+  text: "The client's balance is running low. This call will end in about one minute.",
+};
+const CLIENT_OUT_OF_FUNDS_MESSAGE: Spoken = {
+  key: 'call.out-of-funds-client',
+  text: 'Your balance has run out, so this call is ending. Goodbye.',
+};
+const ADVISOR_OUT_OF_FUNDS_MESSAGE: Spoken = {
+  key: 'call.out-of-funds-advisor',
+  text: "The client's balance has run out, so this call is ending. Goodbye.",
+};
 
 /**
  * How long before the next charge the low-balance warning is spoken. Each minute is charged up front, so a
@@ -354,7 +385,7 @@ export class BillingService {
       this.logger.log(
         `${eventType} session=${state.sessionId} leg=${state.leg} digits=${payload.digits ?? ''} status=${payload.status ?? '?'}`,
       );
-    } else if (eventType === 'call.answered' || eventType === 'call.speak.ended') {
+    } else if (eventType === 'call.answered' || eventType === 'call.speak.ended' || eventType === 'call.playback.ended') {
       this.logger.log(`${eventType} session=${state.sessionId} leg=${state.leg}`);
     }
 
@@ -368,7 +399,8 @@ export class BillingService {
         return this.onGatherEnded(state.sessionId, state.leg, callControlId, payload.digits);
 
       case 'call.speak.ended':
-        // A goodbye has finished playing: now hang up.
+      case 'call.playback.ended':
+        // A goodbye (spoken or recorded) has finished playing: now hang up.
         if (state.step === 'goodbye') await this.telnyx.hangup(callControlId);
         return { ok: true };
 
