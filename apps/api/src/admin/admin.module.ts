@@ -17,6 +17,8 @@ import { SettingsController } from './admin-settings/settings.controller';
 import { SettingsService } from './admin-settings/settings.service';
 import { TaxonomiesController } from './admin-taxonomies/taxonomies.controller';
 import { TaxonomiesService } from './admin-taxonomies/taxonomies.service';
+import { AdminCallsController } from './admin-calls/calls.controller';
+import { AdminCallsService } from './admin-calls/calls.service';
 import { AdminReviewsController } from './admin-reviews/reviews.controller';
 import { AdminReviewsService } from './admin-reviews/reviews.service';
 import { AdminUsersController } from './admin-users/users.controller';
@@ -25,10 +27,11 @@ import { AuditController } from './audit/audit.controller';
 import { AuditService } from './audit/audit.service';
 import { ThemeBuilderController } from './theme-builder/theme-builder.controller';
 import { ThemeBuilderService } from './theme-builder/theme-builder.service';
+import { BillingModule } from '../billing/billing.module';
 import { DefaultContentModule } from '../bootstrap/default-content.module';
 
 @Module({
-  imports: [DefaultContentModule],
+  imports: [DefaultContentModule, BillingModule],
   controllers: [
     DashboardController,
     PagesController,
@@ -43,6 +46,7 @@ import { DefaultContentModule } from '../bootstrap/default-content.module';
     ThemeBuilderController,
     AdminAdvisorsController,
     AdminReviewsController,
+    AdminCallsController,
   ],
   providers: [
     DashboardService,
@@ -58,6 +62,7 @@ import { DefaultContentModule } from '../bootstrap/default-content.module';
     ThemeBuilderService,
     AdminAdvisorsService,
     AdminReviewsService,
+    AdminCallsService,
   ],
   exports: [AuditService, PostsService],
 })

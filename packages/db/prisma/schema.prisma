@@ -226,12 +226,17 @@ model CallSession {
   // → BILLING_ACTIVE, then ENDED* (ENDED, ENDED_BY_USER, ENDED_LOW_BALANCE,
   // ENDED_NOT_CONNECTED).
   status          String    @default("ACTIVE")
+  // How the call started: DIRECT (Call Now) or HOTLINE. Appointment and queue calls are told
+  // apart by their own links to this session.
+  source          String    @default("DIRECT")
 
   advisor AdvisorProfile @relation("AdvisorSessions", fields: [advisorId], references: [id])
   client  ClientProfile  @relation("ClientSessions", fields: [clientId], references: [id])
   walletTransactions WalletTransaction[]
   appointment Appointment?
   queueAssignment QueueAssignment?
+
+  @@index([startedAt])
 
   @@map("call_sessions")
 }
