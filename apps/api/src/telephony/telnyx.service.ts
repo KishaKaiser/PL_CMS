@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createPublicKey, verify } from 'crypto';
-import { PhonePromptService } from './phone-prompt.service';
+import { DEFAULT_TTS_VOICE, PhonePromptService } from './phone-prompt.service';
 import { PROMPT_DEFINITIONS, PROMPT_KEYS, PromptKey, Say, textOf } from './phone-prompts';
 
 const TELNYX_API_BASE = 'https://api.telnyx.com/v2';
@@ -33,7 +33,7 @@ export interface CallState {
 }
 
 /** Where an incoming hotline call is in the menu, before it has become a billed session. */
-export type HotlineStep = 'greeting' | 'menu' | 'queue-offer' | 'goodbye';
+export type HotlineStep = 'greeting' | 'menu' | 'queue-offer' | 'goodbye' | 'voice-test';
 
 /** Travels with an incoming hotline call (which has no session yet) and comes back on every webhook. */
 export interface HotlineState {
@@ -49,6 +49,8 @@ export interface HotlineState {
   tries?: number;
   /** Set when this prompt was played as a recording, so a prompt that produced no key press can be repeated aloud. */
   audioKey?: PromptKey;
+  /** For a voice test call: the voice to try. */
+  voice?: string;
 }
 
 /** Either kind of state a call leg can carry. */
@@ -56,12 +58,10 @@ export type LegState = CallState | HotlineState;
 
 export interface DialOptions {
   to: string;
-  state: CallState;
+  state: LegState;
   timeoutSecs: number;
 }
 
-/** Spoken voice for prompts (Telnyx format <Provider>.<Voice>); override with TELNYX_TTS_VOICE. */
-const DEFAULT_TTS_VOICE = 'AWS.Polly.Joanna';
 
 @Injectable()
 export class TelnyxService {
@@ -121,9 +121,8 @@ export class TelnyxService {
     }
 
     const text = textOf(say);
-    const response = await this.command(callControlId, 'gather_using_speak', {
+    const response = await this.speakingCommand(callControlId, 'gather_using_speak', {
       payload: text,
-      voice: this.config.get<string>('TELNYX_TTS_VOICE') || DEFAULT_TTS_VOICE,
       minimum_digits: 1,
       maximum_digits: 1,
       valid_digits: '1',
@@ -156,9 +155,8 @@ export class TelnyxService {
       }
 
       const text = textOf(say);
-      const response = await this.command(callControlId, 'speak', {
+      const response = await this.speakingCommand(callControlId, 'speak', {
         payload: text,
-        voice: this.config.get<string>('TELNYX_TTS_VOICE') || DEFAULT_TTS_VOICE,
         client_state: encodeState(state),
       });
       if (!response.ok && response.status !== 404 && response.status !== 422) {
@@ -206,9 +204,8 @@ export class TelnyxService {
     }
 
     const text = textOf(say);
-    const response = await this.command(callControlId, 'gather_using_speak', {
+    const response = await this.speakingCommand(callControlId, 'gather_using_speak', {
       payload: text,
-      voice: this.config.get<string>('TELNYX_TTS_VOICE') || DEFAULT_TTS_VOICE,
       minimum_digits: 1,
       maximum_digits: maxDigits,
       terminating_digit: '#',
@@ -297,6 +294,35 @@ export class TelnyxService {
     }
   }
 
+  /**
+   * Sends a command that reads text aloud, in the chosen computer voice. If Telnyx refuses the voice itself (a
+   * mistyped ID, a clone that was deleted), the default voice is used instead so the caller still hears the line.
+   */
+  private async speakingCommand(callControlId: string, action: string, body: Record<string, unknown>) {
+    const voice = await this.prompts.voice();
+    const response = await this.command(callControlId, action, { ...body, voice });
+    if (response.ok || voice === DEFAULT_TTS_VOICE || (response.status !== 400 && response.status !== 422)) return response;
+
+    const detail = await response.clone().text();
+    // 422 also means "that call has ended", which has nothing to do with the voice.
+    if (!/voice/i.test(detail)) return response;
+
+    this.prompts.markVoiceRejected(voice);
+    return this.command(callControlId, action, { ...body, voice: DEFAULT_TTS_VOICE });
+  }
+
+  /** Calls a phone and reads a sample line in the given voice, so a voice can be heard before it is used for real. */
+  async placeVoiceTest(to: string, voice: string | null): Promise<void> {
+    await this.dial({ to, state: { hotline: true, step: 'voice-test', ...(voice ? { voice } : {}) }, timeoutSecs: 30 });
+  }
+
+  /** Reads the voice-test sample. The voice is used exactly as given, so a wrong one shows up as an error. */
+  async speakSample(callControlId: string, text: string, voice: string, state: HotlineState): Promise<boolean> {
+    const response = await this.command(callControlId, 'speak', { payload: text, voice, client_state: encodeState(state) });
+    if (!response.ok) this.logger.error(`Telnyx rejected the voice test (${response.status}): ${await response.text()}`);
+    return response.ok;
+  }
+
   /** The recording to play for this line, if one has been uploaded and Telnyx can fetch it. */
   private async recordingFor(say: Say): Promise<string | null> {
     if (typeof say === 'string') return null;
@@ -356,7 +382,7 @@ export function decodeHotlineState(encoded: string | undefined): HotlineState | 
   if (!encoded) return null;
   try {
     const parsed = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8')) as Partial<HotlineState>;
-    const steps: HotlineStep[] = ['greeting', 'menu', 'queue-offer', 'goodbye'];
+    const steps: HotlineStep[] = ['greeting', 'menu', 'queue-offer', 'goodbye', 'voice-test'];
     if (parsed.hotline === true && parsed.step && steps.includes(parsed.step)) {
       return {
         hotline: true,
@@ -365,6 +391,7 @@ export function decodeHotlineState(encoded: string | undefined): HotlineState | 
         ...(typeof parsed.clientId === 'string' ? { clientId: parsed.clientId } : {}),
         ...(typeof parsed.advisorId === 'string' ? { advisorId: parsed.advisorId } : {}),
         ...(typeof parsed.tries === 'number' ? { tries: parsed.tries } : {}),
+        ...(typeof parsed.voice === 'string' && parsed.voice.length < 200 ? { voice: parsed.voice } : {}),
         ...(typeof parsed.audioKey === 'string' && PROMPT_KEYS.has(parsed.audioKey) ? { audioKey: parsed.audioKey as PromptKey } : {}),
       };
     }

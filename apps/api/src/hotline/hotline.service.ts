@@ -9,6 +9,7 @@ import {
 } from '../billing/billing.service';
 import { CallbacksService } from '../callbacks/callbacks.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PhonePromptService } from '../telephony/phone-prompt.service';
 import { normalizePhoneNumber } from '../telephony/phone-number';
 import type { Say, Spoken } from '../telephony/phone-prompts';
 import { HotlineState, TelnyxService, decodeHotlineState } from '../telephony/telnyx.service';
@@ -79,6 +80,7 @@ export class HotlineService implements OnModuleInit {
     private readonly billing: BillingService,
     private readonly callbacks: CallbacksService,
     private readonly config: ConfigService,
+    private readonly prompts: PhonePromptService,
   ) {}
 
   onModuleInit() {
@@ -108,6 +110,7 @@ export class HotlineService implements OnModuleInit {
       switch (eventType) {
         case 'call.answered':
           if (state.step === 'greeting') await this.onAnswered(callControlId, state);
+          if (state.step === 'voice-test') await this.onVoiceTest(callControlId, state);
           break;
         case 'call.gather.ended':
           this.logger.log(`call.gather.ended step=${state.step} digits=${payload.digits ?? ''} status=${payload.status ?? '?'}`);
@@ -144,6 +147,22 @@ export class HotlineService implements OnModuleInit {
 
     this.logger.log(`Hotline call from ${payload.from ?? 'an unknown number'}`);
     await this.telnyx.answer(callControlId, { hotline: true, step: 'greeting', from: payload.from });
+  }
+
+  /** An admin asked to hear the computer voice: read a sample like the lines that carry names and prices. */
+  private async onVoiceTest(callControlId: string, state: HotlineState) {
+    const voice = state.voice || (await this.prompts.voice());
+    const spoke = await this.telnyx.speakSample(
+      callControlId,
+      'This is a test of the phone voice for The Psychic Link. You have chosen Madame Zelda, at two dollars and fifty cents per minute. You are number two in line. To connect now, press 1. Goodbye.',
+      voice,
+      { hotline: true, step: 'goodbye' },
+    );
+    if (!spoke) {
+      await this.telnyx.hangup(callControlId);
+      return;
+    }
+    setTimeout(() => void this.telnyx.hangup(callControlId), GOODBYE_BACKSTOP_MS).unref();
   }
 
   /** The caller is on the line: work out whose account they are calling from, then play the menu. */
