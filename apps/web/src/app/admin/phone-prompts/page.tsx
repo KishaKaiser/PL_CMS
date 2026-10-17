@@ -22,6 +22,7 @@ interface Prompt {
 
 interface PromptList {
   audioAddressConfigured: boolean;
+  addressProblem: string | null;
   note: string;
   prompts: Prompt[];
 }
@@ -123,6 +124,14 @@ export default function AdminPhonePromptsPage() {
             </p>
           )}
         </header>
+
+        {data && data.audioAddressConfigured && data.addressProblem && (
+          <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p className="font-semibold">Recordings are switched off: the address Telnyx would use does not work.</p>
+            <p className="mt-1">{data.addressProblem}</p>
+            <p className="mt-1">Until it is fixed, callers hear the computer voice. Correct <code className="rounded bg-red-100 px-1">TELNYX_AUDIO_BASE_URL</code> in the API&apos;s environment and update.</p>
+          </div>
+        )}
 
         {data && !data.audioAddressConfigured && (
           <div className="rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">

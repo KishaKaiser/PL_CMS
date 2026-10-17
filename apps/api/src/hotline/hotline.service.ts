@@ -13,6 +13,9 @@ import { normalizePhoneNumber } from '../telephony/phone-number';
 import type { Say, Spoken } from '../telephony/phone-prompts';
 import { HotlineState, TelnyxService, decodeHotlineState } from '../telephony/telnyx.service';
 
+/** A goodbye that has not ended the call by itself after this long is ended for it. */
+const GOODBYE_BACKSTOP_MS = 45_000;
+
 /** The longest extension a caller can key in. */
 const MAX_EXTENSION_DIGITS = 6;
 
@@ -107,6 +110,14 @@ export class HotlineService implements OnModuleInit {
           if (state.step === 'greeting') await this.onAnswered(callControlId, state);
           break;
         case 'call.gather.ended':
+          this.logger.log(`call.gather.ended step=${state.step} digits=${payload.digits ?? ''} status=${payload.status ?? '?'}`);
+          if (state.audioKey && !payload.digits && payload.status !== 'call_hangup') {
+            this.logger.warn(
+              `No key was pressed after the recording for ${state.audioKey} (status=${payload.status ?? '?'}); repeating it in the computer voice`,
+            );
+            await this.telnyx.repeatInComputerVoice(callControlId, state, MAX_EXTENSION_DIGITS);
+            break;
+          }
           await this.onGatherEnded(callControlId, state, payload.digits);
           break;
         case 'call.speak.ended':
@@ -299,7 +310,13 @@ export class HotlineService implements OnModuleInit {
   /** Says a last message and hangs up when it has finished. */
   private async finish(callControlId: string, say: Say) {
     const spoke = await this.telnyx.speak(callControlId, say, { hotline: true, step: 'goodbye' });
-    if (!spoke) await this.telnyx.hangup(callControlId);
+    if (!spoke) {
+      await this.telnyx.hangup(callControlId);
+      return;
+    }
+    // The call normally ends when the message finishes. If that notice never arrives (a recording that would not play,
+    // say), do not leave the caller on a silent line.
+    setTimeout(() => void this.telnyx.hangup(callControlId), GOODBYE_BACKSTOP_MS).unref();
   }
 }
 
