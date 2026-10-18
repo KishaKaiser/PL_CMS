@@ -51,6 +51,9 @@ export function loginUrl(next: string): string {
   return `/login?next=${encodeURIComponent(next)}`;
 }
 
+/** Fired after an advisor is added to or removed from the favourites, so any list on the page refreshes at once. */
+export const FAVORITES_CHANGED_EVENT = 'favorite-advisors-changed';
+
 /** Fired after joining or leaving a queue so the "your place in line" notice refreshes right away. */
 export const QUEUE_CHANGED_EVENT = 'callback-queue-changed';
 

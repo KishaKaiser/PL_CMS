@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../auth/roles.guard';
@@ -19,6 +19,35 @@ export class PhoneController {
   @Get('advisors/:slug')
   getPublicProfile(@Param('slug') slug: string) {
     return this.phoneService.getPublicProfile(slug);
+  }
+
+  /** The signed-in client's favourite advisors, including the ones who are offline. */
+  @Get('favorites')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.CLIENT)
+  listFavorites(@Request() req: { user: { id: string } }) {
+    return this.phoneService.listFavorites(req.user.id);
+  }
+
+  @Get('advisors/:slug/favorite')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.CLIENT)
+  isFavorite(@Request() req: { user: { id: string } }, @Param('slug') slug: string) {
+    return this.phoneService.isFavorite(req.user.id, slug);
+  }
+
+  @Put('advisors/:slug/favorite')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.CLIENT)
+  addFavorite(@Request() req: { user: { id: string } }, @Param('slug') slug: string) {
+    return this.phoneService.setFavorite(req.user.id, slug, true);
+  }
+
+  @Delete('advisors/:slug/favorite')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.CLIENT)
+  removeFavorite(@Request() req: { user: { id: string } }, @Param('slug') slug: string) {
+    return this.phoneService.setFavorite(req.user.id, slug, false);
   }
 
   @Get('advisors/:slug/my-review')

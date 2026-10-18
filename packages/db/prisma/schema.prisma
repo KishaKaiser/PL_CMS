@@ -105,6 +105,7 @@ model User {
   savedPaymentMethods SavedPaymentMethod[]
   productReviews ProductReview[]
   advisorReviews AdvisorReview[]
+  favoriteAdvisors FavoriteAdvisor[]
   paypalWallet   PaypalWallet?
   paypalWalletSetups PaypalWalletSetup[]
   walletTopUps   WalletTopUp[]
@@ -150,6 +151,7 @@ model AdvisorProfile {
   payoutMethods       AdvisorPayoutMethod[]
   appointments        Appointment[]          @relation("AdvisorAppointments")
   reviews             AdvisorReview[]
+  favoritedBy         FavoriteAdvisor[]
 
   @@map("advisor_profiles")
 }
@@ -930,6 +932,21 @@ model WalletTopUp {
 
   @@index([userId, createdAt])
   @@map("wallet_top_ups")
+}
+
+// An advisor a client has saved to their favourites list.
+model FavoriteAdvisor {
+  id        String   @id @default(cuid())
+  userId    String
+  advisorId String
+  createdAt DateTime @default(now())
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  advisor AdvisorProfile @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, advisorId])
+  @@index([userId, createdAt])
+  @@map("favorite_advisors")
 }
 
 model AdvisorReview {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { CallbackQueueStatus } from './callback-queue-status';
+import { FavoriteAdvisorsList } from './favorite-advisors-list';
 import { JoinQueueDialog } from './join-queue-dialog';
 import { fundsNotice, joinQueueRequest, loginUrl, startCallRequest, usePhoneProfile, type PhoneProfile } from './phone-client';
 import { PhonePromptDialog } from './phone-prompt-dialog';
@@ -113,6 +114,8 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
   return (
     <div>
       <CallbackQueueStatus />
+
+      <FavoriteAdvisorsList variant="strip" primaryColor={primaryColor} />
 
       {profile && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white px-4 py-3 text-sm">

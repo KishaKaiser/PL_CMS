@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { AdvisorPublicLink } from './phone/advisor-public-link';
 import { AdvisorScheduleEditor, type ScheduleSlot } from './phone/advisor-schedule-editor';
 import { AppointmentsPanel } from './phone/appointments-panel';
+import { FavoriteAdvisorsList } from './phone/favorite-advisors-list';
 import { PaypalWalletPanel } from './phone/paypal-wallet-panel';
 import { PrivateMessageInbox } from './private-message-inbox';
 
@@ -17,6 +18,7 @@ type DashboardSection =
   | 'payments'
   | 'wallet'
   | 'appointments'
+  | 'favorites'
   | 'account'
   | 'advisor-profile'
   | 'payouts'
@@ -406,6 +408,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     { id: 'payments', label: 'Saved Payments', icon: 'fa-regular fa-credit-card' },
     { id: 'wallet', label: 'Wallet', icon: 'fa-solid fa-wallet' },
     { id: 'appointments', label: 'Appointments', icon: 'fa-regular fa-calendar' },
+    ...(isAdvisor ? [] : [{ id: 'favorites' as const, label: 'Favorite Advisors', icon: 'fa-regular fa-heart' }]),
     { id: 'account', label: 'Account Details', icon: 'fa-regular fa-user' },
     ...(isAdvisor
       ? [
@@ -675,6 +678,16 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
           )}
 
           {activeSection === 'appointments' && <AppointmentsPanel mode={isAdvisor ? 'advisor' : 'client'} />}
+
+          {activeSection === 'favorites' && !isAdvisor && (
+            <div>
+              <p className="mb-4 text-sm text-gray-600">
+                Advisors you have saved, with whether they are available right now. Offline advisors stay here, so you can open their page and
+                request a callback for when they come online.
+              </p>
+              <FavoriteAdvisorsList variant="page" />
+            </div>
+          )}
 
           {activeSection === 'account' && (
             <form onSubmit={handleAccountSave} className="max-w-xl space-y-4">
