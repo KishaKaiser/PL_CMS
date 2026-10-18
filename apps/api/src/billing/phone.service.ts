@@ -9,6 +9,9 @@ import { LIVE_STATUSES } from './billing.service';
 
 const MAX_PUBLIC_REVIEWS = 50;
 
+/** How many advisors one client can keep in their favourites. */
+export const MAX_FAVORITES = 50;
+
 @Injectable()
 export class PhoneService {
   constructor(
@@ -64,6 +67,83 @@ export class PhoneService {
 
     // Array.prototype.sort is stable, so advisors keep their alphabetical order within each group.
     return cards.sort((a, b) => Number(a.busy) - Number(b.busy));
+  }
+
+  /**
+   * The signed-in client's favourite advisors, newest first within each group: available now, then on a call, then
+   * offline. Offline favourites are included, which is the point: this is how a client gets back to them.
+   */
+  async listFavorites(userId: string) {
+    const rows = await this.prisma.favoriteAdvisor.findMany({
+      where: { userId, advisor: { phoneNumber: { not: null }, ratePerMinute: { gt: 0 } } },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_FAVORITES,
+      select: {
+        advisor: {
+          select: { id: true, slug: true, displayName: true, profileImageUrl: true, ratePerMinute: true, isOnline: true },
+        },
+      },
+    });
+    const advisors = rows.map((row) => row.advisor);
+    const ids = advisors.map((advisor) => advisor.id);
+
+    const onCall = await this.prisma.callSession.findMany({
+      where: { status: { in: LIVE_STATUSES }, advisorId: { in: ids } },
+      select: { advisorId: true },
+    });
+    const busyIds = new Set(onCall.map((session) => session.advisorId));
+    const queueLengths = await this.queueLengths(ids);
+
+    const cards = await Promise.all(
+      advisors.map(async (advisor) => {
+        const queueLength = queueLengths.get(advisor.id) ?? 0;
+        // Named fields only, so nothing else about the advisor (their phone number above all) can slip into the card.
+        return {
+          id: advisor.id,
+          slug: await ensureAdvisorSlug(this.prisma, advisor),
+          displayName: advisor.displayName,
+          profileImageUrl: advisor.profileImageUrl,
+          ratePerMinute: advisor.ratePerMinute,
+          isOnline: advisor.isOnline,
+          busy: advisor.isOnline && (busyIds.has(advisor.id) || queueLength > 0),
+          queueLength,
+        };
+      }),
+    );
+
+    // Stable sort: within each group the newest favourite stays first.
+    const rank = (card: { isOnline: boolean; busy: boolean }) => (!card.isOnline ? 2 : card.busy ? 1 : 0);
+    return cards.sort((a, b) => rank(a) - rank(b));
+  }
+
+  async isFavorite(userId: string, slugOrId: string) {
+    const advisor = await this.findPublicAdvisor(slugOrId);
+    const row = await this.prisma.favoriteAdvisor.findUnique({
+      where: { userId_advisorId: { userId, advisorId: advisor.id } },
+      select: { id: true },
+    });
+    return { favorite: row !== null };
+  }
+
+  /** Adds an advisor to the client's favourites or removes them. Doing either twice is harmless. */
+  async setFavorite(userId: string, slugOrId: string, favorite: boolean) {
+    const advisor = await this.findPublicAdvisor(slugOrId);
+    const key = { userId_advisorId: { userId, advisorId: advisor.id } };
+
+    if (!favorite) {
+      await this.prisma.favoriteAdvisor.deleteMany({ where: { userId, advisorId: advisor.id } });
+      return { favorite: false };
+    }
+
+    const existing = await this.prisma.favoriteAdvisor.findUnique({ where: key, select: { id: true } });
+    if (!existing) {
+      const count = await this.prisma.favoriteAdvisor.count({ where: { userId } });
+      if (count >= MAX_FAVORITES) {
+        throw new BadRequestException(`You can keep up to ${MAX_FAVORITES} favorite advisors. Remove one to add another.`);
+      }
+      await this.prisma.favoriteAdvisor.upsert({ where: key, create: { userId, advisorId: advisor.id }, update: {} });
+    }
+    return { favorite: true };
   }
 
   /**

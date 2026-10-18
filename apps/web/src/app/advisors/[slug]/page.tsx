@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { AdvisorActions } from '../../../components/phone/advisor-actions';
+import { FavoriteButton } from '../../../components/phone/favorite-button';
 import { formatDollars, formatPhoneForDisplay, formatTimeOfDay, toCents, WEEK_ORDER, WEEKDAYS } from '../../../components/phone/phone-format';
 import { ReviewForm } from '../../../components/phone/review-form';
 import { StarRating } from '../../../components/phone/star-rating';
@@ -129,6 +130,7 @@ export default async function AdvisorProfilePage({ params }: Props) {
                   />
                   {!advisor.isOnline ? 'Offline' : advisor.busy ? 'On another call' : 'Available now'}
                 </p>
+                <FavoriteButton slug={advisor.slug} primaryColor={primaryColor} />
               </div>
 
               <div className="mt-6">
