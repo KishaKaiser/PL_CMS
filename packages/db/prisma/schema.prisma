@@ -341,9 +341,16 @@ model Message {
   id          String    @id @default(cuid())
   senderId    String
   recipientId String
+  // Messages work like email: a subject, and replies share the thread of the message they answer.
+  // Older messages have neither, so a message with no thread is a thread of its own.
+  subject     String?
+  threadId    String?
   body        String
   sentAt      DateTime  @default(now())
   readAt      DateTime?
+  // Where the message sits for each side: ACTIVE (inbox or sent), TRASH, or PURGED (deleted for good, for that side only).
+  senderFolder    String @default("ACTIVE")
+  recipientFolder String @default("ACTIVE")
 
   sender    User @relation("SentMessages", fields: [senderId], references: [id])
   recipient User @relation("ReceivedMessages", fields: [recipientId], references: [id])
@@ -352,6 +359,7 @@ model Message {
   @@index([recipientId])
   @@index([senderId, recipientId, sentAt])
   @@index([recipientId, readAt])
+  @@index([threadId])
   @@map("messages")
 }
 
