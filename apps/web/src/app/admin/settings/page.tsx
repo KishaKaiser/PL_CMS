@@ -52,6 +52,17 @@ interface TelephonyForm {
   walletTopUpDailyCapDollars: string;
 }
 
+interface MessagingForm {
+  /** The staff account that receives what members send to Support. Empty means the first admin account. */
+  supportUserId: string;
+}
+
+interface StaffUser {
+  id: string;
+  label: string;
+  role: string;
+}
+
 interface SiteHomepageForm {
   mode: 'landing' | 'latest_posts' | 'page';
   pageSlug: string;
@@ -68,6 +79,7 @@ const SITE_POSTS_PAGE_KEY = SITE_SETTING_KEYS.SITE_POSTS_PAGE;
 const SITE_EXTENSION_POINTS_KEY = SITE_SETTING_KEYS.SITE_EXTENSION_POINTS;
 const ASTROLOGY_REPORT_SETTINGS_KEY = 'astrology_report_settings';
 const TELEPHONY_SETTINGS_KEY = 'telephony_settings';
+const MESSAGING_SETTINGS_KEY = 'messaging_settings';
 
 const defaultIdentityForm: SiteIdentityForm = {
   ...DEFAULT_SITE_IDENTITY,
@@ -78,6 +90,8 @@ const defaultTelephonyForm: TelephonyForm = {
   billingDelaySeconds: '45',
   walletTopUpDailyCapDollars: '500',
 };
+
+const defaultMessagingForm: MessagingForm = { supportUserId: '' };
 
 const defaultAstrologyReportForm: AstrologyReportForm = {
   ollamaBaseUrl: 'http://localhost:11434',
@@ -128,6 +142,22 @@ export default function AdminSettingsPage() {
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [astrologyReportForm, setAstrologyReportForm] = useState<AstrologyReportForm>(defaultAstrologyReportForm);
   const [telephonyForm, setTelephonyForm] = useState<TelephonyForm>(defaultTelephonyForm);
+  const [messagingForm, setMessagingForm] = useState<MessagingForm>(defaultMessagingForm);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+
+  // The staff accounts that can be chosen to receive Support messages.
+  useEffect(() => {
+    fetch('/api/proxy/users')
+      .then((res) => (res.ok ? (res.json() as Promise<Array<{ id: string; role: string; username?: string | null; name: string; email: string }>>) : []))
+      .then((users) =>
+        setStaffUsers(
+          users
+            .filter((user) => user.role === 'ADMIN' || user.role === 'EDITOR')
+            .map((user) => ({ id: user.id, role: user.role, label: `${user.username || user.name} (${user.email})` })),
+        ),
+      )
+      .catch(() => setStaffUsers([]));
+  }, []);
 
   const publishedPages = useMemo(
     () => pages.filter((page) => Boolean(page.publishedAt)),
@@ -140,6 +170,7 @@ export default function AdminSettingsPage() {
     const postsPage = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, SITE_POSTS_PAGE_KEY));
     const astrologyReport = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, ASTROLOGY_REPORT_SETTINGS_KEY));
     const telephony = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, TELEPHONY_SETTINGS_KEY));
+    const messaging = parseJsonValue<Record<string, unknown>>(findSetting(allSettings, MESSAGING_SETTINGS_KEY));
 
     setIdentityForm({
       title: readString(identity?.title, defaultIdentityForm.title),
@@ -168,6 +199,7 @@ export default function AdminSettingsPage() {
       billingDelaySeconds: String(telephony?.billingDelaySeconds ?? defaultTelephonyForm.billingDelaySeconds),
       walletTopUpDailyCapDollars: String(telephony?.walletTopUpDailyCapDollars ?? defaultTelephonyForm.walletTopUpDailyCapDollars),
     });
+    setMessagingForm({ supportUserId: readString(messaging?.supportUserId, defaultMessagingForm.supportUserId) });
   }, []);
 
   const applySettingUpdate = useCallback((updated: Setting) => {
@@ -608,6 +640,45 @@ export default function AdminSettingsPage() {
                 className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
                 {saving[TELEPHONY_SETTINGS_KEY] ? 'Saving…' : 'Save Telephony'}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-xl border bg-white p-6 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">Messaging</h2>
+            <p className="text-sm text-gray-500">
+              Clients and advisors can only message each other once they have been in contact (spoken, booked a call or joined a callback
+              line), and everyone can message Support. Support is a single address: whichever staff member replies, members see
+              &ldquo;Support&rdquo;, and what members send to Support arrives in the one account below. All staff can read the Support inbox.
+            </p>
+          </div>
+
+          <div className="max-w-xl space-y-4">
+            <label className="block text-sm font-medium text-gray-700">
+              Support account
+              <select
+                value={messagingForm.supportUserId}
+                onChange={(event) => setMessagingForm({ supportUserId: event.target.value })}
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              >
+                <option value="">The first admin account (default)</option>
+                {staffUsers.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.label} · {user.role.toLowerCase()}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => void saveManagedSetting(MESSAGING_SETTINGS_KEY, messagingForm)}
+                disabled={saving[MESSAGING_SETTINGS_KEY] || loading}
+                className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {saving[MESSAGING_SETTINGS_KEY] ? 'Saving…' : 'Save Messaging'}
               </button>
             </div>
           </div>

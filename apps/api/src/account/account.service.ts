@@ -6,6 +6,7 @@ import { deriveMediaTitle, serializeMediaAsset } from '../admin/admin-media/medi
 import { normalizePhoneNumber } from '../telephony/phone-number';
 import { ensureAdvisorSlug } from '../billing/advisor-slug';
 import { ConfigService } from '@nestjs/config';
+import { MessagesService } from '../messages/messages.service';
 import { publicName } from '../common/public-identity';
 import {
   SaveAddressDto,
@@ -21,6 +22,7 @@ export class AccountService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly messages: MessagesService,
   ) {}
 
   async getDashboard(userId: string) {
@@ -39,7 +41,7 @@ export class AccountService {
     });
     if (!user) throw new NotFoundException('Account not found');
 
-    const [orders, addresses, paymentMethods, walletTransactions, conversations, downloads] =
+    const [orders, addresses, paymentMethods, walletTransactions, unreadMessages, downloads] =
       await Promise.all([
         this.prisma.order.findMany({
           where: { userId },
@@ -65,10 +67,7 @@ export class AccountService {
           orderBy: { createdAt: 'desc' },
           take: 8,
         }),
-        this.prisma.message.findMany({
-          where: { recipientId: userId, readAt: null },
-          select: { id: true },
-        }),
+        this.messages.unreadCount({ id: userId, role: user.role }),
         this.prisma.astrologyReport.findMany({
           where: { userId },
           include: {
@@ -117,7 +116,7 @@ export class AccountService {
         balanceCents: user.clientProfile?.balanceCents ?? null,
         transactions: walletTransactions,
       },
-      messages: { unreadCount: conversations.length },
+      messages: { unreadCount: unreadMessages },
       downloads,
       advisor: user.advisorProfile
         ? {
