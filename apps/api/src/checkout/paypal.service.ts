@@ -1,4 +1,4 @@
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { HttpException, Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,6 +41,29 @@ interface PaypalCaptureResponse {
 
 interface PaypalWebhookVerifyResponse {
   verification_status: string;
+}
+
+interface PaypalErrorDetail {
+  issue?: string;
+  description?: string;
+  field?: string;
+}
+
+/** PayPal's explanation of a refusal, including the detail that says what was actually wrong. */
+export function describeFailure(body: { name?: string; message?: string; details?: PaypalErrorDetail[]; debug_id?: string }): string {
+  const details = (body.details ?? [])
+    .map((detail) => [detail.issue, detail.field ? `(${detail.field})` : '', detail.description].filter(Boolean).join(' '))
+    .join('; ');
+  return [body.name, body.message, details ? `details: ${details}` : '', body.debug_id ? `debug_id ${body.debug_id}` : '']
+    .filter(Boolean)
+    .join(' | ');
+}
+
+/** "fetch failed" on its own says nothing; the cause (a name that did not resolve, a reset connection) does. */
+export function describeNetworkError(error: unknown): string {
+  if (!(error instanceof Error)) return 'Unknown error';
+  const cause = (error as { cause?: { code?: string; message?: string } }).cause;
+  return cause ? `${error.message} (${cause.code ?? ''} ${cause.message ?? ''})`.replace(/\s+\)/, ')') : error.message;
 }
 
 /** The result of charging a saved PayPal wallet. */
@@ -251,9 +274,11 @@ export class PaypalService {
       links?: Array<{ href: string; rel: string }>;
       message?: string;
       name?: string;
+      details?: PaypalErrorDetail[];
+      debug_id?: string;
     };
     if (!response.ok || !body.id) {
-      this.logger.error(`PayPal could not start a wallet connection (${response.status}): ${body.name ?? ''} ${body.message ?? ''}`);
+      this.logger.error(`PayPal could not start a wallet connection (${response.status}): ${describeFailure(body)}`);
       throw new InternalServerErrorException('PayPal could not start the connection. Please try again.');
     }
     const approveUrl = body.links?.find((link) => link.rel === 'approve' || link.rel === 'payer-action')?.href;
@@ -277,9 +302,11 @@ export class PaypalService {
       payment_source?: { paypal?: { email_address?: string } };
       message?: string;
       name?: string;
+      details?: PaypalErrorDetail[];
+      debug_id?: string;
     };
     if (!response.ok || !body.id) {
-      this.logger.warn(`PayPal could not finish the wallet connection (${response.status}): ${body.name ?? ''} ${body.message ?? ''}`);
+      this.logger.warn(`PayPal could not finish the wallet connection (${response.status}): ${describeFailure(body)}`);
       throw new InternalServerErrorException('The PayPal connection was not completed. Please try connecting again.');
     }
     return { vaultId: body.id, payerEmail: body.payment_source?.paypal?.email_address ?? null };
@@ -320,14 +347,15 @@ export class PaypalService {
         status?: string;
         name?: string;
         message?: string;
-        details?: Array<{ issue?: string; description?: string }>;
+        debug_id?: string;
+        details?: PaypalErrorDetail[];
         purchase_units?: Array<{ payments?: { captures?: Array<{ id: string; status: string }> } }>;
       };
 
       if (!response.ok) {
         const issue = body.details?.[0]?.issue ?? body.name ?? `HTTP ${response.status}`;
         const detail = `${issue}${body.details?.[0]?.description ? `: ${body.details[0].description}` : body.message ? `: ${body.message}` : ''}`;
-        this.logger.warn(`PayPal wallet charge failed (${response.status}): ${detail}`);
+        this.logger.warn(`PayPal wallet charge failed (${response.status}): ${describeFailure(body)}`);
         const declined = response.status === 422 && /INSTRUMENT_DECLINED|PAYER_ACCOUNT|PAYER_CANNOT|TRANSACTION_REFUSED|INSUFFICIENT/i.test(issue);
         return { ok: false, reason: declined ? 'declined' : 'error', detail };
       }
@@ -339,24 +367,39 @@ export class PaypalService {
       this.logger.warn(`PayPal wallet charge was not completed immediately (order ${body.id ?? '?'}, ${body.status ?? '?'}, capture ${capture?.status ?? '?'})`);
       return { ok: false, reason: 'pending', detail: `The payment was ${capture?.status ?? body.status ?? 'not completed'}` };
     } catch (error) {
-      const detail = error instanceof Error ? error.message : 'Unknown error';
+      const detail = describeNetworkError(error);
       this.logger.error(`PayPal wallet charge failed: ${detail}`);
       return { ok: false, reason: 'error', detail };
     }
   }
 
+  /**
+   * Sends a request to PayPal. If the connection itself drops (the request never reached PayPal or its answer never
+   * came back), it is tried again a couple of times. That is safe: the same PayPal-Request-Id is used each time, so
+   * PayPal treats a repeat as the same request and never charges twice.
+   */
   private async paypalRequest(path: string, method: 'POST' | 'DELETE', body?: unknown, requestId?: string) {
-    const credentials = await this.getCredentials();
-    const accessToken = await this.getAccessToken();
-    return fetch(`${this.getBaseUrl(credentials.environment)}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        ...(requestId ? { 'PayPal-Request-Id': requestId } : {}),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
+    const attempts = 3;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const credentials = await this.getCredentials();
+        const accessToken = await this.getAccessToken();
+        return await fetch(`${this.getBaseUrl(credentials.environment)}${path}`, {
+          method,
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            ...(requestId ? { 'PayPal-Request-Id': requestId } : {}),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
+      } catch (error) {
+        // PayPal answered with a refusal, or keys are missing: a repeat would get the same answer.
+        if (error instanceof HttpException || attempt >= attempts) throw error;
+        this.logger.warn(`PayPal request to ${path} failed (${describeNetworkError(error)}); trying again (${attempt} of ${attempts - 1})`);
+        await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      }
+    }
   }
 
   async createOrder(

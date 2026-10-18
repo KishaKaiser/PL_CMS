@@ -33,8 +33,9 @@ export class PaypalWalletController {
   }
 
   @Post('complete')
-  complete(@Request() req: AuthedRequest) {
-    return this.wallets.completeConnect(req.user.id);
+  complete(@Request() req: AuthedRequest, @Body() body: { setupTokenId?: string }) {
+    const id = typeof body?.setupTokenId === 'string' && body.setupTokenId.length < 100 ? body.setupTokenId : undefined;
+    return this.wallets.completeConnect(req.user.id, id);
   }
 
   @Delete()
