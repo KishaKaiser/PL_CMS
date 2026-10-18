@@ -20,7 +20,7 @@ import { Role } from '@pl-cms/shared';
 import { memoryStorage } from 'multer';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { normalizePhoneNumber } from '../../telephony/phone-number';
-import { MAX_PROMPT_AUDIO_BYTES, PhonePromptService } from '../../telephony/phone-prompt.service';
+import { MAX_MUSIC_AUDIO_BYTES, PhonePromptService } from '../../telephony/phone-prompt.service';
 import { TelnyxService } from '../../telephony/telnyx.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -61,7 +61,7 @@ export class AdminPhonePromptsController {
 
   /** Replaces the computer voice for one line with an uploaded MP3 or WAV recording. */
   @Post(':key/audio')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MAX_PROMPT_AUDIO_BYTES } }))
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MAX_MUSIC_AUDIO_BYTES } }))
   async upload(@Request() req: AuthedRequest, @Param('key') key: string, @UploadedFile() file?: Express.Multer.File) {
     const saved = await this.prompts.save(key, file);
     await this.audit.log(req.user.id, 'phone-prompt.upload', 'PhonePrompt', key, {

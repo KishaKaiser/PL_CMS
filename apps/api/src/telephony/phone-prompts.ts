@@ -16,6 +16,9 @@ export type PromptKey =
   | 'call.out-of-funds-client'
   | 'call.out-of-funds-advisor'
   | 'call.invalid-choice'
+  | 'call.hold-contacting'
+  | 'call.connected'
+  | 'call.hold-music'
   | 'hotline.menu'
   | 'hotline.menu-retry'
   | 'hotline.no-account'
@@ -42,7 +45,9 @@ export function textOf(say: Say): string {
 
 export interface PromptDefinition {
   key: PromptKey;
-  group: 'Calls' | 'Hotline';
+  group: 'Calls' | 'Hotline' | 'Music';
+  /** A music slot loops while callers wait; it is not a line of speech. */
+  kind?: 'line' | 'music';
   label: string;
   /** When the caller or advisor hears it. */
   when: string;
@@ -141,6 +146,29 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
     label: 'Wrong key pressed',
     when: 'Someone presses a key other than 1 at a "press 1" prompt.',
     recordingText: 'That was not a valid choice.',
+  },
+  {
+    key: 'call.hold-contacting',
+    group: 'Calls',
+    label: 'Client: please hold',
+    when: "The client has pressed 1 and the advisor's phone is being rung. Hold music follows, if you have uploaded some.",
+    recordingText: 'Please hold while I contact your advisor.',
+  },
+  {
+    key: 'call.connected',
+    group: 'Calls',
+    label: 'Client: you are now connected',
+    when: 'The advisor has accepted, just before the two of them are connected.',
+    recordingText: 'You are now connected.',
+  },
+  {
+    key: 'call.hold-music',
+    group: 'Music',
+    kind: 'music',
+    label: 'Hold music',
+    when: 'Plays on a loop while the client waits for the advisor to answer, after the "please hold" line, and stops the moment the advisor accepts.',
+    recordingText: 'Any music you have the right to use, such as royalty-free or licensed music.',
+    note: 'MP3 or WAV, up to 15 MB. Phone lines make music sound thin, so calm music with few instruments works best.',
   },
   {
     key: 'hotline.menu',
