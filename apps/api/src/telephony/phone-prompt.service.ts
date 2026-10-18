@@ -6,6 +6,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { COMPUTER_VOICE_ONLY_NOTE, PROMPT_DEFINITIONS, PROMPT_KEYS, PromptKey } from './phone-prompts';
 
 export const MAX_PROMPT_AUDIO_BYTES = 5 * 1024 * 1024;
+/** Hold music is longer than a spoken line. */
+export const MAX_MUSIC_AUDIO_BYTES = 15 * 1024 * 1024;
 
 /** The computer voice used when nothing else is chosen (Telnyx format <Provider>.<Model>.<Voice>). */
 export const DEFAULT_TTS_VOICE = 'AWS.Polly.Joanna';
@@ -126,7 +128,8 @@ export class PhonePromptService {
     if (!PROMPT_KEYS.has(key)) throw new BadRequestException('Unknown phone line.');
     if (!file) throw new BadRequestException('Choose an MP3 or WAV file to upload.');
     if (file.buffer.length < MIN_PROMPT_AUDIO_BYTES) throw new BadRequestException('That file is too small to be a recording.');
-    if (file.buffer.length > MAX_PROMPT_AUDIO_BYTES) throw new BadRequestException('Recordings can be at most 5 MB.');
+    const maxBytes = key === 'call.hold-music' ? MAX_MUSIC_AUDIO_BYTES : MAX_PROMPT_AUDIO_BYTES;
+    if (file.buffer.length > maxBytes) throw new BadRequestException(`That file can be at most ${Math.round(maxBytes / (1024 * 1024))} MB.`);
 
     const format = detectAudioFormat(file.buffer);
     if (!format) throw new BadRequestException('Upload an MP3 or WAV audio file.');

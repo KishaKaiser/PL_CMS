@@ -12,7 +12,8 @@ interface Recording {
 
 interface Prompt {
   key: string;
-  group: 'Calls' | 'Hotline';
+  group: 'Calls' | 'Hotline' | 'Music';
+  kind?: 'line' | 'music';
   label: string;
   when: string;
   recordingText: string;
@@ -160,8 +161,10 @@ export default function AdminPhonePromptsPage() {
     }
   }
 
-  const recorded = data?.prompts.filter((prompt) => prompt.recording).length ?? 0;
-  const groups: Array<'Calls' | 'Hotline'> = ['Calls', 'Hotline'];
+  const lines = data?.prompts.filter((prompt) => prompt.kind !== 'music') ?? [];
+  const recorded = lines.filter((prompt) => prompt.recording).length;
+  const groups: Array<'Calls' | 'Hotline' | 'Music'> = ['Calls', 'Hotline', 'Music'];
+  const headings = { Calls: 'During calls', Hotline: 'Dial-in hotline', Music: 'Hold music' };
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -174,7 +177,7 @@ export default function AdminPhonePromptsPage() {
           </p>
           {data && (
             <p className="mt-2 text-sm text-gray-500">
-              {recorded} of {data.prompts.length} lines recorded
+              {recorded} of {lines.length} lines recorded
             </p>
           )}
         </header>
@@ -301,7 +304,7 @@ export default function AdminPhonePromptsPage() {
           data &&
           groups.map((group) => (
             <section key={group}>
-              <h2 className="mb-3 text-lg font-semibold text-gray-950">{group === 'Calls' ? 'During calls' : 'Dial-in hotline'}</h2>
+              <h2 className="mb-3 text-lg font-semibold text-gray-950">{headings[group]}</h2>
               <ul className="space-y-3">
                 {data.prompts
                   .filter((prompt) => prompt.group === group)
@@ -316,11 +319,15 @@ export default function AdminPhonePromptsPage() {
                                 prompt.recording ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
                               }`}
                             >
-                              {prompt.recording ? 'Your recording' : 'Computer voice'}
+                              {prompt.recording ? (prompt.kind === 'music' ? 'Music uploaded' : 'Your recording') : prompt.kind === 'music' ? 'Silence' : 'Computer voice'}
                             </span>
                           </div>
                           <p className="mt-1 text-xs text-gray-500">{prompt.when}</p>
-                          <p className="mt-2 rounded bg-gray-50 px-3 py-2 text-sm italic text-gray-800">&ldquo;{prompt.recordingText}&rdquo;</p>
+                          {prompt.kind === 'music' ? (
+                            <p className="mt-2 text-sm text-gray-700">{prompt.recordingText}</p>
+                          ) : (
+                            <p className="mt-2 rounded bg-gray-50 px-3 py-2 text-sm italic text-gray-800">&ldquo;{prompt.recordingText}&rdquo;</p>
+                          )}
                           {prompt.note && <p className="mt-1 text-xs text-gray-500">{prompt.note}</p>}
                         </div>
                       </div>
@@ -339,7 +346,7 @@ export default function AdminPhonePromptsPage() {
                             busyKey === prompt.key ? 'pointer-events-none opacity-50' : ''
                           }`}
                         >
-                          {busyKey === prompt.key ? 'Working...' : prompt.recording ? 'Replace recording' : 'Upload recording'}
+                          {busyKey === prompt.key ? 'Working...' : prompt.recording ? (prompt.kind === 'music' ? 'Replace music' : 'Replace recording') : prompt.kind === 'music' ? 'Upload music' : 'Upload recording'}
                           <input
                             ref={(element) => {
                               fileInputs.current[prompt.key] = element;

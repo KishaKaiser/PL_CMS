@@ -66,6 +66,12 @@ function spokenAmount(cents: number): string {
 }
 const inboundClientPrompt = (advisorName: string, rateCents: number) =>
   `You have chosen ${advisorName}, at ${spokenAmount(rateCents)} per minute. To connect now, press 1.`;
+/** What the client hears while we reach the advisor, and just before the two are connected. */
+const HOLD_MESSAGE: Spoken = { key: 'call.hold-contacting', text: 'Please hold while I contact your advisor.' };
+const CONNECTED_MESSAGE: Spoken = { key: 'call.connected', text: 'You are now connected.' };
+/** If "you are now connected" never reports that it has finished, the two are connected anyway after this long. */
+const BRIDGE_FALLBACK_MS = 8_000;
+
 const CLIENT_UNAVAILABLE_MESSAGE: Spoken = {
   key: 'call.advisor-unavailable',
   text: 'We are sorry, your advisor is unavailable right now. You have not been charged. Goodbye.',
@@ -140,6 +146,9 @@ export type InboundCallHandler = (eventType: string | undefined, payload: Telnyx
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
   private inboundHandler: InboundCallHandler | null = null;
+  /** Calls already being connected, so the announcement ending and the safety timer cannot both bridge. */
+  private readonly bridging = new Map<string, number>();
+  private bridgeFallbackMs = BRIDGE_FALLBACK_MS;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -429,6 +438,10 @@ export class BillingService {
       case 'call.playback.ended':
         // A goodbye (spoken or recorded) has finished playing: now hang up.
         if (state.step === 'goodbye') await this.telnyx.hangup(callControlId);
+        // "Please hold" has been said: start the music.
+        else if (state.step === 'hold-announce') await this.startHoldMusic(state.sessionId, callControlId);
+        // "You are now connected" has been said: connect the two.
+        else if (state.step === 'bridge') await this.bridgeNow(state.sessionId);
         return { ok: true };
 
       case 'call.hangup':
@@ -560,6 +573,8 @@ export class BillingService {
         where: { id: sessionId },
         data: { advisorCallControlId: callControlId },
       });
+      // The client would otherwise sit in silence while the advisor's phone rings.
+      void this.holdClient(sessionId, clientCallControlId);
     } catch (error) {
       this.logger.error(
         `Could not ring advisor for session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -596,8 +611,37 @@ export class BillingService {
     });
     if (claim.count === 0) return { ok: true };
 
+    // End the hold music, tell the client they are through, and bridge when that has been said.
+    await this.stopHold(session.clientCallControlId);
+    const announced = await this.telnyx
+      .speak(session.clientCallControlId, CONNECTED_MESSAGE, { sessionId, leg: 'client', step: 'bridge' })
+      .catch(() => false);
+    if (announced) {
+      // The bridge happens when the announcement ends; this timer only matters if that notice never arrives.
+      setTimeout(() => void this.bridgeNow(sessionId), this.bridgeFallbackMs).unref();
+    } else {
+      await this.bridgeNow(sessionId);
+    }
+
+    return { ok: true };
+  }
+
+  /** Connects the two legs, once, however many things ask. */
+  private async bridgeNow(sessionId: string) {
+    if (this.bridging.has(sessionId)) return;
+    this.bridging.set(sessionId, Date.now());
+    for (const [id, at] of this.bridging) {
+      if (Date.now() - at > 10 * 60_000) this.bridging.delete(id);
+    }
+
+    const session = await this.prisma.callSession.findUnique({
+      where: { id: sessionId },
+      select: { status: true, clientCallControlId: true, advisorCallControlId: true },
+    });
+    if (!session || session.status.startsWith('ENDED') || !session.clientCallControlId || !session.advisorCallControlId) return;
+
     try {
-      await this.telnyx.bridge(session.clientCallControlId, advisorCallControlId);
+      await this.telnyx.bridge(session.clientCallControlId, session.advisorCallControlId);
     } catch (error) {
       this.logger.error(
         `Could not bridge session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -605,8 +649,32 @@ export class BillingService {
       await this.endSession(sessionId, 'ENDED_NOT_CONNECTED');
       await this.terminateCall(sessionId);
     }
+  }
 
-    return { ok: true };
+  /** While the advisor is rung: "please hold", then music until they answer. Never blocks or breaks the call. */
+  private async holdClient(sessionId: string, clientCallControlId: string) {
+    try {
+      const spoke = await this.telnyx.speak(clientCallControlId, HOLD_MESSAGE, { sessionId, leg: 'client', step: 'hold-announce' });
+      // No announcement to wait for: go straight to the music.
+      if (!spoke) await this.startHoldMusic(sessionId, clientCallControlId);
+    } catch (error) {
+      this.logger.warn(`Could not hold the client on session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /** Starts the music, but only if the advisor has not answered (or hung up) in the meantime. */
+  private async startHoldMusic(sessionId: string, clientCallControlId: string) {
+    const session = await this.prisma.callSession.findUnique({ where: { id: sessionId }, select: { status: true } });
+    if (!session || session.status !== 'DIALING_ADVISOR') return;
+    await this.telnyx.playHoldMusic(clientCallControlId, { sessionId, leg: 'client', step: 'hold' });
+  }
+
+  private async stopHold(clientCallControlId: string | null | undefined) {
+    try {
+      await this.telnyx.stopPlayback(clientCallControlId);
+    } catch {
+      // nothing playing, or the call is already gone
+    }
   }
 
   /**
@@ -626,6 +694,8 @@ export class BillingService {
     await this.telnyx.hangup(session.advisorCallControlId);
 
     if (session.clientCallControlId) {
+      // Music that loops would hold the apology back for ever, so stop it first.
+      await this.stopHold(session.clientCallControlId);
       const spoke = await this.telnyx.speak(session.clientCallControlId, CLIENT_UNAVAILABLE_MESSAGE, {
         sessionId,
         leg: 'client',

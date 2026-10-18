@@ -21,7 +21,17 @@ const WEBHOOK_TOLERANCE_SECONDS = 300;
 export type CallLeg = 'client' | 'advisor';
 
 /** What a leg is doing: waiting for the caller to press 1, or hearing a goodbye before hanging up. */
-export type CallStep = 'consent' | 'goodbye' | 'topup' | 'topup-amount' | 'topup-amount-retry';
+export type CallStep =
+  | 'consent'
+  | 'goodbye'
+  | 'topup'
+  | 'topup-amount'
+  | 'topup-amount-retry'
+  // The client is waiting while the advisor is rung: first the "please hold" line, then music.
+  | 'hold-announce'
+  | 'hold'
+  // "You are now connected" is playing; the two legs are bridged when it ends.
+  | 'bridge';
 
 /** Travels with each Telnyx call leg and comes back, base64-encoded, on every webhook. */
 export interface CallState {
@@ -205,6 +215,43 @@ export class TelnyxService {
     if (!response.ok) {
       this.logger.error(`Telnyx top-up amount prompt failed (${response.status}): ${await response.text()}`);
       throw new BadGatewayException('The phone service could not play the top-up prompt.');
+    }
+  }
+
+  /**
+   * Plays the uploaded hold music on a loop until it is stopped. Returns false when there is no music to play (none
+   * uploaded, or Telnyx cannot reach it), and the caller then simply waits in silence.
+   */
+  async playHoldMusic(callControlId: string, state: CallState): Promise<boolean> {
+    const url = await this.recordingFor({ key: 'call.hold-music', text: '' });
+    if (!url) return false;
+    try {
+      const response = await this.command(callControlId, 'playback_start', {
+        audio_url: url,
+        loop: 'infinity',
+        client_state: encodeState(state),
+      });
+      if (response.ok) this.logger.log(`Playing hold music from ${url}`);
+      else if (response.status !== 404 && response.status !== 422) {
+        this.logger.warn(`Telnyx could not play the hold music (${response.status}): ${await response.text()}`);
+      }
+      return response.ok;
+    } catch (error) {
+      this.logger.warn(`Telnyx could not play the hold music: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return false;
+    }
+  }
+
+  /** Stops whatever is playing on a leg (hold music, an announcement). Nothing playing, or a call that is gone, is fine. */
+  async stopPlayback(callControlId: string | null | undefined): Promise<void> {
+    if (!callControlId) return;
+    try {
+      const response = await this.command(callControlId, 'playback_stop', { stop: 'all' });
+      if (!response.ok && response.status !== 404 && response.status !== 422) {
+        this.logger.warn(`Telnyx could not stop the playback (${response.status}): ${await response.text()}`);
+      }
+    } catch (error) {
+      this.logger.warn(`Telnyx could not stop the playback: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -406,7 +453,7 @@ export function decodeState(encoded: string | undefined): CallState | null {
   try {
     const parsed = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8')) as Partial<CallState>;
     if (typeof parsed.sessionId === 'string' && (parsed.leg === 'client' || parsed.leg === 'advisor')) {
-      const steps: CallStep[] = ['consent', 'goodbye', 'topup', 'topup-amount', 'topup-amount-retry'];
+      const steps: CallStep[] = ['consent', 'goodbye', 'topup', 'topup-amount', 'topup-amount-retry', 'hold-announce', 'hold', 'bridge'];
       const step = parsed.step && steps.includes(parsed.step) ? parsed.step : undefined;
       const audioKey = typeof parsed.audioKey === 'string' && PROMPT_KEYS.has(parsed.audioKey) ? (parsed.audioKey as PromptKey) : undefined;
       return { sessionId: parsed.sessionId, leg: parsed.leg, ...(step ? { step } : {}), ...(audioKey ? { audioKey } : {}) };
