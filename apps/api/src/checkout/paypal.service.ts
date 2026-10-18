@@ -43,6 +43,11 @@ interface PaypalWebhookVerifyResponse {
   verification_status: string;
 }
 
+/** The result of charging a saved PayPal wallet. */
+export type PaypalChargeResult =
+  | { ok: true; orderId: string; captureId: string }
+  | { ok: false; reason: 'declined' | 'pending' | 'error'; detail: string };
+
 /** What PayPal said when asked whether this app may save customers' PayPal wallets. */
 export interface PaypalWalletCheck {
   environment: 'sandbox' | 'live';
@@ -227,6 +232,131 @@ export class PaypalService {
       this.logger.error(`PayPal wallet check failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return result('error');
     }
+  }
+
+  // ── Saved wallets (PayPal Vault) ──────────────────────────────────────────
+
+  /** Starts saving a client's PayPal wallet: PayPal returns a setup token and the page the client approves it on. */
+  async createWalletSetup(returnUrl: string): Promise<{ setupTokenId: string; approveUrl: string }> {
+    const response = await this.paypalRequest('/v3/vault/setup-tokens', 'POST', {
+      payment_source: {
+        paypal: {
+          usage_type: 'MERCHANT',
+          experience_context: { return_url: returnUrl, cancel_url: returnUrl },
+        },
+      },
+    }, randomUUID());
+    const body = (await response.json().catch(() => ({}))) as {
+      id?: string;
+      links?: Array<{ href: string; rel: string }>;
+      message?: string;
+      name?: string;
+    };
+    if (!response.ok || !body.id) {
+      this.logger.error(`PayPal could not start a wallet connection (${response.status}): ${body.name ?? ''} ${body.message ?? ''}`);
+      throw new InternalServerErrorException('PayPal could not start the connection. Please try again.');
+    }
+    const approveUrl = body.links?.find((link) => link.rel === 'approve' || link.rel === 'payer-action')?.href;
+    if (!approveUrl) {
+      this.logger.error('PayPal did not return a page to approve the wallet on');
+      throw new InternalServerErrorException('PayPal could not start the connection. Please try again.');
+    }
+    return { setupTokenId: body.id, approveUrl };
+  }
+
+  /** Once the client has approved on PayPal, turns the setup token into the wallet we can charge later. */
+  async createPaymentToken(setupTokenId: string): Promise<{ vaultId: string; payerEmail: string | null }> {
+    const response = await this.paypalRequest(
+      '/v3/vault/payment-tokens',
+      'POST',
+      { payment_source: { token: { id: setupTokenId, type: 'SETUP_TOKEN' } } },
+      randomUUID(),
+    );
+    const body = (await response.json().catch(() => ({}))) as {
+      id?: string;
+      payment_source?: { paypal?: { email_address?: string } };
+      message?: string;
+      name?: string;
+    };
+    if (!response.ok || !body.id) {
+      this.logger.warn(`PayPal could not finish the wallet connection (${response.status}): ${body.name ?? ''} ${body.message ?? ''}`);
+      throw new InternalServerErrorException('The PayPal connection was not completed. Please try connecting again.');
+    }
+    return { vaultId: body.id, payerEmail: body.payment_source?.paypal?.email_address ?? null };
+  }
+
+  /** Removes a saved wallet at PayPal. A wallet PayPal no longer knows about counts as removed. */
+  async deletePaymentToken(vaultId: string): Promise<void> {
+    const response = await this.paypalRequest(`/v3/vault/payment-tokens/${encodeURIComponent(vaultId)}`, 'DELETE');
+    if (!response.ok && response.status !== 404) {
+      this.logger.warn(`PayPal could not remove a saved wallet (${response.status})`);
+    }
+  }
+
+  /**
+   * Charges a saved wallet for a top-up the client chose. The request id makes a repeated attempt safe: PayPal
+   * will not charge twice for the same id.
+   */
+  async chargeSavedWallet(args: { vaultId: string; amountCents: number; requestId: string; description: string }): Promise<PaypalChargeResult> {
+    try {
+      const response = await this.paypalRequest(
+        '/v2/checkout/orders',
+        'POST',
+        {
+          intent: 'CAPTURE',
+          purchase_units: [
+            {
+              amount: { currency_code: 'USD', value: (args.amountCents / 100).toFixed(2) },
+              description: args.description,
+              custom_id: args.requestId,
+            },
+          ],
+          payment_source: { paypal: { vault_id: args.vaultId } },
+        },
+        args.requestId,
+      );
+      const body = (await response.json().catch(() => ({}))) as {
+        id?: string;
+        status?: string;
+        name?: string;
+        message?: string;
+        details?: Array<{ issue?: string; description?: string }>;
+        purchase_units?: Array<{ payments?: { captures?: Array<{ id: string; status: string }> } }>;
+      };
+
+      if (!response.ok) {
+        const issue = body.details?.[0]?.issue ?? body.name ?? `HTTP ${response.status}`;
+        const detail = `${issue}${body.details?.[0]?.description ? `: ${body.details[0].description}` : body.message ? `: ${body.message}` : ''}`;
+        this.logger.warn(`PayPal wallet charge failed (${response.status}): ${detail}`);
+        const declined = response.status === 422 && /INSTRUMENT_DECLINED|PAYER_ACCOUNT|PAYER_CANNOT|TRANSACTION_REFUSED|INSUFFICIENT/i.test(issue);
+        return { ok: false, reason: declined ? 'declined' : 'error', detail };
+      }
+
+      const capture = body.purchase_units?.[0]?.payments?.captures?.[0];
+      if (body.status === 'COMPLETED' && capture?.status === 'COMPLETED' && body.id) {
+        return { ok: true, orderId: body.id, captureId: capture.id };
+      }
+      this.logger.warn(`PayPal wallet charge was not completed immediately (order ${body.id ?? '?'}, ${body.status ?? '?'}, capture ${capture?.status ?? '?'})`);
+      return { ok: false, reason: 'pending', detail: `The payment was ${capture?.status ?? body.status ?? 'not completed'}` };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`PayPal wallet charge failed: ${detail}`);
+      return { ok: false, reason: 'error', detail };
+    }
+  }
+
+  private async paypalRequest(path: string, method: 'POST' | 'DELETE', body?: unknown, requestId?: string) {
+    const credentials = await this.getCredentials();
+    const accessToken = await this.getAccessToken();
+    return fetch(`${this.getBaseUrl(credentials.environment)}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        ...(requestId ? { 'PayPal-Request-Id': requestId } : {}),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
   }
 
   async createOrder(

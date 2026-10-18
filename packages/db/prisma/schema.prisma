@@ -105,6 +105,9 @@ model User {
   savedPaymentMethods SavedPaymentMethod[]
   productReviews ProductReview[]
   advisorReviews AdvisorReview[]
+  paypalWallet   PaypalWallet?
+  paypalWalletSetups PaypalWalletSetup[]
+  walletTopUps   WalletTopUp[]
   postComments   PostComment[]
 
   @@map("users")
@@ -229,6 +232,8 @@ model CallSession {
   // How the call started: DIRECT (Call Now) or HOTLINE. Appointment and queue calls are told
   // apart by their own links to this session.
   source          String    @default("DIRECT")
+  // Set when the client said no to the in-call offer to add money, so they are not asked again on this call.
+  topUpDeclinedAt DateTime?
 
   advisor AdvisorProfile @relation("AdvisorSessions", fields: [advisorId], references: [id])
   client  ClientProfile  @relation("ClientSessions", fields: [clientId], references: [id])
@@ -875,6 +880,56 @@ model PhonePromptAudio {
   updatedAt DateTime @updatedAt
 
   @@map("phone_prompt_audio")
+}
+
+// A client's saved PayPal wallet (a PayPal Vault payment token), charged only when they choose to
+// add money during a call.
+model PaypalWallet {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  vaultId    String   @unique
+  payerEmail String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("paypal_wallets")
+}
+
+// A wallet connection the client has started on PayPal's site but not finished yet.
+model PaypalWalletSetup {
+  id           String   @id @default(cuid())
+  userId       String
+  setupTokenId String   @unique
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("paypal_wallet_setups")
+}
+
+// Every attempt to add money from a saved PayPal wallet. Used for the daily limit and as a record of
+// what was charged.
+model WalletTopUp {
+  id              String   @id @default(cuid())
+  userId          String
+  amountCents     Int
+  // PENDING (charging) → COMPLETED | FAILED
+  status          String   @default("PENDING")
+  source          String   @default("CALL")
+  callSessionId   String?
+  paypalOrderId   String?
+  paypalCaptureId String?  @unique
+  failureReason   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("wallet_top_ups")
 }
 
 model AdvisorReview {

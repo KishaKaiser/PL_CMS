@@ -10,7 +10,8 @@ import { Cron } from '@nestjs/schedule';
 import type { AdvisorProfile, ClientProfile } from '@pl-cms/db';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Spoken } from '../telephony/phone-prompts';
-import { CallLeg, TelnyxService, decodeState } from '../telephony/telnyx.service';
+import { CallLeg, CallState, TelnyxService, decodeState } from '../telephony/telnyx.service';
+import { MAX_TOP_UP_CENTS, MIN_TOP_UP_CENTS, PaypalWalletService } from '../wallet/paypal-wallet.service';
 import { StartSessionDto } from './billing.dto';
 
 /** How often a connected call is charged another minute. */
@@ -77,6 +78,16 @@ const ADVISOR_LOW_BALANCE_WARNING: Spoken = {
   key: 'call.low-balance-advisor',
   text: "The client's balance is running low. This call will end in about one minute.",
 };
+/** The menu a client with a saved PayPal wallet hears with the low-balance warning. */
+const TOP_UP_MENU =
+  'Your balance is running low, and this call will end in about one minute. To add money from your PayPal wallet, press 1 for 10 dollars, 2 for 20 dollars, 3 for 50 dollars, 4 to enter an amount of your choice, or 9 to continue without adding money.';
+const TOP_UP_AMOUNT_PROMPT = 'Enter the amount in dollars, from 5 to 100, followed by the pound key.';
+const TOP_UP_AMOUNT_RETRY = 'That amount is not allowed. Enter an amount in dollars from 5 to 100, followed by the pound key.';
+const TOP_UP_DECLINED = 'No problem. Your call will end in about one minute unless you add funds on the website.';
+const TOP_UP_FAILED = 'We could not add funds just now. You can add funds on the website to keep talking.';
+const TOP_UP_DECLINED_BY_PAYPAL = 'PayPal did not accept that payment. You can add funds on the website to keep talking.';
+const TOP_UP_PRESETS: Record<string, number> = { '1': 1000, '2': 2000, '3': 5000 };
+
 const CLIENT_OUT_OF_FUNDS_MESSAGE: Spoken = {
   key: 'call.out-of-funds-client',
   text: 'Your balance has run out, so this call is ending. Goodbye.',
@@ -133,6 +144,7 @@ export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly telnyx: TelnyxService,
+    private readonly wallets: PaypalWalletService,
   ) {}
 
   /** The hotline registers itself here so incoming calls reach it through the same webhook. */
@@ -399,6 +411,9 @@ export class BillingService {
           : this.onAdvisorAnswered(state.sessionId, callControlId);
 
       case 'call.gather.ended':
+        if (state.step === 'topup' || state.step === 'topup-amount' || state.step === 'topup-amount-retry') {
+          return this.onTopUpChoice(state, callControlId, payload.digits);
+        }
         // A recording that produced no key press may simply not have played: say it again in the computer voice before
         // treating the silence as the person declining.
         if (state.audioKey && !payload.digits && payload.status !== 'call_hangup') {
@@ -716,10 +731,16 @@ export class BillingService {
       if (claim.count === 0) continue;
 
       if (session.clientCallControlId) {
-        await this.telnyx.speak(session.clientCallControlId, CLIENT_LOW_BALANCE_WARNING, {
-          sessionId: session.id,
-          leg: 'client',
-        });
+        // A client with a saved PayPal wallet is offered a top-up right now; everyone else is told where to add funds.
+        const offered =
+          !session.topUpDeclinedAt &&
+          (await this.offerTopUp(session.id, session.client.userId, session.clientCallControlId));
+        if (!offered) {
+          await this.telnyx.speak(session.clientCallControlId, CLIENT_LOW_BALANCE_WARNING, {
+            sessionId: session.id,
+            leg: 'client',
+          });
+        }
       }
       if (session.advisorCallControlId) {
         await this.telnyx.speak(session.advisorCallControlId, ADVISOR_LOW_BALANCE_WARNING, {
@@ -727,6 +748,83 @@ export class BillingService {
           leg: 'advisor',
         });
       }
+    }
+  }
+
+  /** Plays the top-up menu to the client. Returns false if it could not be offered, so the plain warning is used. */
+  private async offerTopUp(sessionId: string, userId: string, clientCallControlId: string): Promise<boolean> {
+    try {
+      if (!(await this.wallets.canOffer(userId))) return false;
+      await this.telnyx.promptTopUpMenu(clientCallControlId, TOP_UP_MENU, { sessionId, leg: 'client', step: 'topup' });
+      return true;
+    } catch (error) {
+      this.logger.warn(`Could not offer a top-up on session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return false;
+    }
+  }
+
+  /** The client pressed a key on the top-up menu, or entered an amount. */
+  private async onTopUpChoice(state: CallState, callControlId: string, digits: string | undefined) {
+    const { sessionId } = state;
+    const session = await this.prisma.callSession.findUnique({
+      where: { id: sessionId },
+      select: { status: true, client: { select: { userId: true } } },
+    });
+    if (!session || session.status.startsWith('ENDED')) return { ok: true };
+
+    const legState = { sessionId, leg: 'client' as const };
+    const say = (text: string) => this.telnyx.speak(callControlId, text, legState);
+    const decline = async () => {
+      await this.prisma.callSession.updateMany({ where: { id: sessionId }, data: { topUpDeclinedAt: new Date() } });
+      await say(TOP_UP_DECLINED);
+      return { ok: true };
+    };
+
+    let amountCents: number | null = null;
+    if (state.step === 'topup') {
+      if (digits === '4') {
+        await this.telnyx.promptTopUpAmount(callControlId, TOP_UP_AMOUNT_PROMPT, { ...legState, step: 'topup-amount' });
+        return { ok: true };
+      }
+      amountCents = digits ? (TOP_UP_PRESETS[digits] ?? null) : null;
+      if (amountCents === null) return decline();
+    } else {
+      const dollars = Number((digits ?? '').replace(/\D/g, ''));
+      if (Number.isInteger(dollars) && dollars >= MIN_TOP_UP_CENTS / 100 && dollars <= MAX_TOP_UP_CENTS / 100) {
+        amountCents = dollars * 100;
+      } else if (digits && state.step === 'topup-amount') {
+        await this.telnyx.promptTopUpAmount(callControlId, TOP_UP_AMOUNT_RETRY, { ...legState, step: 'topup-amount-retry' });
+        return { ok: true };
+      } else {
+        return decline();
+      }
+    }
+
+    // Answer the webhook now; the charge takes a few seconds and the result is spoken when it is done.
+    await say(`Adding ${spokenAmount(amountCents)} to your wallet now.`);
+    void this.runTopUp(session.client.userId, sessionId, amountCents, say);
+    return { ok: true };
+  }
+
+  private async runTopUp(userId: string, sessionId: string, amountCents: number, say: (text: string) => Promise<unknown>) {
+    try {
+      const result = await this.wallets.topUp(userId, amountCents, sessionId);
+      if (result.ok) {
+        await say(`Done. ${spokenAmount(result.amountCents)} has been added to your wallet. Your balance is now ${spokenAmount(result.balanceCents)}.`);
+      } else if (result.reason === 'limit') {
+        await say(
+          result.remainingCents && result.remainingCents >= MIN_TOP_UP_CENTS
+            ? `That would go over your daily limit. You can add up to ${spokenAmount(result.remainingCents)} today.`
+            : 'You have reached your daily limit for adding funds. You can add funds on the website tomorrow.',
+        );
+      } else if (result.reason === 'declined') {
+        await say(TOP_UP_DECLINED_BY_PAYPAL);
+      } else {
+        await say(TOP_UP_FAILED);
+      }
+    } catch (error) {
+      this.logger.error(`Top-up for session ${sessionId} failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      await say(TOP_UP_FAILED).catch(() => undefined);
     }
   }
 

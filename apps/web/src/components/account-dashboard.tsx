@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { AdvisorPublicLink } from './phone/advisor-public-link';
 import { AdvisorScheduleEditor, type ScheduleSlot } from './phone/advisor-schedule-editor';
 import { AppointmentsPanel } from './phone/appointments-panel';
+import { PaypalWalletPanel } from './phone/paypal-wallet-panel';
 import { PrivateMessageInbox } from './private-message-inbox';
 
 type DashboardMode = 'client' | 'advisor';
@@ -700,6 +701,8 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
               <PrimaryButton disabled={saving === 'client-phone' || clientPhone.trim() === ''}>Save Phone Number</PrimaryButton>
             </form>
           )}
+
+          {activeSection === 'account' && !isAdvisor && <PaypalWalletPanel />}
 
           {activeSection === 'advisor-profile' && isAdvisor && (
             <div className="space-y-10">
