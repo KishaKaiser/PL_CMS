@@ -10,7 +10,7 @@ interface ActiveSession {
   nextBillAt?: string | null;
   advisorId: string;
   advisor?: { displayName: string; ratePerMinute: number | string; slug?: string | null };
-  /** PENDING_CONNECTION → AWAITING_CLIENT → DIALING_ADVISOR → CONNECTED (free period) → BILLING_ACTIVE */
+  /** PENDING_CONNECTION → AWAITING_CLIENT → DIALING_ADVISOR → CONNECTED (billing not started yet) → BILLING_ACTIVE */
   status: string;
   _count?: { walletTransactions: number };
 }
@@ -212,10 +212,6 @@ export default function ClientSessionPage() {
 
   const connectedAtMs = new Date(session.connectedAt ?? session.startedAt).getTime();
   const elapsed = Math.max(0, Math.floor((now - connectedAtMs) / 1000));
-  const freeSecondsLeft =
-    session.status === 'CONNECTED' && session.nextBillAt
-      ? Math.max(0, Math.ceil((new Date(session.nextBillAt).getTime() - now) / 1000))
-      : 0;
   const billedMinutes = session._count?.walletTransactions ?? 0;
   const billedSoFar = session.advisor ? billedMinutes * Number(session.advisor.ratePerMinute) : null;
 
@@ -243,11 +239,11 @@ export default function ClientSessionPage() {
           <p className="text-5xl font-mono font-bold text-indigo-700">
             {formatTime(elapsed)}
           </p>
-          <p className="mt-2 text-sm text-gray-500">
-            {session.status === 'CONNECTED'
-              ? `Free for the next ${freeSecondsLeft} second${freeSecondsLeft !== 1 ? 's' : ''}, then billing starts`
-              : `${billedMinutes} min billed${billedSoFar !== null ? ` ($${billedSoFar.toFixed(2)} so far)` : ''}`}
-          </p>
+          {session.status === 'BILLING_ACTIVE' && (
+            <p className="mt-2 text-sm text-gray-500">
+              {`${billedMinutes} min billed${billedSoFar !== null ? ` ($${billedSoFar.toFixed(2)} so far)` : ''}`}
+            </p>
+          )}
         </div>
 
         {balanceCents !== null && (
