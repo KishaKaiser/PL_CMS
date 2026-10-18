@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { PaypalWalletCheck } from '../../../components/paypal-wallet-check';
 
 interface Setting {
   key: string;
@@ -324,6 +325,7 @@ export default function AdminStorePage() {
               <input value={billingApiForm.stripePublishableKey} onChange={(event) => setBillingApiForm((current) => ({ ...current, stripePublishableKey: event.target.value }))} placeholder="Stripe publishable key" className="w-full rounded border px-3 py-2 text-sm" />
               <input value={billingApiForm.stripeSecretKey} onChange={(event) => setBillingApiForm((current) => ({ ...current, stripeSecretKey: event.target.value }))} placeholder="Stripe secret key" className="w-full rounded border px-3 py-2 text-sm" />
               <input value={billingApiForm.webhookSecret} onChange={(event) => setBillingApiForm((current) => ({ ...current, webhookSecret: event.target.value }))} placeholder="Webhook secret" className="w-full rounded border px-3 py-2 text-sm" />
+              <PaypalWalletCheck />
               <div className="flex justify-end">
                 <button type="button" onClick={() => void saveBillingApi()} disabled={savingBillingApi} className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
                   {savingBillingApi ? 'Saving…' : 'Save Billing'}

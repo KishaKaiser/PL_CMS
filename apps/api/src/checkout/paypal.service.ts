@@ -1,5 +1,6 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface PaypalAccessTokenResponse {
@@ -40,6 +41,19 @@ interface PaypalCaptureResponse {
 
 interface PaypalWebhookVerifyResponse {
   verification_status: string;
+}
+
+/** What PayPal said when asked whether this app may save customers' PayPal wallets. */
+export interface PaypalWalletCheck {
+  environment: 'sandbox' | 'live';
+  /**
+   * allowed: PayPal accepted the request. not-enabled: the keys work but wallet saving is not switched on.
+   * bad-credentials / no-credentials: the saved keys are wrong or missing. inconclusive: PayPal objected to the
+   * request itself. error: PayPal could not be reached.
+   */
+  outcome: 'allowed' | 'not-enabled' | 'bad-credentials' | 'no-credentials' | 'inconclusive' | 'error';
+  allowed: boolean;
+  paypal: { name: string | null; message: string | null; debugId: string | null; status: number } | null;
 }
 
 @Injectable()
@@ -144,6 +158,75 @@ export class PaypalService {
 
     const data = (await res.json()) as PaypalAccessTokenResponse;
     return data.access_token;
+  }
+
+  /**
+   * Asks PayPal to start saving a PayPal wallet with the saved keys, to learn whether wallet saving (the Vault) is
+   * switched on for this app. It is the same request the "connect my PayPal wallet" feature would make. Nothing is
+   * saved and nobody is charged: PayPal just returns a setup token that expires unused.
+   */
+  async checkWalletAccess(returnOrigin: string): Promise<PaypalWalletCheck> {
+    const credentials = await this.getCredentials();
+    const environment: 'sandbox' | 'live' = credentials.environment === 'live' ? 'live' : 'sandbox';
+    const result = (outcome: PaypalWalletCheck['outcome'], paypal: PaypalWalletCheck['paypal'] = null): PaypalWalletCheck => ({
+      environment,
+      outcome,
+      allowed: outcome === 'allowed',
+      paypal,
+    });
+
+    if (!credentials.clientId || !credentials.clientSecret) return result('no-credentials');
+
+    const base = this.getBaseUrl(environment);
+    try {
+      const tokenResponse = await fetch(`${base}/v1/oauth2/token`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${credentials.clientId}:${credentials.clientSecret}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'grant_type=client_credentials',
+      });
+      if (!tokenResponse.ok) {
+        return result(tokenResponse.status === 401 || tokenResponse.status === 400 ? 'bad-credentials' : 'error');
+      }
+      const { access_token: accessToken } = (await tokenResponse.json()) as PaypalAccessTokenResponse;
+
+      const response = await fetch(`${base}/v3/vault/setup-tokens`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'PayPal-Request-Id': randomUUID(),
+        },
+        body: JSON.stringify({
+          payment_source: {
+            paypal: {
+              usage_type: 'MERCHANT',
+              experience_context: {
+                return_url: `${returnOrigin}/client`,
+                cancel_url: `${returnOrigin}/client`,
+              },
+            },
+          },
+        }),
+      });
+      if (response.ok) return result('allowed');
+
+      const body = (await response.json().catch(() => ({}))) as { name?: string; message?: string; debug_id?: string };
+      const paypal = { name: body.name ?? null, message: body.message ?? null, debugId: body.debug_id ?? null, status: response.status };
+      this.logger.warn(`PayPal wallet check (${environment}): ${response.status} ${body.name ?? ''} ${body.message ?? ''}`);
+
+      if (response.status === 401) return result('bad-credentials', paypal);
+      if (response.status === 403 || /NOT_AUTHORIZED|PERMISSION_DENIED|AUTHORIZATION_ERROR|FEATURE_NOT_ENABLED/i.test(body.name ?? '')) {
+        return result('not-enabled', paypal);
+      }
+      if (response.status === 400 || response.status === 422) return result('inconclusive', paypal);
+      return result('error', paypal);
+    } catch (error) {
+      this.logger.error(`PayPal wallet check failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return result('error');
+    }
   }
 
   async createOrder(
