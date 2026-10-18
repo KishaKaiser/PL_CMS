@@ -48,6 +48,8 @@ interface TelephonyForm {
   dialInNumber: string;
   /** Free seconds after a call connects before per-minute billing begins. */
   billingDelaySeconds: string;
+  /** The most that can be charged to one client's saved PayPal wallet in 24 hours, in dollars. */
+  walletTopUpDailyCapDollars: string;
 }
 
 interface SiteHomepageForm {
@@ -74,6 +76,7 @@ const defaultIdentityForm: SiteIdentityForm = {
 const defaultTelephonyForm: TelephonyForm = {
   dialInNumber: '',
   billingDelaySeconds: '45',
+  walletTopUpDailyCapDollars: '500',
 };
 
 const defaultAstrologyReportForm: AstrologyReportForm = {
@@ -163,6 +166,7 @@ export default function AdminSettingsPage() {
     setTelephonyForm({
       dialInNumber: readString(telephony?.dialInNumber, defaultTelephonyForm.dialInNumber),
       billingDelaySeconds: String(telephony?.billingDelaySeconds ?? defaultTelephonyForm.billingDelaySeconds),
+      walletTopUpDailyCapDollars: String(telephony?.walletTopUpDailyCapDollars ?? defaultTelephonyForm.walletTopUpDailyCapDollars),
     });
   }, []);
 
@@ -572,6 +576,19 @@ export default function AdminSettingsPage() {
               />
               <span className="mt-1 block text-xs font-normal text-gray-500">
                 After the client and advisor are connected, the call is free for this long, then the first minute is charged. 0 to 300 seconds; 30 to 60 is typical.
+              </span>
+            </label>
+            <label className="block text-sm font-medium text-gray-700">
+              Daily limit for adding money from a saved PayPal wallet (dollars)
+              <input
+                value={telephonyForm.walletTopUpDailyCapDollars}
+                onChange={(event) => setTelephonyForm((current) => ({ ...current, walletTopUpDailyCapDollars: event.target.value.replace(/[^\d]/g, '') }))}
+                inputMode="numeric"
+                placeholder="500"
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              />
+              <span className="mt-1 block text-xs font-normal text-gray-500">
+                The most that can be charged to one client's saved PayPal wallet in any 24 hours, across all their in-call top-ups. Each top-up is $5 to $100. Between $5 and $10,000.
               </span>
             </label>
             <label className="block text-sm font-medium text-gray-700">

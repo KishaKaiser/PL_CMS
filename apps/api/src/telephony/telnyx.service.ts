@@ -21,7 +21,7 @@ const WEBHOOK_TOLERANCE_SECONDS = 300;
 export type CallLeg = 'client' | 'advisor';
 
 /** What a leg is doing: waiting for the caller to press 1, or hearing a goodbye before hanging up. */
-export type CallStep = 'consent' | 'goodbye';
+export type CallStep = 'consent' | 'goodbye' | 'topup' | 'topup-amount' | 'topup-amount-retry';
 
 /** Travels with each Telnyx call leg and comes back, base64-encoded, on every webhook. */
 export interface CallState {
@@ -166,6 +166,45 @@ export class TelnyxService {
     } catch (error) {
       this.logger.error(`Telnyx speak failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return false;
+    }
+  }
+
+  /**
+   * Offers a client whose balance is running low the chance to add money from their saved PayPal wallet. One key
+   * press answers it (call.gather.ended): 1, 2 or 3 for a set amount, 4 to choose an amount, 9 to decline.
+   */
+  async promptTopUpMenu(callControlId: string, text: string, state: CallState): Promise<void> {
+    const response = await this.speakingCommand(callControlId, 'gather_using_speak', {
+      payload: text,
+      minimum_digits: 1,
+      maximum_digits: 1,
+      valid_digits: '12349',
+      maximum_tries: 1,
+      timeout_millis: 12_000,
+      client_state: encodeState(state),
+    });
+    if (!response.ok) {
+      this.logger.error(`Telnyx top-up prompt failed (${response.status}): ${await response.text()}`);
+      throw new BadGatewayException('The phone service could not play the top-up prompt.');
+    }
+  }
+
+  /** Asks for an amount in dollars, ended with the pound key. */
+  async promptTopUpAmount(callControlId: string, text: string, state: CallState): Promise<void> {
+    const response = await this.speakingCommand(callControlId, 'gather_using_speak', {
+      payload: text,
+      minimum_digits: 1,
+      maximum_digits: 3,
+      terminating_digit: '#',
+      valid_digits: '0123456789',
+      maximum_tries: 1,
+      timeout_millis: 15_000,
+      inter_digit_timeout_millis: 6_000,
+      client_state: encodeState(state),
+    });
+    if (!response.ok) {
+      this.logger.error(`Telnyx top-up amount prompt failed (${response.status}): ${await response.text()}`);
+      throw new BadGatewayException('The phone service could not play the top-up prompt.');
     }
   }
 
@@ -367,7 +406,8 @@ export function decodeState(encoded: string | undefined): CallState | null {
   try {
     const parsed = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8')) as Partial<CallState>;
     if (typeof parsed.sessionId === 'string' && (parsed.leg === 'client' || parsed.leg === 'advisor')) {
-      const step = parsed.step === 'consent' || parsed.step === 'goodbye' ? parsed.step : undefined;
+      const steps: CallStep[] = ['consent', 'goodbye', 'topup', 'topup-amount', 'topup-amount-retry'];
+      const step = parsed.step && steps.includes(parsed.step) ? parsed.step : undefined;
       const audioKey = typeof parsed.audioKey === 'string' && PROMPT_KEYS.has(parsed.audioKey) ? (parsed.audioKey as PromptKey) : undefined;
       return { sessionId: parsed.sessionId, leg: parsed.leg, ...(step ? { step } : {}), ...(audioKey ? { audioKey } : {}) };
     }
