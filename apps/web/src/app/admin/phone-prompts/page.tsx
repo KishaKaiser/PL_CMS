@@ -20,9 +20,18 @@ interface Prompt {
   recording: Recording | null;
 }
 
+interface VoiceInfo {
+  voice: string;
+  source: 'admin' | 'environment' | 'default';
+  chosen: string | null;
+  fellBack: boolean;
+}
+
 interface PromptList {
+  voice: VoiceInfo;
   audioAddressConfigured: boolean;
   addressProblem: string | null;
+  addressNote: string | null;
   note: string;
   prompts: Prompt[];
 }
@@ -46,12 +55,17 @@ export default function AdminPhonePromptsPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [voiceInput, setVoiceInput] = useState('');
+  const [testPhone, setTestPhone] = useState('');
+  const [voiceBusy, setVoiceBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/proxy/admin/phone-prompts');
       if (!res.ok) throw new Error(await readMessage(res, `Could not load the phone lines (HTTP ${res.status}).`));
-      setData((await res.json()) as PromptList);
+      const next = (await res.json()) as PromptList;
+      setData(next);
+      setVoiceInput((current) => (current === '' ? next.voice.chosen ?? '' : current));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the phone lines.');
     } finally {
@@ -106,6 +120,46 @@ export default function AdminPhonePromptsPage() {
     }
   }
 
+  async function saveVoice(voice: string) {
+    setVoiceBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await fetch('/api/proxy/admin/phone-prompts/voice', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ voice }),
+      });
+      if (!res.ok) throw new Error(await readMessage(res, 'Could not save the voice.'));
+      setMessage(voice.trim() ? 'The computer voice was saved. New calls use it.' : 'Back to the default computer voice.');
+      if (!voice.trim()) setVoiceInput('');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save the voice.');
+    } finally {
+      setVoiceBusy(false);
+    }
+  }
+
+  async function testVoice() {
+    setVoiceBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await fetch('/api/proxy/admin/phone-prompts/voice/test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: testPhone, voice: voiceInput }),
+      });
+      if (!res.ok) throw new Error(await readMessage(res, 'Could not place the test call.'));
+      setMessage('Calling you now. Answer to hear a sample in this voice.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not place the test call.');
+    } finally {
+      setVoiceBusy(false);
+    }
+  }
+
   const recorded = data?.prompts.filter((prompt) => prompt.recording).length ?? 0;
   const groups: Array<'Calls' | 'Hotline'> = ['Calls', 'Hotline'];
 
@@ -133,6 +187,10 @@ export default function AdminPhonePromptsPage() {
           </div>
         )}
 
+        {data && data.audioAddressConfigured && !data.addressProblem && data.addressNote && (
+          <div className="rounded border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">{data.addressNote}</div>
+        )}
+
         {data && !data.audioAddressConfigured && (
           <div className="rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <p className="font-semibold">Recordings cannot be played on calls yet.</p>
@@ -153,6 +211,86 @@ export default function AdminPhonePromptsPage() {
             {data && <li>{data.note}</li>}
           </ul>
         </div>
+
+        {data && (
+          <section className="rounded border border-gray-200 bg-white p-4">
+            <h2 className="text-lg font-semibold text-gray-950">Computer voice</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Reads every line that has no recording, including the lines with an advisor&apos;s name, a price or your place in line. Clone
+              your own voice and these lines can sound like your recordings.
+            </p>
+            <p className="mt-2 text-sm text-gray-700">
+              Now using: <span className="font-mono text-xs">{data.voice.voice}</span>{' '}
+              <span className="text-gray-500">
+                ({data.voice.source === 'admin' ? 'chosen here' : data.voice.source === 'environment' ? 'from the server settings' : 'the default'})
+              </span>
+            </p>
+            {data.voice.fellBack && (
+              <p className="mt-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                Telnyx refused the voice <span className="font-mono text-xs">{data.voice.chosen}</span>, so calls are using the default voice
+                for now. Check the voice ID, then save it again.
+              </p>
+            )}
+
+            <label className="mt-3 block text-sm font-medium text-gray-700">
+              Voice ID
+              <input
+                value={voiceInput}
+                onChange={(event) => setVoiceInput(event.target.value)}
+                placeholder="Telnyx.Qwen3TTS.33226e69-3abd-429b-b64a-86775c9b5850"
+                className="mt-1 block w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm"
+              />
+            </label>
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <button
+                type="button"
+                disabled={voiceBusy || voiceInput.trim() === ''}
+                onClick={() => void saveVoice(voiceInput)}
+                className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                Save voice
+              </button>
+              <button
+                type="button"
+                disabled={voiceBusy || !data.voice.chosen}
+                onClick={() => void saveVoice('')}
+                className="rounded border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                Use the default
+              </button>
+              <label className="text-sm font-medium text-gray-700">
+                Your phone number
+                <input
+                  value={testPhone}
+                  onChange={(event) => setTestPhone(event.target.value)}
+                  type="tel"
+                  placeholder="(555) 123-4567"
+                  className="mt-1 block rounded border border-gray-300 px-3 py-2 text-sm"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={voiceBusy || testPhone.trim() === ''}
+                onClick={() => void testVoice()}
+                className="rounded border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+              >
+                Call me to hear it
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-gray-500">The test uses the voice in the box above, even before you save it.</p>
+
+            <details className="mt-3 text-sm text-gray-600">
+              <summary className="cursor-pointer font-medium text-gray-800">How to clone your voice</summary>
+              <ol className="mt-2 list-decimal space-y-1 pl-5">
+                <li>Sign in to the Telnyx portal and open <span className="font-medium">Voice Design Lab</span>.</li>
+                <li>Create a voice by cloning: record yourself in the browser or upload a clean recording of you speaking naturally. A short clip of about 10 to 15 seconds, in a quiet room, works for the Telnyx voice.</li>
+                <li>Save it, then open the saved voice and copy its voice ID. It looks like <span className="font-mono text-xs">Telnyx.Qwen3TTS.33226e69-…</span>.</li>
+                <li>Paste the ID above, press <span className="font-medium">Call me to hear it</span>, and listen. Save it when you like it.</li>
+              </ol>
+              <p className="mt-2">If Telnyx ever refuses the voice, calls use the default voice instead of going quiet, and this page tells you.</p>
+            </details>
+          </section>
+        )}
 
         {error && <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
         {message && <div className="rounded border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div>}

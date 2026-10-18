@@ -6,6 +6,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { COMPUTER_VOICE_ONLY_NOTE, PROMPT_DEFINITIONS, PROMPT_KEYS, PromptKey } from './phone-prompts';
 
 export const MAX_PROMPT_AUDIO_BYTES = 5 * 1024 * 1024;
+
+/** The computer voice used when nothing else is chosen (Telnyx format <Provider>.<Model>.<Voice>). */
+export const DEFAULT_TTS_VOICE = 'AWS.Polly.Joanna';
+const VOICE_SETTING_KEY = 'phone_voice';
+
+/** How long a voice Telnyx refused is left alone before it is tried again. */
+const REJECTED_VOICE_MS = 10 * 60_000;
+const VOICE_CACHE_MS = 30_000;
+
+export type VoiceSource = 'admin' | 'environment' | 'default';
 const MIN_PROMPT_AUDIO_BYTES = 512;
 
 /** How long a looked-up recording is remembered, so a busy line does not hit the database on every prompt. */
@@ -26,16 +36,44 @@ export class PhonePromptService {
   private readonly logger = new Logger(PhonePromptService.name);
   private readonly cache = new Map<string, CachedEntry>();
   private addressCheck: { base: string; at: number; problem: string | null } | null = null;
+  private voiceCache: { voice: string | null; at: number } | null = null;
+  private readonly rejectedVoices = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {}
 
-  /** The public address Telnyx uses to fetch recordings (this server as the internet sees it), or null if not set. */
+  /**
+   * The public address Telnyx uses to fetch recordings (this server as the internet sees it), or null if not set.
+   * Only the web address itself is used: if the setting also holds a path (the webhook address pasted in whole, say),
+   * the path is ignored.
+   */
   get publicBaseUrl(): string | null {
-    const configured = this.config.get<string>('TELNYX_AUDIO_BASE_URL')?.trim().replace(/\/+$/, '');
-    return configured || null;
+    const configured = this.config.get<string>('TELNYX_AUDIO_BASE_URL')?.trim();
+    if (!configured) return null;
+    try {
+      const url = new URL(configured);
+      if (url.protocol === 'http:' || url.protocol === 'https:') return url.origin;
+    } catch {
+      // not a web address: the address check below explains what is wrong
+    }
+    return configured.replace(/\/+$/, '');
+  }
+
+  /** A note for the admin when the setting holds more than the web address, which is ignored. */
+  get addressNote(): string | null {
+    const configured = this.config.get<string>('TELNYX_AUDIO_BASE_URL')?.trim();
+    if (!configured) return null;
+    try {
+      const url = new URL(configured);
+      if ((url.pathname !== '/' && url.pathname !== '') || url.search || url.hash) {
+        return `TELNYX_AUDIO_BASE_URL also contains "${url.pathname}". Only ${url.origin} is used, so recordings are fetched from ${url.origin}/api/phone-audio/…`;
+      }
+    } catch {
+      // handled by the address check
+    }
+    return null;
   }
 
   /** The URL Telnyx should play for this line, or null to use the computer voice. */
@@ -63,6 +101,8 @@ export class PhonePromptService {
       // Telnyx cannot play recordings until it knows this server's public address.
       audioAddressConfigured: this.publicBaseUrl !== null,
       addressProblem: await this.addressProblem(),
+      addressNote: this.addressNote,
+      voice: await this.voiceInfo(),
       note: COMPUTER_VOICE_ONLY_NOTE,
       prompts: PROMPT_DEFINITIONS.map((definition) => {
         const recording = byKey.get(definition.key);
@@ -120,6 +160,76 @@ export class PhonePromptService {
     });
     if (!recording) return null;
     return { data: Buffer.from(recording.data), format: recording.format === 'wav' ? 'wav' : 'mp3' };
+  }
+
+  // ── The computer voice ─────────────────────────────────────────────────────
+
+  /**
+   * The voice that reads every line without a recording. A voice chosen in Admin wins, then TELNYX_TTS_VOICE, then
+   * the default. A voice Telnyx recently refused is skipped so calls are never left without sound.
+   */
+  async voice(): Promise<string> {
+    const { voice } = await this.voiceInfo();
+    return voice;
+  }
+
+  async voiceInfo(): Promise<{ voice: string; source: VoiceSource; chosen: string | null; fellBack: boolean }> {
+    const admin = await this.adminVoice();
+    const environment = this.config.get<string>('TELNYX_TTS_VOICE')?.trim() || null;
+    const chosen = admin ?? environment;
+    const source: VoiceSource = admin ? 'admin' : environment ? 'environment' : 'default';
+
+    if (chosen && chosen !== DEFAULT_TTS_VOICE && this.isRejected(chosen)) {
+      return { voice: DEFAULT_TTS_VOICE, source: 'default', chosen, fellBack: true };
+    }
+    return { voice: chosen ?? DEFAULT_TTS_VOICE, source, chosen, fellBack: false };
+  }
+
+  /** Telnyx refused this voice (a wrong ID, say): use the default for a while instead of failing every prompt. */
+  markVoiceRejected(voice: string) {
+    this.rejectedVoices.set(voice, Date.now());
+    this.logger.error(`Telnyx rejected the computer voice "${voice}". Using ${DEFAULT_TTS_VOICE} until it is fixed.`);
+  }
+
+  async setVoice(input: string | null | undefined) {
+    const voice = input?.trim() || null;
+    if (voice && !/^[A-Za-z0-9][A-Za-z0-9._:\- ]{2,199}$/.test(voice)) {
+      throw new BadRequestException('A voice looks like Telnyx.Qwen3TTS.33226e69-3abd-429b-b64a-86775c9b5850 or AWS.Polly.Joanna-Neural.');
+    }
+    if (voice) {
+      await this.prisma.setting.upsert({
+        where: { key: VOICE_SETTING_KEY },
+        create: { key: VOICE_SETTING_KEY, value: JSON.stringify({ voice }) },
+        update: { value: JSON.stringify({ voice }) },
+      });
+    } else {
+      await this.prisma.setting.deleteMany({ where: { key: VOICE_SETTING_KEY } });
+    }
+    this.voiceCache = null;
+    if (voice) this.rejectedVoices.delete(voice);
+    return this.voiceInfo();
+  }
+
+  private isRejected(voice: string): boolean {
+    const at = this.rejectedVoices.get(voice);
+    if (at === undefined) return false;
+    if (Date.now() - at < REJECTED_VOICE_MS) return true;
+    this.rejectedVoices.delete(voice);
+    return false;
+  }
+
+  private async adminVoice(): Promise<string | null> {
+    if (this.voiceCache && Date.now() - this.voiceCache.at < VOICE_CACHE_MS) return this.voiceCache.voice;
+    try {
+      const setting = await this.prisma.setting.findUnique({ where: { key: VOICE_SETTING_KEY } });
+      const parsed = setting ? (JSON.parse(setting.value) as { voice?: unknown }) : null;
+      const voice = typeof parsed?.voice === 'string' && parsed.voice.trim() ? parsed.voice.trim() : null;
+      this.voiceCache = { voice, at: Date.now() };
+      return voice;
+    } catch (error) {
+      this.logger.error(`Could not read the computer voice setting: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return null;
+    }
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
