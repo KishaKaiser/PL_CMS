@@ -4,7 +4,7 @@ export default function AdvisorMessagesPage() {
   return (
     <PrivateMessageInbox
       title="Messages"
-      description="Send and receive private messages."
+      description="Your inbox: write to Support and to clients you have spoken with or who have booked or requested a call with you."
       backHref="/advisor"
     />
   );

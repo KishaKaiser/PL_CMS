@@ -113,6 +113,7 @@ export class AppointmentsService {
     await this.notify(
       userId,
       advisor.userId,
+      'Appointment request',
       `New appointment request from ${client.displayName} for ${formatUtc(scheduledAt)}. ` +
         'Open Appointments in your dashboard to accept or decline.',
     );
@@ -184,6 +185,7 @@ export class AppointmentsService {
     await this.notify(
       userId,
       appointment.client.userId,
+      'Appointment confirmed',
       `${appointment.advisor.displayName} accepted your appointment for ${formatUtc(appointment.scheduledAt)}. ` +
         'We will call you at that time. Please make sure your wallet has funds.',
     );
@@ -202,6 +204,7 @@ export class AppointmentsService {
     await this.notify(
       userId,
       appointment.client.userId,
+      'Appointment declined',
       `${appointment.advisor.displayName} is not able to take your appointment for ${formatUtc(appointment.scheduledAt)}. ` +
         'You can request another time.',
     );
@@ -234,6 +237,7 @@ export class AppointmentsService {
     await this.notify(
       user.id,
       isClient ? appointment.advisor.userId : appointment.client.userId,
+      'Appointment cancelled',
       `${who} cancelled the appointment for ${formatUtc(appointment.scheduledAt)}.`,
     );
     return { id, status: 'CANCELLED' };
@@ -429,9 +433,9 @@ export class AppointmentsService {
   }
 
   /** Sends an in-app message. Only used for things a person did (a request, an answer, a cancellation). */
-  private async notify(senderId: string, recipientId: string, body: string) {
+  private async notify(senderId: string, recipientId: string, subject: string, body: string) {
     try {
-      await this.prisma.message.create({ data: { senderId, recipientId, body } });
+      await this.prisma.message.create({ data: { senderId, recipientId, subject, body } });
     } catch (error) {
       this.logger.warn(`Could not send an appointment message: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

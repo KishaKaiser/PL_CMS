@@ -535,7 +535,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
           </div>
 
           {activeSection === 'messages' && (
-            <PrivateMessageInbox title="Messages" description="Send and receive private messages." backHref={messagesHref} embedded />
+            <PrivateMessageInbox title="Messages" backHref={messagesHref} embedded />
           )}
 
           {activeSection === 'orders' && (
