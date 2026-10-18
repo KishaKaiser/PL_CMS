@@ -24,6 +24,7 @@ type DashboardSection =
 interface DashboardUser {
   id: string;
   email: string;
+  clientProfile?: { phoneNumber?: string | null } | null;
   username?: string | null;
   publicName?: string;
   name: string;
@@ -176,6 +177,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
   const [success, setSuccess] = useState('');
   const [uploadingProfileImage, setUploadingProfileImage] = useState(false);
   const [accountName, setAccountName] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
   const [addressForm, setAddressForm] = useState(emptyAddress);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentMethod);
   const [advisorForm, setAdvisorForm] = useState({
@@ -200,6 +202,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
       const nextData = (await res.json()) as DashboardData;
       setData(nextData);
       setAccountName(nextData.user.name);
+      setClientPhone(nextData.user.clientProfile?.phoneNumber ?? '');
       if (nextData.advisor?.profile) {
         setAdvisorForm({
           queueCallingEnabled: nextData.advisor.profile.queueCallingEnabled ?? false,
@@ -238,6 +241,26 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     await saveAction('account', async () => {
       await postJson('me', { name: accountName }, 'PATCH');
       setSuccess('Account details saved.');
+    });
+  }
+
+  /** The number we ring to connect a client, and the one the hotline recognises them by. */
+  async function handleClientPhoneSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await saveAction('client-phone', async () => {
+      const res = await fetch('/api/proxy/phone/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: clientPhone }),
+      });
+      if (!res.ok) {
+        const responseBody = (await res.json().catch(() => null)) as { message?: string | string[] } | null;
+        const message = Array.isArray(responseBody?.message) ? responseBody.message.join(' ') : responseBody?.message;
+        throw new Error(message ?? 'Could not save your phone number');
+      }
+      const saved = (await res.json()) as { phoneNumber?: string | null };
+      setClientPhone(saved.phoneNumber ?? clientPhone);
+      setSuccess('Phone number saved.');
     });
   }
 
@@ -438,17 +461,33 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
           )}
         </TopCard>
 
-        <TopCard className="items-center text-center">
-          <IconBubble icon="fa-solid fa-phone" />
-          <h2 className="text-2xl font-bold text-gray-950">Call Availability</h2>
-          <ToggleSwitch enabled={advisorForm.isOnline} onChange={() => void handleToggleOnline()} disabled={saving === 'advisor-online'} />
-          <p className={advisorForm.isOnline ? 'font-semibold text-green-600' : 'font-semibold text-gray-500'}>
-            {advisorForm.isOnline ? 'On' : 'Off'} <span className="ml-1 inline-block h-2.5 w-2.5 rounded-full bg-current" />
-          </p>
-          <p className="max-w-xs text-center text-sm text-gray-500">
-            {isAdvisor ? 'Clients will be able to call you when you are available.' : 'Advisor call availability appears here.'}
-          </p>
-        </TopCard>
+        {isAdvisor ? (
+          <TopCard className="items-center text-center">
+            <IconBubble icon="fa-solid fa-phone" />
+            <h2 className="text-2xl font-bold text-gray-950">Call Availability</h2>
+            <ToggleSwitch enabled={advisorForm.isOnline} onChange={() => void handleToggleOnline()} disabled={saving === 'advisor-online'} />
+            <p className={advisorForm.isOnline ? 'font-semibold text-green-600' : 'font-semibold text-gray-500'}>
+              {advisorForm.isOnline ? 'On' : 'Off'} <span className="ml-1 inline-block h-2.5 w-2.5 rounded-full bg-current" />
+            </p>
+            <p className="max-w-xs text-center text-sm text-gray-500">Clients will be able to call you when you are available.</p>
+          </TopCard>
+        ) : (
+          <TopCard className="items-center text-center">
+            <IconBubble icon="fa-solid fa-phone" />
+            <h2 className="text-2xl font-bold text-gray-950">Talk to an Advisor</h2>
+            <p className="max-w-xs text-center text-gray-600">
+              {clientPhone
+                ? `We will call ${clientPhone} to connect you.`
+                : 'Add your phone number so we know where to call you.'}
+            </p>
+            <a href="/phone-readings" className="rounded-lg bg-purple-700 px-8 py-3 font-semibold text-white hover:bg-purple-800">
+              Find an Advisor
+            </a>
+            <button type="button" onClick={() => setActiveSection('account')} className="text-sm font-medium text-purple-700 underline">
+              {clientPhone ? 'Change my phone number' : 'Add my phone number'}
+            </button>
+          </TopCard>
+        )}
 
         <TopCard className="items-center text-center">
           <IconBubble icon="fa-solid fa-wallet" />
@@ -647,6 +686,18 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
               <ReadOnly label="Email" value={data.user.email} />
               <ReadOnly label="Role" value={data.user.role} />
               <PrimaryButton disabled={saving === 'account'}>Save Account</PrimaryButton>
+            </form>
+          )}
+
+          {activeSection === 'account' && !isAdvisor && (
+            <form onSubmit={handleClientPhoneSave} className="mt-10 max-w-xl space-y-4 border-t pt-8">
+              <h3 className="text-lg font-semibold text-gray-950">Your phone number</h3>
+              <p className="text-sm text-gray-600">
+                This is the number we ring to connect your calls, and the number the advisor hotline recognises you by when you phone in.
+                Call the hotline from this number.
+              </p>
+              <Input label="Phone number" value={clientPhone} onChange={setClientPhone} type="tel" />
+              <PrimaryButton disabled={saving === 'client-phone' || clientPhone.trim() === ''}>Save Phone Number</PrimaryButton>
             </form>
           )}
 
