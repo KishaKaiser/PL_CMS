@@ -55,11 +55,16 @@ export class PaypalWalletService {
   }
 
   /** The client came back from PayPal: turn what they approved into the wallet we can charge later. */
-  async completeConnect(userId: string) {
-    const setup = await this.prisma.paypalWalletSetup.findFirst({
-      where: { userId, createdAt: { gt: new Date(Date.now() - SETUP_VALID_MS) } },
-      orderBy: { createdAt: 'desc' },
-    });
+  async completeConnect(userId: string, approvedSetupTokenId?: string) {
+    const recent = { userId, createdAt: { gt: new Date(Date.now() - SETUP_VALID_MS) } };
+    // PayPal sends the client back saying which connection they approved. A client who started more than once (a
+    // second tab, a retry) must not have the wrong one finished, so use that one when it is theirs and still open.
+    const approved = approvedSetupTokenId
+      ? await this.prisma.paypalWalletSetup.findFirst({ where: { ...recent, setupTokenId: approvedSetupTokenId } })
+      : null;
+    const setup =
+      approved ??
+      (await this.prisma.paypalWalletSetup.findFirst({ where: recent, orderBy: { createdAt: 'desc' } }));
     if (!setup) throw new BadRequestException('There is no PayPal connection in progress. Please start again from your account page.');
 
     let token: { vaultId: string; payerEmail: string | null };

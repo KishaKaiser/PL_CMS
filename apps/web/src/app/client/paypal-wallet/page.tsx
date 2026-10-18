@@ -14,7 +14,13 @@ export default function PaypalWalletReturnPage() {
     if (started.current) return;
     started.current = true;
 
-    fetch('/api/proxy/wallet/paypal/complete', { method: 'POST' })
+    // PayPal adds the id of the connection the client approved to the address they come back to.
+    const approved = new URLSearchParams(window.location.search).get('approval_token_id');
+    fetch('/api/proxy/wallet/paypal/complete', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(approved ? { setupTokenId: approved } : {}),
+    })
       .then(async (res) => {
         const body = (await res.json().catch(() => ({}))) as { message?: string | string[]; payerEmail?: string | null };
         if (!res.ok) {
