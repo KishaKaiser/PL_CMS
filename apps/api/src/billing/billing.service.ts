@@ -58,6 +58,11 @@ const QUEUED_ADVISOR_PROMPT: Spoken = {
   key: 'call.advisor-press1-callback',
   text: 'The next client in your queue is ready. Press 1 to accept this call.',
 };
+/** Said before the "press 1" prompt when the client has free minutes for this call (the number is spoken, so no recording). */
+const freeMinutesAnnouncement = (leg: CallLeg, minutes: number): string => {
+  const amount = `${minutes} free ${minutes === 1 ? 'minute' : 'minutes'}`;
+  return leg === 'client' ? `You have ${amount} for this call.` : `This client has ${amount} for this call.`;
+};
 /** "2 dollars", "2 dollars and 50 cents": amounts read out by the voice. */
 function spokenAmount(cents: number): string {
   const dollars = Math.floor(cents / 100);
@@ -273,11 +278,7 @@ export class BillingService {
     await this.settleQueueSpots(client.id, advisor.id);
 
     try {
-      await this.telnyx.promptToPressOne(clientCallControlId, inboundClientPrompt(advisor.displayName, toCents(advisor.ratePerMinute)), {
-        sessionId: session.id,
-        leg: 'client',
-        step: 'consent',
-      });
+      await this.promptConsent(session.id, 'client', clientCallControlId, true);
     } catch (error) {
       await this.endSession(session.id, 'ENDED_NOT_CONNECTED');
       throw error;
@@ -449,6 +450,8 @@ export class BillingService {
         else if (state.step === 'hold-announce') await this.startHoldMusic(state.sessionId, callControlId);
         // "You are now connected" has been said: connect the two.
         else if (state.step === 'bridge') await this.bridgeNow(state.sessionId);
+        // The free-minutes announcement has finished: now ask them to press 1.
+        else if (state.step === 'free-announce') await this.afterFreeAnnouncement(state.sessionId, state.leg, callControlId);
         return { ok: true };
 
       case 'call.hangup':
@@ -483,15 +486,7 @@ export class BillingService {
     if (claim.count === 0) return { ok: true };
 
     try {
-      await this.telnyx.promptToPressOne(
-        clientCallControlId,
-        session.appointment
-          ? scheduledClientPrompt(session.advisor?.displayName ?? 'your advisor')
-          : session.queueAssignment
-            ? queuedClientPrompt(session.advisor?.displayName ?? 'your advisor')
-            : CLIENT_PROMPT,
-        { sessionId, leg: 'client', step: 'consent' },
-      );
+      await this.promptConsent(sessionId, 'client', clientCallControlId, true);
     } catch (error) {
       this.logger.error(
         `Could not prompt the client for session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -515,11 +510,7 @@ export class BillingService {
     }
 
     try {
-      await this.telnyx.promptToPressOne(
-        advisorCallControlId,
-        session.appointment ? SCHEDULED_ADVISOR_PROMPT : session.queueAssignment ? QUEUED_ADVISOR_PROMPT : ADVISOR_PROMPT,
-        { sessionId, leg: 'advisor', step: 'consent' },
-      );
+      await this.promptConsent(sessionId, 'advisor', advisorCallControlId, true);
     } catch (error) {
       this.logger.error(
         `Could not prompt the advisor for session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -528,6 +519,70 @@ export class BillingService {
     }
 
     return { ok: true };
+  }
+
+  /**
+   * Asks a party to press 1. If the client has free minutes for this call, both parties are first told how many
+   * (the client "You have 3 free minutes for this call", the advisor "This client has 3 free minutes for this call").
+   */
+  private async promptConsent(sessionId: string, leg: CallLeg, callControlId: string, announce: boolean) {
+    const session = await this.prisma.callSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        status: true,
+        source: true,
+        clientId: true,
+        advisorId: true,
+        advisor: { select: { displayName: true, ratePerMinute: true } },
+        appointment: { select: { id: true } },
+        queueAssignment: { select: { id: true } },
+      },
+    });
+    if (!session || session.status.startsWith('ENDED')) {
+      await this.telnyx.hangup(callControlId);
+      return;
+    }
+
+    if (announce) {
+      const free = await this.freeMinutes.availableMinutes(session.clientId, session.advisorId);
+      if (free > 0 && (await this.telnyx.speak(callControlId, freeMinutesAnnouncement(leg, free), { sessionId, leg, step: 'free-announce' }))) {
+        return;
+      }
+    }
+
+    const advisorName = session.advisor?.displayName ?? 'your advisor';
+    const say: Spoken | string =
+      leg === 'advisor'
+        ? session.appointment
+          ? SCHEDULED_ADVISOR_PROMPT
+          : session.queueAssignment
+            ? QUEUED_ADVISOR_PROMPT
+            : ADVISOR_PROMPT
+        : session.appointment
+          ? scheduledClientPrompt(advisorName)
+          : session.queueAssignment
+            ? queuedClientPrompt(advisorName)
+            : session.source === 'HOTLINE'
+              ? inboundClientPrompt(advisorName, toCents(session.advisor?.ratePerMinute ?? 0))
+              : CLIENT_PROMPT;
+    await this.telnyx.promptToPressOne(callControlId, say, { sessionId, leg, step: 'consent' });
+  }
+
+  /** The free-minutes announcement is over: play the "press 1" prompt, or give up on the call if that fails. */
+  private async afterFreeAnnouncement(sessionId: string, leg: CallLeg, callControlId: string) {
+    try {
+      await this.promptConsent(sessionId, leg, callControlId, false);
+    } catch (error) {
+      this.logger.error(
+        `Could not prompt the ${leg} for session ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      if (leg === 'client') {
+        await this.endSession(sessionId, 'ENDED_NOT_CONNECTED');
+        await this.telnyx.hangup(callControlId);
+      } else {
+        await this.failSetup(sessionId);
+      }
+    }
   }
 
   /** A party finished the "press 1" prompt, whether or not they pressed it. */
