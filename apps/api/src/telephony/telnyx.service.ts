@@ -30,6 +30,8 @@ export type CallStep =
   // The client is waiting while the advisor is rung: first the "please hold" line, then music.
   | 'hold-announce'
   | 'hold'
+  // The free-minutes announcement is playing; the "press 1" prompt follows when it ends.
+  | 'free-announce'
   // "You are now connected" is playing; the two legs are bridged when it ends.
   | 'bridge';
 
@@ -453,7 +455,7 @@ export function decodeState(encoded: string | undefined): CallState | null {
   try {
     const parsed = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8')) as Partial<CallState>;
     if (typeof parsed.sessionId === 'string' && (parsed.leg === 'client' || parsed.leg === 'advisor')) {
-      const steps: CallStep[] = ['consent', 'goodbye', 'topup', 'topup-amount', 'topup-amount-retry', 'hold-announce', 'hold', 'bridge'];
+      const steps: CallStep[] = ['consent', 'goodbye', 'topup', 'topup-amount', 'topup-amount-retry', 'hold-announce', 'hold', 'bridge', 'free-announce'];
       const step = parsed.step && steps.includes(parsed.step) ? parsed.step : undefined;
       const audioKey = typeof parsed.audioKey === 'string' && PROMPT_KEYS.has(parsed.audioKey) ? (parsed.audioKey as PromptKey) : undefined;
       return { sessionId: parsed.sessionId, leg: parsed.leg, ...(step ? { step } : {}), ...(audioKey ? { audioKey } : {}) };
