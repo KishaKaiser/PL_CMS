@@ -7,6 +7,7 @@ import { AdvisorScheduleEditor, type ScheduleSlot } from './phone/advisor-schedu
 import { AppointmentsPanel } from './phone/appointments-panel';
 import { FavoriteAdvisorsList } from './phone/favorite-advisors-list';
 import { PaypalWalletPanel } from './phone/paypal-wallet-panel';
+import { AdvisorClients } from './advisor-clients';
 import { PrivateMessageInbox } from './private-message-inbox';
 
 type DashboardMode = 'client' | 'advisor';
@@ -17,6 +18,7 @@ type DashboardSection =
   | 'addresses'
   | 'payments'
   | 'wallet'
+  | 'clients'
   | 'appointments'
   | 'favorites'
   | 'account'
@@ -66,6 +68,13 @@ interface PaymentMethod {
   brand?: string | null;
   last4?: string | null;
   isDefault: boolean;
+}
+
+interface FreeMinutesSummary {
+  total: number;
+  anyAdvisor: number;
+  advisors: { advisorId: string; name: string; slug: string | null; minutes: number }[];
+  nextExpiry: string | null;
 }
 
 interface WalletTransaction {
@@ -131,6 +140,7 @@ interface DashboardData {
   wallet: {
     balanceCents: number | null;
     transactions: WalletTransaction[];
+    freeMinutes?: FreeMinutesSummary | null;
   };
   messages: { unreadCount: number };
   downloads: AstrologyDownload[];
@@ -412,6 +422,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     { id: 'account', label: 'Account Details', icon: 'fa-regular fa-user' },
     ...(isAdvisor
       ? [
+          { id: 'clients' as const, label: 'My Clients', icon: 'fa-solid fa-users' },
           { id: 'advisor-profile' as const, label: 'Advisor Profile', icon: 'fa-regular fa-id-card' },
           { id: 'payouts' as const, label: 'Payout Info', icon: 'fa-regular fa-file-lines' },
           { id: 'calls' as const, label: 'Call Transactions', icon: 'fa-solid fa-phone-volume' },
@@ -499,6 +510,11 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
           <div>
             <p className="text-5xl font-bold text-gray-950">{walletValue}</p>
             <p className="mt-2 text-lg text-gray-600">Available</p>
+            {(data.wallet.freeMinutes?.total ?? 0) > 0 && (
+              <p className="mt-2 text-sm font-semibold text-green-700">
+                + {data.wallet.freeMinutes?.total} free minute{data.wallet.freeMinutes?.total === 1 ? '' : 's'}
+              </p>
+            )}
           </div>
           <button type="button" onClick={() => setActiveSection('wallet')} className="mt-3 rounded-lg border border-purple-500 px-8 py-3 font-semibold text-purple-700 hover:bg-purple-50">
             View Wallet
@@ -535,7 +551,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
           </div>
 
           {activeSection === 'messages' && (
-            <PrivateMessageInbox title="Messages" backHref={messagesHref} embedded />
+            <PrivateMessageInbox title="Messages" backHref={messagesHref} embedded customLists={isAdvisor} listsHref="/advisor/clients" />
           )}
 
           {activeSection === 'orders' && (
@@ -654,6 +670,26 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                 <p className="mt-2 text-4xl font-bold text-gray-950">{walletValue}</p>
                 <a href="/client/shop" className="mt-5 inline-block rounded-lg bg-purple-700 px-6 py-3 font-semibold text-white hover:bg-purple-800">Add money to wallet</a>
               </div>
+              {data.wallet.freeMinutes && data.wallet.freeMinutes.total > 0 && (
+                <div className="mb-6 rounded-2xl bg-green-50 p-6">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">Free minutes</p>
+                  <p className="mt-2 text-4xl font-bold text-gray-950">{data.wallet.freeMinutes.total}</p>
+                  <ul className="mt-3 space-y-1 text-sm text-gray-700">
+                    {data.wallet.freeMinutes.anyAdvisor > 0 && <li>{data.wallet.freeMinutes.anyAdvisor} to use with any advisor</li>}
+                    {data.wallet.freeMinutes.advisors.map((advisor) => (
+                      <li key={advisor.advisorId}>
+                        {advisor.minutes} to use with{' '}
+                        {advisor.slug ? <a href={`/advisors/${advisor.slug}`} className="font-medium underline">{advisor.name}</a> : advisor.name}
+                      </li>
+                    ))}
+                  </ul>
+                  {data.wallet.freeMinutes.nextExpiry && (
+                    <p className="mt-3 text-xs text-gray-500">
+                      Some expire as soon as {new Date(data.wallet.freeMinutes.nextExpiry).toLocaleDateString()}. They are used before your wallet is charged.
+                    </p>
+                  )}
+                </div>
+              )}
               {data.wallet.transactions.length === 0 ? (
                 <EmptyText text="No wallet transactions yet." />
               ) : (
@@ -661,12 +697,12 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                   {data.wallet.transactions.map((transaction) => (
                     <div key={transaction.id} className="flex justify-between gap-4 py-4">
                       <div>
-                        <p className="font-semibold">{transaction.type}</p>
+                        <p className="font-semibold">{transaction.type === 'DEBIT' && Number(transaction.amount) === 0 ? 'FREE MINUTE' : transaction.type}</p>
                         <p className="text-sm text-gray-500">{transaction.description ?? transaction.currency}</p>
                       </div>
                       <div className="text-right">
                         <p className={`font-semibold ${transaction.type === 'DEBIT' ? 'text-red-600' : 'text-green-600'}`}>
-                          {transaction.type === 'DEBIT' ? '-' : '+'}${Number(transaction.amount).toFixed(2)}
+                          {Number(transaction.amount) === 0 ? 'Free' : `${transaction.type === 'DEBIT' ? '-' : '+'}$${Number(transaction.amount).toFixed(2)}`}
                         </p>
                         <p className="text-xs text-gray-500">{new Date(transaction.createdAt).toLocaleDateString()}</p>
                       </div>
@@ -676,6 +712,8 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
               )}
             </div>
           )}
+
+          {activeSection === 'clients' && isAdvisor && <AdvisorClients />}
 
           {activeSection === 'appointments' && <AppointmentsPanel mode={isAdvisor ? 'advisor' : 'client'} />}
 

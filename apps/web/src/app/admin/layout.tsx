@@ -45,6 +45,8 @@ const NAV_GROUPS = [
       { href: '/admin/calls', label: 'Calls' },
       { href: '/admin/reviews', label: 'Reviews' },
       { href: '/admin/messages', label: 'Messages' },
+      { href: '/admin/broadcasts', label: 'Broadcast messages' },
+      { href: '/admin/free-minutes', label: 'Free minutes' },
     ],
   },
   {

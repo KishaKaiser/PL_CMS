@@ -51,7 +51,7 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
   }, [loadAdvisors]);
 
   async function startCall(advisor: AdvisorCard, currentProfile: PhoneProfile) {
-    const shortfall = fundsNotice(advisor.displayName, advisor.ratePerMinute, currentProfile);
+    const shortfall = fundsNotice(advisor.id, advisor.displayName, advisor.ratePerMinute, currentProfile);
     if (shortfall) {
       setNotice({ advisorId: advisor.id, text: shortfall.text, needsFunds: true, suggestedDollars: shortfall.suggestedDollars });
       return;
@@ -83,7 +83,7 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
   }
 
   function openQueue(advisor: AdvisorCard, current: PhoneProfile) {
-    const shortfall = fundsNotice(advisor.displayName, advisor.ratePerMinute, current);
+    const shortfall = fundsNotice(advisor.id, advisor.displayName, advisor.ratePerMinute, current);
     if (shortfall) {
       setNotice({ advisorId: advisor.id, text: shortfall.text, needsFunds: true, suggestedDollars: shortfall.suggestedDollars });
       return;
@@ -121,6 +121,11 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white px-4 py-3 text-sm">
           <p>
             Wallet balance: <span className="font-semibold">{formatDollars(profile.balanceCents)}</span>
+            {(profile.freeMinutes?.anyAdvisor ?? 0) > 0 && (
+              <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                {profile.freeMinutes?.anyAdvisor} free minute{profile.freeMinutes?.anyAdvisor === 1 ? '' : 's'} with any advisor
+              </span>
+            )}
             {profile.phoneNumber && <span className="ml-3 text-gray-500">We will call {profile.phoneNumber}</span>}
           </p>
           <a href="/client/shop" className="font-medium underline" style={{ color: primaryColor }}>

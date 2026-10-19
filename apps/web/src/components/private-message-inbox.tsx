@@ -46,12 +46,24 @@ type View =
   | { kind: 'message'; id: string }
   | { kind: 'compose'; to: string; replyTo: { id: string; subject: string } | null };
 
+interface CustomList {
+  id: string;
+  name: string;
+  members: { id: string; name: string }[];
+}
+
 interface PrivateMessageInboxProps {
   title?: string;
   description?: string;
   backHref?: string;
   embedded?: boolean;
+  /** Advisors can write to one of their own lists of clients; this adds the lists to the address book. */
+  customLists?: boolean;
+  /** Where "Manage lists" leads. */
+  listsHref?: string;
 }
+
+const LIST_PREFIX = 'list:';
 
 const ROLE_LABELS: Record<string, string> = { SUPPORT: 'Support', ADVISOR: 'Advisor', CLIENT: 'Client' };
 const roleLabel = (role: string) => ROLE_LABELS[role] ?? role;
@@ -94,6 +106,8 @@ export function PrivateMessageInbox({
   description = 'Write to Support and to the advisors or clients you have been in contact with.',
   backHref,
   embedded = false,
+  customLists = false,
+  listsHref = '/advisor/clients',
 }: PrivateMessageInboxProps) {
   const [folder, setFolder] = useState<Folder>('inbox');
   const [view, setView] = useState<View>({ kind: 'list' });
@@ -103,6 +117,7 @@ export function PrivateMessageInbox({
   const [list, setList] = useState<ListResponse | null>(null);
   const [summary, setSummary] = useState<Summary>({ unread: 0, trash: 0 });
   const [contacts, setContacts] = useState<MessageUser[]>([]);
+  const [lists, setLists] = useState<CustomList[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [detail, setDetail] = useState<{ message: MessageDetail; thread: MessageDetail[] } | null>(null);
   const [form, setForm] = useState({ subject: '', body: '' });
@@ -141,6 +156,14 @@ export function PrivateMessageInbox({
       .then(setContacts)
       .catch(() => setContacts([]));
   }, []);
+
+  useEffect(() => {
+    if (!customLists) return;
+    fetch('/api/proxy/contact-lists')
+      .then((res) => (res.ok ? (res.json() as Promise<{ lists: CustomList[] }>) : { lists: [] }))
+      .then((data) => setLists(data.lists))
+      .catch(() => setLists([]));
+  }, [customLists]);
 
   useEffect(() => {
     setLoading(true);
@@ -213,6 +236,24 @@ export function PrivateMessageInbox({
     setBusy(true);
     setError('');
     try {
+      if (view.to.startsWith(LIST_PREFIX)) {
+        const listId = view.to.slice(LIST_PREFIX.length);
+        const listRes = await fetch(`/api/proxy/contact-lists/${listId}/message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject: form.subject, body: form.body }),
+        });
+        if (!listRes.ok) throw new Error(await readError(listRes, 'Unable to send your message'));
+        const result = (await listRes.json()) as { sent: number };
+        setForm({ subject: '', body: '' });
+        setNotice(`Your message was sent to ${result.sent} client${result.sent === 1 ? '' : 's'}.`);
+        setFolder('sent');
+        setPage(1);
+        setSearch('');
+        setSearchInput('');
+        setView({ kind: 'list' });
+        return;
+      }
       const res = await fetch('/api/proxy/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -342,6 +383,35 @@ export function PrivateMessageInbox({
               </p>
             )}
           </div>
+          {customLists && (
+            <div className={card}>
+              <div className="border-b px-4 py-3">
+                <h2 className="text-sm font-semibold text-gray-900">Custom lists</h2>
+                <p className="text-xs text-gray-500">Click a list to write to everyone on it.</p>
+              </div>
+              <ul className="max-h-60 divide-y overflow-y-auto">
+                {lists.map((customList) => (
+                  <li key={customList.id}>
+                    <button
+                      type="button"
+                      onClick={() => startCompose(`${LIST_PREFIX}${customList.id}`)}
+                      disabled={customList.members.length === 0}
+                      className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <span className="truncate text-sm font-medium text-gray-900">{customList.name}</span>
+                      <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{customList.members.length}</span>
+                    </button>
+                  </li>
+                ))}
+                {lists.length === 0 && <li className="p-4 text-sm text-gray-500">You have not made any lists yet.</li>}
+              </ul>
+              <div className="border-t px-4 py-3">
+                <a href={listsHref} className="text-sm font-medium text-indigo-600 hover:underline">
+                  Manage lists
+                </a>
+              </div>
+            </div>
+          )}
         </aside>
 
         {/* ── The folder list, a message, or the compose form ──────────────── */}
@@ -562,7 +632,19 @@ export function PrivateMessageInbox({
                         {contact.name} ({roleLabel(contact.role)})
                       </option>
                     ))}
+                    {lists.length > 0 && (
+                      <optgroup label="Custom lists">
+                        {lists.map((customList) => (
+                          <option key={customList.id} value={`${LIST_PREFIX}${customList.id}`} disabled={customList.members.length === 0}>
+                            {customList.name} ({customList.members.length} client{customList.members.length === 1 ? '' : 's'})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
+                )}
+                {view.to.startsWith(LIST_PREFIX) && (
+                  <span className="mt-1 block text-xs font-normal text-gray-500">Everyone on this list gets their own copy.</span>
                 )}
               </label>
 

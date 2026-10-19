@@ -216,7 +216,7 @@ export class HotlineService implements OnModuleInit {
   private async connectToFirstAvailable(callControlId: string, state: HotlineState) {
     const client = await this.prisma.clientProfile.findUnique({
       where: { id: state.clientId },
-      select: { balanceCents: true },
+      select: { id: true, balanceCents: true },
     });
     if (!client) return this.finish(callControlId, GENERIC_FAILURE_MESSAGE);
 
@@ -251,7 +251,8 @@ export class HotlineService implements OnModuleInit {
       return this.finish(callControlId, ALL_BUSY_MESSAGE);
     }
 
-    const affordable = free.filter((advisor) => client.balanceCents >= toCents(advisor.ratePerMinute) * MIN_CALL_MINUTES);
+    const canPay = await Promise.all(free.map((advisor) => this.billing.canAfford(client, advisor.id, toCents(advisor.ratePerMinute))));
+    const affordable = free.filter((_, index) => canPay[index]);
     if (affordable.length === 0) {
       return this.finish(callControlId, BALANCE_TOO_LOW_MESSAGE);
     }

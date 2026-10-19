@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { CallbackQueueStatus } from './callback-queue-status';
 import { JoinQueueDialog } from './join-queue-dialog';
-import { fundsNotice, joinQueueRequest, loginUrl, startCallRequest, usePhoneProfile, type PhoneProfile } from './phone-client';
+import { freeMinutesFor, fundsNotice, joinQueueRequest, loginUrl, startCallRequest, usePhoneProfile, type PhoneProfile } from './phone-client';
 import { PhonePromptDialog } from './phone-prompt-dialog';
 import { formatDollars } from './phone-format';
 import { ScheduleDialog } from './schedule-dialog';
@@ -66,7 +66,7 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
   const canRequestCallback = !status.isOnline;
 
   async function startCall(current: PhoneProfile) {
-    const shortfall = fundsNotice(advisor.displayName, advisor.ratePerMinute, current);
+    const shortfall = fundsNotice(advisor.id, advisor.displayName, advisor.ratePerMinute, current);
     if (shortfall) {
       setNotice(shortfall);
       return;
@@ -98,7 +98,7 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
   }
 
   function openQueue(current: PhoneProfile) {
-    const shortfall = fundsNotice(advisor.displayName, advisor.ratePerMinute, current);
+    const shortfall = fundsNotice(advisor.id, advisor.displayName, advisor.ratePerMinute, current);
     if (shortfall) {
       setNotice(shortfall);
       return;
@@ -139,7 +139,12 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
 
       {profile && (
         <p className="text-sm text-gray-600">
-          Wallet balance: <span className="font-semibold">{formatDollars(profile.balanceCents)}</span>{' '}
+          Wallet balance: <span className="font-semibold">{formatDollars(profile.balanceCents)}</span>
+          {freeMinutesFor(profile, advisor.id) > 0 && (
+            <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+              {freeMinutesFor(profile, advisor.id)} free minute{freeMinutesFor(profile, advisor.id) === 1 ? '' : 's'} with {advisor.displayName}
+            </span>
+          )}{' '}
           <a href="/client/shop" className="font-medium underline" style={{ color: primaryColor }}>
             Add Funds
           </a>

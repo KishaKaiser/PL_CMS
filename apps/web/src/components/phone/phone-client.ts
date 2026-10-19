@@ -6,6 +6,13 @@ import { formatDollars, readMessage, toCents } from './phone-format';
 export interface PhoneProfile {
   phoneNumber: string | null;
   balanceCents: number;
+  /** Free minutes: usable with any advisor, or only with the advisor they are keyed to. */
+  freeMinutes?: { anyAdvisor: number; byAdvisor: Record<string, number> };
+}
+
+/** Free minutes the client could use on a call with this advisor. */
+export function freeMinutesFor(profile: Pick<PhoneProfile, 'freeMinutes'>, advisorId: string): number {
+  return (profile.freeMinutes?.anyAdvisor ?? 0) + (profile.freeMinutes?.byAdvisor[advisorId] ?? 0);
 }
 
 /** A client needs this many minutes of the advisor's rate in their wallet to start a call. */
@@ -27,11 +34,13 @@ export function usePhoneProfile() {
 }
 
 /** The message and Add Funds suggestion to show when the wallet is too low for a call, or null if it is enough. */
-export function fundsNotice(advisorName: string, ratePerMinute: number | string, profile: PhoneProfile) {
-  const requiredCents = toCents(ratePerMinute) * MIN_CALL_MINUTES;
+export function fundsNotice(advisorId: string, advisorName: string, ratePerMinute: number | string, profile: PhoneProfile) {
+  // Free minutes with this advisor count towards the two-minute minimum.
+  const covered = Math.min(freeMinutesFor(profile, advisorId), MIN_CALL_MINUTES);
+  const requiredCents = toCents(ratePerMinute) * (MIN_CALL_MINUTES - covered);
   if (profile.balanceCents >= requiredCents) return null;
   return {
-    text: `You need at least ${formatDollars(requiredCents)} (${MIN_CALL_MINUTES} minutes) in your wallet to call ${advisorName}. You have ${formatDollars(profile.balanceCents)}.`,
+    text: `You need at least ${formatDollars(toCents(ratePerMinute) * MIN_CALL_MINUTES)} (${MIN_CALL_MINUTES} minutes) in your wallet to call ${advisorName}. You have ${formatDollars(profile.balanceCents)}.`,
     // Pre-fill the Add Funds page with what they are short by (it enforces its own $5 minimum).
     suggestedDollars: Math.ceil((requiredCents - profile.balanceCents) / 100),
   };

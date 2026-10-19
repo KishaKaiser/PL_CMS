@@ -28,6 +28,8 @@ const ALLOWED_PATH_PREFIXES = [
   'modules',
   'media',
   'messages',
+  'contact-lists',
+  'free-minutes',
   'forms',
   'sliders',
   'newsletter',

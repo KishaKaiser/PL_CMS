@@ -12,6 +12,7 @@ export interface SchedulableAdvisor {
 export interface DialogProfile {
   phoneNumber: string | null;
   balanceCents: number;
+  freeMinutes?: { anyAdvisor: number; byAdvisor: Record<string, number> };
 }
 
 /** Keep in step with the API: how far ahead a booking must be, and how far ahead it can be. */
@@ -49,7 +50,12 @@ export function ScheduleDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const requiredCents = toCents(advisor.ratePerMinute) * MIN_CALL_MINUTES;
+  // Free minutes with this advisor count towards the two-minute minimum.
+  const freeCovered = Math.min(
+    (profile.freeMinutes?.anyAdvisor ?? 0) + (profile.freeMinutes?.byAdvisor[advisor.id] ?? 0),
+    MIN_CALL_MINUTES,
+  );
+  const requiredCents = toCents(advisor.ratePerMinute) * (MIN_CALL_MINUTES - freeCovered);
   const shortOnFunds = profile.balanceCents < requiredCents;
   const minInput = toLocalInput(new Date(Date.now() + MIN_LEAD_MINUTES * 60_000));
   const maxInput = toLocalInput(new Date(Date.now() + MAX_ADVANCE_DAYS * 24 * 60 * 60_000));
@@ -139,8 +145,9 @@ export function ScheduleDialog({
         )}
 
         <p className={`mt-3 text-sm ${shortOnFunds ? 'text-red-600' : 'text-gray-500'}`}>
-          You need at least {formatDollars(requiredCents)} ({MIN_CALL_MINUTES} minutes) in your wallet when you book, and again when
-          the call is placed. Your balance is {formatDollars(profile.balanceCents)}.{' '}
+          You need at least {formatDollars(toCents(advisor.ratePerMinute) * MIN_CALL_MINUTES)} ({MIN_CALL_MINUTES} minutes) in your wallet
+          {freeCovered > 0 ? ` (less the ${freeCovered} free minute${freeCovered === 1 ? '' : 's'} you have with ${advisor.displayName})` : ''} when you
+          book, and again when the call is placed. Your balance is {formatDollars(profile.balanceCents)}.{' '}
           {shortOnFunds && (
             <a
               href={`/client/shop?amount=${Math.max(5, Math.ceil((requiredCents - profile.balanceCents) / 100))}`}

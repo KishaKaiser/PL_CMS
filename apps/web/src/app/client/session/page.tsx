@@ -12,6 +12,8 @@ interface ActiveSession {
   advisor?: { displayName: string; ratePerMinute: number | string; slug?: string | null };
   /** PENDING_CONNECTION → AWAITING_CLIENT → DIALING_ADVISOR → CONNECTED (billing not started yet) → BILLING_ACTIVE */
   status: string;
+  /** How many of the billed minutes were covered by free minutes. */
+  freeMinutesUsed?: number;
   _count?: { walletTransactions: number };
 }
 
@@ -32,6 +34,8 @@ export default function ClientSessionPage() {
   const [result, setResult] = useState<{ billedMinutes: number; billedAmountCents: number; durationSeconds: number; advisorProfilePath?: string } | null>(null);
   const [error, setError] = useState('');
   const [balanceCents, setBalanceCents] = useState<number | null>(null);
+  // Free minutes the client still has for this advisor.
+  const [freeLeft, setFreeLeft] = useState(0);
   const hadSession = useRef(false);
   // Where to send the client to rate the advisor once the call is over.
   const [reviewPath, setReviewPath] = useState<string | null>(null);
@@ -46,8 +50,11 @@ export default function ClientSessionPage() {
         setReviewPath(data.advisor?.slug ?? data.advisorId);
         // The wallet balance drives the low-funds notice below.
         fetch('/api/proxy/phone/me')
-          .then((r) => (r.ok ? (r.json() as Promise<{ balanceCents: number }>) : null))
-          .then((profile) => setBalanceCents(profile ? profile.balanceCents : null))
+          .then((r) => (r.ok ? (r.json() as Promise<{ balanceCents: number; freeMinutes?: { anyAdvisor: number; byAdvisor: Record<string, number> } }>) : null))
+          .then((profile) => {
+            setBalanceCents(profile ? profile.balanceCents : null);
+            setFreeLeft(profile ? (profile.freeMinutes?.anyAdvisor ?? 0) + (profile.freeMinutes?.byAdvisor[data.advisorId] ?? 0) : 0);
+          })
           .catch(() => undefined);
       } else {
         // The call vanished from the active list: the other side hung up (or it never connected).
@@ -213,13 +220,14 @@ export default function ClientSessionPage() {
   const connectedAtMs = new Date(session.connectedAt ?? session.startedAt).getTime();
   const elapsed = Math.max(0, Math.floor((now - connectedAtMs) / 1000));
   const billedMinutes = session._count?.walletTransactions ?? 0;
-  const billedSoFar = session.advisor ? billedMinutes * Number(session.advisor.ratePerMinute) : null;
+  const freeUsed = session.freeMinutesUsed ?? 0;
+  const billedSoFar = session.advisor ? Math.max(0, billedMinutes - freeUsed) * Number(session.advisor.ratePerMinute) : null;
 
   // Billing charges each minute up front, so the balance left covers this many minutes beyond the current one.
   const rateCents = session.advisor ? Math.round(Number(session.advisor.ratePerMinute) * 100) : 0;
   const minutesCovered =
     session.status === 'BILLING_ACTIVE' && balanceCents !== null && rateCents > 0
-      ? Math.floor(balanceCents / rateCents)
+      ? Math.floor(balanceCents / rateCents) + freeLeft
       : null;
   const lowFunds = minutesCovered !== null && minutesCovered <= 1;
 
@@ -242,9 +250,16 @@ export default function ClientSessionPage() {
           {session.status === 'BILLING_ACTIVE' && (
             <p className="mt-2 text-sm text-gray-500">
               {`${billedMinutes} min billed${billedSoFar !== null ? ` ($${billedSoFar.toFixed(2)} so far)` : ''}`}
+              {freeUsed > 0 ? ` · ${freeUsed} free` : ''}
             </p>
           )}
         </div>
+
+        {freeLeft > 0 && (
+          <p className="mb-2 text-sm font-medium text-green-700">
+            {freeLeft} free minute{freeLeft === 1 ? '' : 's'} left
+          </p>
+        )}
 
         {balanceCents !== null && (
           <p className="mb-4 text-sm text-gray-600">
