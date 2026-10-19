@@ -6,6 +6,7 @@ import { deriveMediaTitle, serializeMediaAsset } from '../admin/admin-media/medi
 import { normalizePhoneNumber } from '../telephony/phone-number';
 import { ensureAdvisorSlug } from '../billing/advisor-slug';
 import { ConfigService } from '@nestjs/config';
+import { FreeMinutesService } from '../free-minutes/free-minutes.service';
 import { MessagesService } from '../messages/messages.service';
 import { publicName } from '../common/public-identity';
 import {
@@ -23,6 +24,7 @@ export class AccountService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly messages: MessagesService,
+    private readonly freeMinutes: FreeMinutesService,
   ) {}
 
   async getDashboard(userId: string) {
@@ -115,6 +117,7 @@ export class AccountService {
       wallet: {
         balanceCents: user.clientProfile?.balanceCents ?? null,
         transactions: walletTransactions,
+        freeMinutes: user.clientProfile ? await this.freeMinutes.mine(userId) : null,
       },
       messages: { unreadCount: unreadMessages },
       downloads,

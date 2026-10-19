@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { AdvisorProfile, ClientProfile } from '@pl-cms/db';
+import { FreeMinutesService } from '../free-minutes/free-minutes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Spoken } from '../telephony/phone-prompts';
 import { CallLeg, CallState, TelnyxService, decodeState } from '../telephony/telnyx.service';
@@ -154,6 +155,7 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly telnyx: TelnyxService,
     private readonly wallets: PaypalWalletService,
+    private readonly freeMinutes: FreeMinutesService,
   ) {}
 
   /** The hotline registers itself here so incoming calls reach it through the same webhook. */
@@ -284,6 +286,11 @@ export class BillingService {
     return { id: session.id };
   }
 
+  /** Whether the wallet plus any free minutes cover this many minutes with the advisor. */
+  canAfford(client: { id: string; balanceCents: number }, advisorId: string, rateCents: number, minutes = MIN_CALL_MINUTES) {
+    return this.freeMinutes.canAfford(client, advisorId, rateCents, minutes);
+  }
+
   /** The rules every call has to pass, whoever starts it: the advisor is reachable, the wallet covers it, nobody is in the way. */
   private async assertCanCall(
     client: ClientProfile,
@@ -299,7 +306,7 @@ export class BillingService {
     if (rateCents <= 0) throw new BadRequestException('This advisor has not set a rate yet.');
 
     const requiredCents = rateCents * MIN_CALL_MINUTES;
-    if (client.balanceCents < requiredCents) {
+    if (!(await this.canAfford(client, advisor.id, rateCents))) {
       throw new BadRequestException(
         `You need at least $${(requiredCents / 100).toFixed(2)} (${MIN_CALL_MINUTES} minutes) in your wallet to call this advisor.`,
       );
@@ -792,6 +799,8 @@ export class BillingService {
 
     for (const session of candidates) {
       if (session.client.balanceCents >= toCents(session.advisor.ratePerMinute)) continue;
+      // Free minutes still to come cover the next charge, so there is nothing to warn about.
+      if ((await this.freeMinutes.availableMinutes(session.clientId, session.advisorId)) > 0) continue;
 
       // Claim the warning so overlapping runs only speak it once.
       const claim = await this.prisma.callSession.updateMany({
@@ -956,6 +965,23 @@ export class BillingService {
         return { terminate: false };
       }
 
+      // Free minutes go first; the wallet is only charged when there are none left.
+      if (await this.freeMinutes.consumeOne(tx, session.clientId, session.advisorId)) {
+        await tx.callSession.update({ where: { id: sessionId }, data: { freeMinutesUsed: { increment: 1 } } });
+        await tx.walletTransaction.create({
+          data: {
+            userId: session.client.userId,
+            callSessionId: sessionId,
+            type: 'DEBIT',
+            amount: 0,
+            currency: 'USD',
+            minutesDelta: -1,
+            description: `Call session ${sessionId} — free minute`,
+          },
+        });
+        return { terminate: false };
+      }
+
       const rateCents = toCents(session.advisor.ratePerMinute);
 
       const debit = await tx.clientProfile.updateMany({
@@ -1104,6 +1130,7 @@ export class BillingService {
         connectedAt: true,
         nextBillAt: true,
         status: true,
+        freeMinutesUsed: true,
         advisor: { select: { displayName: true, ratePerMinute: true, slug: true } },
         _count: { select: { walletTransactions: { where: { type: 'DEBIT' } } } },
       },

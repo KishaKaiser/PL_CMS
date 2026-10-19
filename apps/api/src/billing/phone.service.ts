@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { FreeMinutesService } from '../free-minutes/free-minutes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhoneNumber } from '../telephony/phone-number';
 import { publicName } from '../common/public-identity';
@@ -17,6 +18,7 @@ export class PhoneService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly freeMinutes: FreeMinutesService,
   ) {}
 
   /**
@@ -259,7 +261,16 @@ export class PhoneService {
       select: { phoneNumber: true, balanceCents: true },
     });
     if (!client) throw new NotFoundException('Client profile not found');
-    return client;
+    return { ...client, freeMinutes: await this.freeMinutesFor(userId) };
+  }
+
+  /** Free minutes in the shape the call buttons need: those usable with any advisor, and those tied to one advisor. */
+  private async freeMinutesFor(userId: string) {
+    const mine = await this.freeMinutes.mine(userId);
+    return {
+      anyAdvisor: mine.anyAdvisor,
+      byAdvisor: Object.fromEntries(mine.advisors.map((advisor) => [advisor.advisorId, advisor.minutes])),
+    };
   }
 
   async setMyPhoneNumber(userId: string, input: string) {
@@ -271,11 +282,12 @@ export class PhoneService {
     const client = await this.prisma.clientProfile.findUnique({ where: { userId }, select: { id: true } });
     if (!client) throw new NotFoundException('Client profile not found');
 
-    return this.prisma.clientProfile.update({
+    const saved = await this.prisma.clientProfile.update({
       where: { id: client.id },
       data: { phoneNumber },
       select: { phoneNumber: true, balanceCents: true },
     });
+    return { ...saved, freeMinutes: await this.freeMinutesFor(userId) };
   }
 
   /** An advisor with a public page: set up to take calls (phone number and rate), found by slug or id. */

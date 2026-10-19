@@ -313,6 +313,82 @@ export class MessagesService {
     return { id, deleted: true };
   }
 
+  /**
+   * The same message to several people at once (an advisor writing to one of their lists). Each person gets their
+   * own copy in their inbox, and the sender's sent folder shows one per person. Only people the sender is allowed
+   * to write to are included.
+   */
+  async sendBulk(viewer: Viewer, recipientIds: string[], subjectInput: string, bodyInput: string) {
+    const subject = subjectInput.trim();
+    const body = bodyInput.trim();
+    if (!subject) throw new BadRequestException('Add a subject.');
+    if (subject.length > MAX_SUBJECT_LENGTH) throw new BadRequestException(`A subject can be up to ${MAX_SUBJECT_LENGTH} characters.`);
+    if (!body) throw new BadRequestException('Write a message before sending it.');
+
+    const ctx = await this.context(viewer);
+    const allowed = [...new Set(recipientIds)].filter((id) => id !== viewer.id && ctx.contactIds.includes(id));
+    if (allowed.length === 0) throw new BadRequestException('There is nobody to send this to.');
+
+    await this.prisma.message.createMany({
+      data: allowed.map((recipientId) => ({ senderId: viewer.id, recipientId, subject, body })),
+    });
+    return { sent: allowed.length };
+  }
+
+  // ── Admin broadcasts ───────────────────────────────────────────────────────
+
+  /** A message from Support to every client, every advisor, or both. It lands in each person's inbox. */
+  async broadcast(adminId: string, audience: 'CLIENTS' | 'ADVISORS' | 'BOTH', subjectInput: string, bodyInput: string) {
+    const subject = subjectInput.trim();
+    const body = bodyInput.trim();
+    if (!subject) throw new BadRequestException('Add a subject.');
+    if (subject.length > MAX_SUBJECT_LENGTH) throw new BadRequestException(`A subject can be up to ${MAX_SUBJECT_LENGTH} characters.`);
+    if (!body) throw new BadRequestException('Write a message before sending it.');
+
+    const roles: DbRole[] = audience === 'CLIENTS' ? ['CLIENT'] : audience === 'ADVISORS' ? ['ADVISOR'] : ['CLIENT', 'ADVISOR'];
+    const people = await this.prisma.user.findMany({ where: { role: { in: roles }, id: { not: adminId } }, select: { id: true } });
+    if (people.length === 0) throw new BadRequestException('There is nobody to send this to yet.');
+
+    for (let i = 0; i < people.length; i += 500) {
+      await this.prisma.message.createMany({
+        // Kept out of the staff sent folder (one copy per person would bury it); the broadcast history lists it instead.
+        data: people.slice(i, i + 500).map((person) => ({
+          senderId: adminId,
+          recipientId: person.id,
+          subject,
+          body,
+          senderFolder: 'PURGED',
+        })),
+      });
+    }
+
+    const record = await this.prisma.broadcastMessage.create({
+      data: {
+        authorId: adminId,
+        subject,
+        body,
+        recipientCount: people.length,
+        targets: { create: roles.map((targetRole) => ({ targetRole })) },
+      },
+      select: { id: true },
+    });
+    return { id: record.id, sent: people.length };
+  }
+
+  /** Past broadcasts, newest first. */
+  async broadcastHistory() {
+    const rows = await this.prisma.broadcastMessage.findMany({
+      orderBy: { sentAt: 'desc' },
+      take: 50,
+      select: { id: true, subject: true, body: true, sentAt: true, recipientCount: true, targets: { select: { targetRole: true } } },
+    });
+    return rows.map((row) => {
+      const roles = row.targets.map((t) => t.targetRole);
+      const audience = roles.includes('CLIENT') && roles.includes('ADVISOR') ? 'BOTH' : roles.includes('ADVISOR') ? 'ADVISORS' : 'CLIENTS';
+      return { id: row.id, subject: row.subject, body: row.body, sentAt: row.sentAt, recipientCount: row.recipientCount, audience };
+    });
+  }
+
   async markRead(userId: string, messageId: string) {
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },

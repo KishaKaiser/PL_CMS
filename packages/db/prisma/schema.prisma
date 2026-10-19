@@ -89,6 +89,8 @@ model User {
   sentMessages      Message[]          @relation("SentMessages")
   receivedMessages  Message[]          @relation("ReceivedMessages")
   broadcastMessages BroadcastMessage[]
+  contactLists      ContactList[]
+  freeMinutesGiven  FreeMinuteGrant[] @relation("FreeMinutesGivenBy")
   auditLogs         AuditLog[]
   contentRevisions  ContentRevision[]
   builderLayoutsUpdated BuilderLayout[] @relation("BuilderLayoutUpdatedBy")
@@ -152,6 +154,7 @@ model AdvisorProfile {
   appointments        Appointment[]          @relation("AdvisorAppointments")
   reviews             AdvisorReview[]
   favoritedBy         FavoriteAdvisor[]
+  freeMinuteGrants    FreeMinuteGrant[]
 
   @@map("advisor_profiles")
 }
@@ -177,6 +180,7 @@ model ClientProfile {
   callSessionsAsClient    CallSession[] @relation("ClientSessions")
   queueAssignments        QueueAssignment[]
   appointments            Appointment[] @relation("ClientAppointments")
+  freeMinuteGrants        FreeMinuteGrant[]
 
   @@map("client_profiles")
 }
@@ -236,6 +240,8 @@ model CallSession {
   source          String    @default("DIRECT")
   // Set when the client said no to the in-call offer to add money, so they are not asked again on this call.
   topUpDeclinedAt DateTime?
+  // How many of this call's minutes were covered by free minutes instead of the wallet.
+  freeMinutesUsed Int       @default(0)
 
   advisor AdvisorProfile @relation("AdvisorSessions", fields: [advisorId], references: [id])
   client  ClientProfile  @relation("ClientSessions", fields: [clientId], references: [id])
@@ -369,6 +375,8 @@ model BroadcastMessage {
   subject  String
   body     String
   sentAt   DateTime @default(now())
+  // How many people it went to.
+  recipientCount Int   @default(0)
 
   author  User              @relation(fields: [authorId], references: [id])
   targets BroadcastTarget[]
@@ -955,6 +963,60 @@ model FavoriteAdvisor {
   @@unique([userId, advisorId])
   @@index([userId, createdAt])
   @@map("favorite_advisors")
+}
+
+// An advisor's own lists of the clients they have spoken with ("Monday callers"), used to message a group at once.
+model ContactList {
+  id            String   @id @default(cuid())
+  advisorUserId String
+  name          String
+  createdAt     DateTime @default(now())
+
+  advisor User                @relation(fields: [advisorUserId], references: [id], onDelete: Cascade)
+  members ContactListMember[]
+
+  @@unique([advisorUserId, name])
+  @@map("contact_lists")
+}
+
+model ContactListMember {
+  id           String   @id @default(cuid())
+  listId       String
+  clientUserId String
+  createdAt    DateTime @default(now())
+
+  list ContactList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, clientUserId])
+  @@index([clientUserId])
+  @@map("contact_list_members")
+}
+
+// Free call minutes given to a client. advisorId set = usable only with that advisor (an advisor's gift);
+// null = usable with any advisor (admin gifts and promotions). Used before the wallet is charged.
+model FreeMinuteGrant {
+  id              String    @id @default(cuid())
+  clientId        String
+  advisorId       String?
+  minutes         Int
+  remaining       Int
+  // ADVISOR, ADMIN or PROMO (the welcome promotion for new clients).
+  source          String
+  grantedByUserId String?
+  note            String?
+  // Makes a promotion idempotent: one grant per client per promoKey.
+  promoKey        String?
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  client    ClientProfile   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  advisor   AdvisorProfile? @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+  grantedBy User?           @relation("FreeMinutesGivenBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([clientId, promoKey])
+  @@index([clientId, remaining])
+  @@index([grantedByUserId, createdAt])
+  @@map("free_minute_grants")
 }
 
 model AdvisorReview {

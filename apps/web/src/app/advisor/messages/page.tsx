@@ -6,6 +6,7 @@ export default function AdvisorMessagesPage() {
       title="Messages"
       description="Your inbox: write to Support and to clients you have spoken with or who have booked or requested a call with you."
       backHref="/advisor"
+      customLists
     />
   );
 }

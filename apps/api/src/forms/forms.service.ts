@@ -9,6 +9,7 @@ import { Role } from '@pl-cms/shared';
 import * as bcrypt from 'bcryptjs';
 import { normalizeEmailInput } from '../common/input-normalization.util';
 import { assertPublicUsername, displayNameFromUsername, generateUniqueUsername, isPublicRole } from '../common/public-identity';
+import { grantWelcomePromo } from '../free-minutes/free-minutes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CmsFormStatus,
@@ -175,7 +176,10 @@ export class FormsService {
       });
 
       if (role === Role.CLIENT) {
-        await tx.clientProfile.create({ data: { userId: user.id, displayName: username ? displayNameFromUsername(username) : user.name } });
+        const profile = await tx.clientProfile.create({
+          data: { userId: user.id, displayName: username ? displayNameFromUsername(username) : user.name },
+        });
+        await grantWelcomePromo(tx, profile.id);
       }
 
       if (role === Role.ADVISOR) {

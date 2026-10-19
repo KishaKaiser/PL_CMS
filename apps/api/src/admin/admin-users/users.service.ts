@@ -9,6 +9,7 @@ import * as bcrypt from 'bcryptjs';
 import { Role } from '@pl-cms/shared';
 import { normalizeEmailInput } from '../../common/input-normalization.util';
 import { assertPublicUsername, displayNameFromUsername, generateUniqueUsername, isPublicRole } from '../../common/public-identity';
+import { grantWelcomePromo } from '../../free-minutes/free-minutes.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto, UpdateUserDto, UpdateUserRoleDto, ResetPasswordDto } from './users.dto';
 
@@ -62,9 +63,10 @@ export class AdminUsersService {
       });
 
       if (dto.role === Role.CLIENT) {
-        await tx.clientProfile.create({
+        const profile = await tx.clientProfile.create({
           data: { userId: user.id, displayName: shownName ?? user.name },
         });
+        await grantWelcomePromo(tx, profile.id);
       }
 
       if (dto.role === Role.ADVISOR) {

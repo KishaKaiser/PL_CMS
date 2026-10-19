@@ -58,7 +58,7 @@ export class CallbacksService {
     const rateCents = toCents(advisor.ratePerMinute);
     if (rateCents <= 0) throw new BadRequestException('This advisor has not set a rate yet.');
     const requiredCents = rateCents * MIN_CALL_MINUTES;
-    if (client.balanceCents < requiredCents) {
+    if (!(await this.billing.canAfford(client, advisor.id, rateCents))) {
       throw new BadRequestException(
         `You need at least $${(requiredCents / 100).toFixed(2)} (${MIN_CALL_MINUTES} minutes) in your wallet to wait for this advisor.`,
       );
