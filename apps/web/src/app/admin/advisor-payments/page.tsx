@@ -19,12 +19,14 @@ interface AdvisorRow {
 
 interface Overview {
   defaultSharePercent: number;
+  paypalFeePercent: number;
   totals: { chargedCents: number; earnedCents: number; paidCents: number; owedCents: number };
   advisors: AdvisorRow[];
 }
 
 interface Detail {
   advisorId: string;
+  paypalFeePercent: number;
   displayName: string;
   sharePercentOverride: number | null;
   sharePercent: number;
@@ -32,7 +34,7 @@ interface Detail {
   paidCents: number;
   owedCents: number;
   payout: { method: 'PAYPAL' | 'DIRECT_DEPOSIT'; summary: string; paypalEmail: string | null; bankOnFile: boolean; bankOnFileAt: string | null };
-  payouts: { id: string; amountCents: number; method: string; reference: string | null; note: string | null; paidAt: string }[];
+  payouts: { id: string; amountCents: number; feeCents: number; netCents: number; method: string; reference: string | null; note: string | null; paidAt: string }[];
   recentEarnings: { id: string; at: string; client: string; billedMinutes: number; freeMinutes: number; chargedCents: number; sharePercent: number; earnedCents: number }[];
 }
 
@@ -48,6 +50,7 @@ async function readMessage(res: Response, fallback: string): Promise<string> {
 export default function AdminAdvisorPaymentsPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [defaultShare, setDefaultShare] = useState('50');
+  const [paypalFee, setPaypalFee] = useState('3');
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [shareInput, setShareInput] = useState('');
@@ -63,6 +66,7 @@ export default function AdminAdvisorPaymentsPage() {
       const data = (await res.json()) as Overview;
       setOverview(data);
       setDefaultShare(String(data.defaultSharePercent));
+      setPaypalFee(String(data.paypalFeePercent));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unable to load advisor payments');
     }
@@ -114,6 +118,11 @@ export default function AdminAdvisorPaymentsPage() {
   function saveDefault(event: FormEvent) {
     event.preventDefault();
     void send('/settings/share', 'PUT', { sharePercent: Number(defaultShare) }, 'Default share saved. It applies to calls that end from now on.');
+  }
+
+  function saveFee(event: FormEvent) {
+    event.preventDefault();
+    void send('/settings/paypal-fee', 'PUT', { paypalFeePercent: Number(paypalFee) }, 'PayPal fee saved. It applies to payments you record from now on.');
   }
 
   function saveAdvisorShare(event: FormEvent) {
@@ -172,6 +181,23 @@ export default function AdminAdvisorPaymentsPage() {
               <label className="block text-sm font-medium text-gray-700">
                 Advisor share (%)
                 <input type="number" min={0} max={100} step={1} value={defaultShare} onChange={(event) => setDefaultShare(event.target.value)} required className={`${field} w-32`} />
+              </label>
+              <button type="submit" disabled={busy} className="rounded bg-purple-700 px-5 py-2 text-sm font-medium text-white hover:bg-purple-800 disabled:opacity-50">
+                Save
+              </button>
+            </form>
+          </section>
+
+          <section className="rounded-lg border bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-semibold">PayPal fee</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              When you record a payment to an advisor who is paid by PayPal, this percentage is kept from it to cover PayPal&apos;s charges.
+              The advisor is owed less by the full amount you record, and receives that amount less the fee. Direct Deposit has no fee.
+            </p>
+            <form onSubmit={saveFee} className="mt-4 flex flex-wrap items-end gap-3">
+              <label className="block text-sm font-medium text-gray-700">
+                PayPal fee (%)
+                <input type="number" min={0} max={50} step={0.01} value={paypalFee} onChange={(event) => setPaypalFee(event.target.value)} required className={`${field} w-32`} />
               </label>
               <button type="submit" disabled={busy} className="rounded bg-purple-700 px-5 py-2 text-sm font-medium text-white hover:bg-purple-800 disabled:opacity-50">
                 Save
@@ -319,6 +345,12 @@ export default function AdminAdvisorPaymentsPage() {
                     <input value={pay.note} onChange={(event) => setPay({ ...pay, note: event.target.value })} maxLength={500} className={field} />
                   </label>
                 </div>
+                {detail.payout.method === 'PAYPAL' && Number(pay.amount) > 0 && (
+                  <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    PayPal fee ({detail.paypalFeePercent}%): {money(Math.round(Math.round(Number(pay.amount) * 100) * detail.paypalFeePercent / 100))}. Send the advisor{' '}
+                    <span className="font-semibold">{money(Math.round(Number(pay.amount) * 100) - Math.round(Math.round(Number(pay.amount) * 100) * detail.paypalFeePercent / 100))}</span> through PayPal.
+                  </p>
+                )}
                 <button type="submit" disabled={busy || detail.owedCents <= 0} className="rounded bg-purple-700 px-5 py-2 text-sm font-medium text-white hover:bg-purple-800 disabled:opacity-50">
                   Record payment
                 </button>
@@ -333,6 +365,7 @@ export default function AdminAdvisorPaymentsPage() {
                 <li key={payout.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm">
                   <span>
                     <span className="font-semibold">{money(payout.amountCents)}</span>
+                    {payout.feeCents > 0 && <span className="text-gray-500"> (fee {money(payout.feeCents)}, sent {money(payout.netCents)})</span>}
                     <span className="text-gray-500"> · {payout.method}</span>
                     {payout.reference && <span className="text-gray-500"> · ref {payout.reference}</span>}
                     {payout.note && <span className="text-gray-500"> · {payout.note}</span>}

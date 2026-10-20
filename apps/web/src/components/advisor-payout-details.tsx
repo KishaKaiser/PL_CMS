@@ -9,6 +9,7 @@ interface Details {
   paypalEmail: string | null;
   bankOnFile: boolean;
   bankInstructions: string | null;
+  paypalFeePercent: number;
 }
 
 async function readError(res: Response, fallback: string): Promise<string> {
@@ -96,6 +97,12 @@ export function AdvisorPayoutDetails() {
 
       {!details.bankOnFile && details.bankInstructions && (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{details.bankInstructions}</p>
+      )}
+      {details.paypalFeePercent > 0 && (
+        <p className="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700">
+          PayPal payments have a {details.paypalFeePercent}% fee, taken from each payment to cover PayPal&apos;s charges. For example, a
+          $100.00 payment reaches you as ${(100 - details.paypalFeePercent).toFixed(2)}. Direct Deposit has no fee.
+        </p>
       )}
       {details.bankOnFile && (
         <p className="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700">

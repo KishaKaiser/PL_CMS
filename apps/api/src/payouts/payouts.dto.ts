@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class SetPayoutMethodDto {
   @IsIn(['PAYPAL', 'DIRECT_DEPOSIT'])
@@ -21,6 +21,14 @@ export class SetDefaultShareDto {
   @Min(0)
   @Max(100)
   sharePercent!: number;
+}
+
+export class SetPaypalFeeDto {
+  /** Percent of each PayPal payment kept as the fee, with at most two decimals. */
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(50)
+  paypalFeePercent!: number;
 }
 
 export class SetAdvisorShareDto {

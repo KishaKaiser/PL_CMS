@@ -11,6 +11,9 @@ import { RecordPayoutDto, SetPayoutMethodDto } from './payouts.dto';
  *    platform default, and it is fixed on the call when it ends (changing it later does not rewrite old calls).
  *  - Admin pays advisors outside the app and records each payment here. What an advisor is owed is everything they
  *    have earned minus everything recorded as paid.
+ *  - A fee (3% unless admin changes it) is taken from each payment made by PayPal, to cover PayPal's charges: the
+ *    payment clears the full amount from what the advisor is owed, and they receive that amount less the fee.
+ *    Direct Deposit has no fee.
  *  - An advisor is paid by PayPal (to the email they give) or by Direct Deposit. This site never stores bank details:
  *    they are given to Support during onboarding, and Support marks the advisor's bank information as received, which
  *    is what lets the advisor choose Direct Deposit.
@@ -19,6 +22,9 @@ import { RecordPayoutDto, SetPayoutMethodDto } from './payouts.dto';
 const SETTINGS_KEY = 'payout_settings';
 export const DEFAULT_SHARE_PERCENT = 50;
 export const EARNINGS_PAGE_SIZE = 25;
+/** PayPal payments to advisors lose this much to the fee unless admin changes it. */
+export const DEFAULT_PAYPAL_FEE_PERCENT = 3;
+const MAX_FEE_PERCENT = 50;
 
 export const BANK_INSTRUCTIONS =
   'Direct Deposit is not available yet. Bank information is given to Support during advisor onboarding, not on this site. ' +
@@ -38,6 +44,11 @@ function effectiveMethod(advisor: PayoutFields): PayoutMethod {
   return advisor.payoutMethod === 'DIRECT_DEPOSIT' && advisor.bankOnFileAt ? 'DIRECT_DEPOSIT' : 'PAYPAL';
 }
 
+/** The fee on a payment of this size, rounded to the nearest cent. */
+export function paypalFee(amountCents: number, percent: number): number {
+  return Math.round((amountCents * percent) / 100);
+}
+
 /** Words for the method, for the advisor's history and the admin's payment records. */
 function describeMethod(advisor: PayoutFields): string {
   if (effectiveMethod(advisor) === 'DIRECT_DEPOSIT') return 'Direct deposit';
@@ -52,21 +63,47 @@ export class PayoutsService {
 
   // ── Settings ───────────────────────────────────────────────────────────────
 
-  async getDefaultShare(): Promise<number> {
+  private async readSettings(): Promise<{ defaultSharePercent: number; paypalFeePercent: number }> {
     const row = await this.prisma.setting.findUnique({ where: { key: SETTINGS_KEY } });
-    if (!row) return DEFAULT_SHARE_PERCENT;
+    let parsed: { defaultSharePercent?: unknown; paypalFeePercent?: unknown } = {};
     try {
-      const value = Number((JSON.parse(row.value) as { defaultSharePercent?: unknown }).defaultSharePercent);
-      return Number.isInteger(value) && value >= 0 && value <= 100 ? value : DEFAULT_SHARE_PERCENT;
+      parsed = row ? (JSON.parse(row.value) as typeof parsed) : {};
     } catch {
-      return DEFAULT_SHARE_PERCENT;
+      parsed = {};
     }
+    const share = Number(parsed.defaultSharePercent);
+    const fee = Number(parsed.paypalFeePercent);
+    return {
+      defaultSharePercent: parsed.defaultSharePercent != null && Number.isInteger(share) && share >= 0 && share <= 100 ? share : DEFAULT_SHARE_PERCENT,
+      paypalFeePercent: parsed.paypalFeePercent != null && Number.isFinite(fee) && fee >= 0 && fee <= MAX_FEE_PERCENT ? fee : DEFAULT_PAYPAL_FEE_PERCENT,
+    };
+  }
+
+  private async writeSettings(next: { defaultSharePercent: number; paypalFeePercent: number }): Promise<void> {
+    const value = JSON.stringify(next);
+    await this.prisma.setting.upsert({ where: { key: SETTINGS_KEY }, create: { key: SETTINGS_KEY, value }, update: { value } });
+  }
+
+  async getDefaultShare(): Promise<number> {
+    return (await this.readSettings()).defaultSharePercent;
   }
 
   async setDefaultShare(percent: number): Promise<number> {
     if (!Number.isInteger(percent) || percent < 0 || percent > 100) throw new BadRequestException('The share must be a whole number from 0 to 100.');
-    const value = JSON.stringify({ defaultSharePercent: percent });
-    await this.prisma.setting.upsert({ where: { key: SETTINGS_KEY }, create: { key: SETTINGS_KEY, value }, update: { value } });
+    await this.writeSettings({ ...(await this.readSettings()), defaultSharePercent: percent });
+    return percent;
+  }
+
+  /** The fee taken from payments made by PayPal, in percent of the amount paid. */
+  async getPaypalFeePercent(): Promise<number> {
+    return (await this.readSettings()).paypalFeePercent;
+  }
+
+  async setPaypalFeePercent(percent: number): Promise<number> {
+    if (!Number.isFinite(percent) || percent < 0 || percent > MAX_FEE_PERCENT || Math.round(percent * 100) !== percent * 100) {
+      throw new BadRequestException(`The fee must be from 0 to ${MAX_FEE_PERCENT} percent, with at most two decimal places.`);
+    }
+    await this.writeSettings({ ...(await this.readSettings()), paypalFeePercent: percent });
     return percent;
   }
 
@@ -124,7 +161,7 @@ export class PayoutsService {
     const sinceWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const sinceMonth = startOfMonth(now, zone);
 
-    const [all, week, month, paid, total, rows, payouts, defaultShare] = await Promise.all([
+    const [all, week, month, paid, total, rows, payouts, defaultShare, feePercent] = await Promise.all([
       this.sumEarned(advisor.id),
       this.sumEarned(advisor.id, sinceWeek),
       this.sumEarned(advisor.id, sinceMonth),
@@ -150,21 +187,28 @@ export class PayoutsService {
         where: { advisorId: advisor.id },
         orderBy: { paidAt: 'desc' },
         take: 50,
-        select: { id: true, amountCents: true, method: true, reference: true, paidAt: true },
+        select: { id: true, amountCents: true, feeCents: true, method: true, reference: true, paidAt: true },
       }),
       this.getDefaultShare(),
+      this.getPaypalFeePercent(),
     ]);
 
     const paidCents = paid._sum.amountCents ?? 0;
+    const owedCents = all - paidCents;
+    const method = effectiveMethod(advisor);
     return {
       timeZone: zone,
       sharePercent: advisor.sharePercent ?? defaultShare,
+      method,
+      paypalFeePercent: feePercent,
       summary: {
         last7DaysCents: week,
         thisMonthCents: month,
         allTimeCents: all,
         paidCents,
-        owedCents: all - paidCents,
+        owedCents,
+        // What would reach them if they were paid everything owed right now by their current method.
+        owedAfterFeeCents: method === 'PAYPAL' ? owedCents - paypalFee(Math.max(owedCents, 0), feePercent) : owedCents,
       },
       earnings: {
         page,
@@ -181,7 +225,7 @@ export class PayoutsService {
           earnedCents: row.earnedCents,
         })),
       },
-      payouts,
+      payouts: payouts.map((payout) => ({ ...payout, netCents: payout.amountCents - payout.feeCents })),
     };
   }
 
@@ -197,7 +241,7 @@ export class PayoutsService {
 
   /** The advisor's payout choice and whether Direct Deposit is available to them. */
   async myDetails(userId: string) {
-    return this.detailsOf(await this.advisorOf(userId));
+    return { ...this.detailsOf(await this.advisorOf(userId)), paypalFeePercent: await this.getPaypalFeePercent() };
   }
 
   /**
@@ -222,7 +266,7 @@ export class PayoutsService {
       data: { payoutMethod: dto.method, ...(typedEmail ? { paypalEmail: typedEmail } : {}) },
       select: ADVISOR_SELECT,
     });
-    return this.detailsOf(updated);
+    return { ...this.detailsOf(updated), paypalFeePercent: await this.getPaypalFeePercent() };
   }
 
   private detailsOf(advisor: PayoutFields) {
@@ -274,6 +318,7 @@ export class PayoutsService {
     rows.sort((a, b) => b.owedCents - a.owedCents || a.displayName.localeCompare(b.displayName));
     return {
       defaultSharePercent: defaultShare,
+      paypalFeePercent: await this.getPaypalFeePercent(),
       totals: {
         chargedCents: rows.reduce((sum, r) => sum + r.chargedCents, 0),
         earnedCents: rows.reduce((sum, r) => sum + r.earnedCents, 0),
@@ -317,6 +362,7 @@ export class PayoutsService {
     return {
       advisorId: advisor.id,
       displayName: advisor.displayName,
+      paypalFeePercent: await this.getPaypalFeePercent(),
       sharePercentOverride: advisor.sharePercent,
       sharePercent: advisor.sharePercent ?? defaultShare,
       earnedCents: earned,
@@ -332,6 +378,8 @@ export class PayoutsService {
       payouts: payouts.map((payout) => ({
         id: payout.id,
         amountCents: payout.amountCents,
+        feeCents: payout.feeCents,
+        netCents: payout.amountCents - payout.feeCents,
         method: payout.method,
         reference: payout.reference,
         note: payout.note,
@@ -377,6 +425,7 @@ export class PayoutsService {
 
   /** Records a payment made to an advisor, along with how they were being paid at the time. It cannot be more than they are owed. */
   async recordPayout(adminId: string, advisorId: string, dto: RecordPayoutDto) {
+    const feePercent = await this.getPaypalFeePercent();
     let paidAt = new Date();
     if (dto.paidAt) {
       paidAt = new Date(dto.paidAt);
@@ -396,18 +445,22 @@ export class PayoutsService {
         if (dto.amountCents > owed) {
           throw new BadRequestException(`This advisor is owed $${(Math.max(owed, 0) / 100).toFixed(2)}, so you cannot record a payment of $${(dto.amountCents / 100).toFixed(2)}.`);
         }
-        return tx.advisorPayout.create({
+        // The fee comes out of the payment: the advisor is owed less by the full amount, and receives it less the fee.
+        const feeCents = effectiveMethod(advisor) === 'PAYPAL' ? paypalFee(dto.amountCents, feePercent) : 0;
+        const created = await tx.advisorPayout.create({
           data: {
             advisorId,
             amountCents: dto.amountCents,
+            feeCents,
             method: describeMethod(advisor),
             reference: dto.reference?.trim() || null,
             note: dto.note?.trim() || null,
             paidAt,
             createdByUserId: adminId,
           },
-          select: { id: true, amountCents: true, method: true, reference: true, note: true, paidAt: true },
+          select: { id: true, amountCents: true, feeCents: true, method: true, reference: true, note: true, paidAt: true },
         });
+        return { ...created, netCents: created.amountCents - created.feeCents };
       },
       // Serializable, so two payments recorded at the same moment cannot together exceed what is owed.
       { isolationLevel: 'Serializable' },

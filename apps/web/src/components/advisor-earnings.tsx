@@ -16,9 +16,11 @@ interface EarningRow {
 interface Overview {
   timeZone: string;
   sharePercent: number;
-  summary: { last7DaysCents: number; thisMonthCents: number; allTimeCents: number; paidCents: number; owedCents: number };
+  method: 'PAYPAL' | 'DIRECT_DEPOSIT';
+  paypalFeePercent: number;
+  summary: { last7DaysCents: number; thisMonthCents: number; allTimeCents: number; paidCents: number; owedCents: number; owedAfterFeeCents: number };
   earnings: { page: number; pageSize: number; total: number; rows: EarningRow[] };
-  payouts: { id: string; amountCents: number; method: string; reference: string | null; paidAt: string }[];
+  payouts: { id: string; amountCents: number; feeCents: number; netCents: number; method: string; reference: string | null; paidAt: string }[];
 }
 
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
@@ -65,6 +67,12 @@ export function AdvisorEarnings() {
           You have earned {money(summary.allTimeCents)} and been paid {money(summary.paidCents)}. You earn {data.sharePercent}% of what clients
           pay for each minute. Free minutes do not earn anything.
         </p>
+        {data.method === 'PAYPAL' && data.paypalFeePercent > 0 && summary.owedCents > 0 && (
+          <p className="mt-2 text-sm text-gray-600">
+            You are paid by PayPal, which has a {data.paypalFeePercent}% fee taken from each payment, so you would receive about{' '}
+            <span className="font-semibold">{money(summary.owedAfterFeeCents)}</span> of this. Direct Deposit has no fee.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -135,7 +143,13 @@ export function AdvisorEarnings() {
             {data.payouts.map((payout) => (
               <li key={payout.id} className="flex flex-wrap justify-between gap-2 px-4 py-3 text-sm">
                 <span>
-                  <span className="font-semibold">{money(payout.amountCents)}</span>
+                  <span className="font-semibold">{money(payout.netCents)}</span>
+                  {payout.feeCents > 0 && (
+                    <span className="text-gray-500">
+                      {' '}
+                      ({money(payout.amountCents)} less a {money(payout.feeCents)} fee)
+                    </span>
+                  )}
                   <span className="text-gray-500"> · {payout.method}</span>
                   {payout.reference && <span className="text-gray-500"> · ref {payout.reference}</span>}
                 </span>
