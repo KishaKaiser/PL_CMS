@@ -9,6 +9,7 @@ import {
 import { Cron } from '@nestjs/schedule';
 import type { AdvisorProfile, ClientProfile } from '@pl-cms/db';
 import { FreeMinutesService } from '../free-minutes/free-minutes.service';
+import { PayoutsService } from '../payouts/payouts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Spoken } from '../telephony/phone-prompts';
 import { CallLeg, CallState, TelnyxService, decodeState } from '../telephony/telnyx.service';
@@ -161,6 +162,7 @@ export class BillingService {
     private readonly telnyx: TelnyxService,
     private readonly wallets: PaypalWalletService,
     private readonly freeMinutes: FreeMinutesService,
+    private readonly payouts: PayoutsService,
   ) {}
 
   /** The hotline registers itself here so incoming calls reach it through the same webhook. */
@@ -1155,7 +1157,7 @@ export class BillingService {
       ? Math.max(0, Math.floor((endedAt.getTime() - session.connectedAt.getTime()) / 1000))
       : 0;
 
-    return this.prisma.callSession.update({
+    const ended = await this.prisma.callSession.update({
       where: { id: sessionId },
       data: {
         endedAt,
@@ -1165,6 +1167,13 @@ export class BillingService {
         status,
       },
     });
+
+    // The advisor's share of what the client paid for. A failure here must never get in the way of ending the call.
+    await this.payouts.recordEarning(sessionId).catch((error: unknown) => {
+      this.logger.error(`Could not record the advisor's earnings for ${sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    });
+
+    return ended;
   }
 
   async getActiveSession(userId: string) {

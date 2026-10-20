@@ -29,7 +29,6 @@ import {
 import {
   SaveAddressDto,
   SavePaymentMethodDto,
-  SavePayoutMethodDto,
   UpdateAccountDto,
   UpdateAdvisorProfileDto,
   UpdateAdvisorScheduleDto,
@@ -160,18 +159,5 @@ export class AccountController {
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
     return this.accountService.uploadAdvisorProfileImage(req.user.id, file);
-  }
-
-  @Post('payout-methods')
-  createPayoutMethod(
-    @Request() req: AuthenticatedRequest,
-    @Body() dto: SavePayoutMethodDto,
-  ) {
-    return this.accountService.createPayoutMethod(req.user.id, dto);
-  }
-
-  @Delete('payout-methods/:id')
-  removePayoutMethod(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.accountService.removePayoutMethod(req.user.id, id);
   }
 }

@@ -7,12 +7,12 @@ import { normalizePhoneNumber } from '../telephony/phone-number';
 import { ensureAdvisorSlug } from '../billing/advisor-slug';
 import { ConfigService } from '@nestjs/config';
 import { FreeMinutesService } from '../free-minutes/free-minutes.service';
+import { PayoutsService } from '../payouts/payouts.service';
 import { MessagesService } from '../messages/messages.service';
 import { publicName } from '../common/public-identity';
 import {
   SaveAddressDto,
   SavePaymentMethodDto,
-  SavePayoutMethodDto,
   UpdateAccountDto,
   UpdateAdvisorProfileDto,
   UpdateAdvisorScheduleDto,
@@ -25,6 +25,7 @@ export class AccountService {
     private readonly config: ConfigService,
     private readonly messages: MessagesService,
     private readonly freeMinutes: FreeMinutesService,
+    private readonly payouts: PayoutsService,
   ) {}
 
   async getDashboard(userId: string) {
@@ -81,12 +82,15 @@ export class AccountService {
         }),
       ]);
 
+    // Only what an advisor needs to recognise their payout details; full account numbers are never sent back.
     const payoutMethods =
       user.advisorProfile
-        ? await this.prisma.advisorPayoutMethod.findMany({
-            where: { advisorId: user.advisorProfile.id },
-            orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
-          })
+        ? (
+            await this.prisma.advisorPayoutMethod.findMany({
+              where: { advisorId: user.advisorProfile.id },
+              orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+            })
+          ).map((method) => this.payouts.masked(method))
         : [];
 
     const callTransactions =
@@ -320,38 +324,6 @@ export class AccountService {
       data: { profileImageUrl: media.url },
     });
     return { profile, media };
-  }
-
-  async createPayoutMethod(userId: string, dto: SavePayoutMethodDto) {
-    const advisor = await this.getAdvisorProfileForUser(userId);
-    return this.prisma.$transaction(async (tx) => {
-      if (dto.isDefault) {
-        await tx.advisorPayoutMethod.updateMany({
-          where: { advisorId: advisor.id },
-          data: { isDefault: false },
-        });
-      }
-
-      return tx.advisorPayoutMethod.create({
-        data: {
-          advisorId: advisor.id,
-          label: dto.label.trim(),
-          methodType: dto.methodType.trim(),
-          accountName: dto.accountName.trim(),
-          details: toJsonObject(dto.details),
-          isDefault: dto.isDefault ?? false,
-        },
-      });
-    });
-  }
-
-  async removePayoutMethod(userId: string, id: string) {
-    const advisor = await this.getAdvisorProfileForUser(userId);
-    const method = await this.prisma.advisorPayoutMethod.findFirst({
-      where: { id, advisorId: advisor.id },
-    });
-    if (!method) throw new NotFoundException(`Payout method ${id} not found`);
-    return this.prisma.advisorPayoutMethod.delete({ where: { id } });
   }
 
   private async ensureOwnedAddress(userId: string, id: string) {

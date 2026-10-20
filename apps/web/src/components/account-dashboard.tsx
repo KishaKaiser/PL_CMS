@@ -8,6 +8,8 @@ import { AppointmentsPanel } from './phone/appointments-panel';
 import { FavoriteAdvisorsList } from './phone/favorite-advisors-list';
 import { PaypalWalletPanel } from './phone/paypal-wallet-panel';
 import { AdvisorClients } from './advisor-clients';
+import { AdvisorEarnings } from './advisor-earnings';
+import { AdvisorPayoutDetails } from './advisor-payout-details';
 import { PrivateMessageInbox } from './private-message-inbox';
 
 type DashboardMode = 'client' | 'advisor';
@@ -23,6 +25,7 @@ type DashboardSection =
   | 'favorites'
   | 'account'
   | 'advisor-profile'
+  | 'earnings'
   | 'payouts'
   | 'calls';
 
@@ -174,14 +177,6 @@ const emptyPaymentMethod = {
   isDefault: false,
 };
 
-const emptyPayoutMethod = {
-  label: '',
-  methodType: 'PayPal',
-  accountName: '',
-  details: '',
-  isDefault: false,
-};
-
 export function AccountDashboard({ mode }: { mode: DashboardMode }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -200,7 +195,6 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     phoneNumber: '',
     isOnline: false,
   });
-  const [payoutForm, setPayoutForm] = useState(emptyPayoutMethod);
   const [activeSection, setActiveSection] = useState<DashboardSection>('messages');
 
   const isAdvisor = mode === 'advisor';
@@ -318,21 +312,6 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
     });
   }
 
-  async function handlePayoutSave(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await saveAction('payout', async () => {
-      await postJson('payout-methods', {
-        label: payoutForm.label,
-        methodType: payoutForm.methodType,
-        accountName: payoutForm.accountName,
-        details: payoutForm.details ? { note: payoutForm.details } : {},
-        isDefault: payoutForm.isDefault,
-      });
-      setPayoutForm(emptyPayoutMethod);
-      setSuccess('Payout method saved.');
-    });
-  }
-
   async function saveAction(name: string, action: () => Promise<void>) {
     setSaving(name);
     setError('');
@@ -424,6 +403,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
       ? [
           { id: 'clients' as const, label: 'My Clients', icon: 'fa-solid fa-users' },
           { id: 'advisor-profile' as const, label: 'Advisor Profile', icon: 'fa-regular fa-id-card' },
+          { id: 'earnings' as const, label: 'Earnings', icon: 'fa-solid fa-sack-dollar' },
           { id: 'payouts' as const, label: 'Payout Info', icon: 'fa-regular fa-file-lines' },
           { id: 'calls' as const, label: 'Call Transactions', icon: 'fa-solid fa-phone-volume' },
         ]
@@ -793,24 +773,9 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
             </div>
           )}
 
-          {activeSection === 'payouts' && isAdvisor && data.advisor && (
-            <div>
-              <form onSubmit={handlePayoutSave} className="grid gap-4 md:grid-cols-2">
-                <Input label="Label" value={payoutForm.label} onChange={(label) => setPayoutForm((f) => ({ ...f, label }))} required />
-                <Input label="Method type" value={payoutForm.methodType} onChange={(methodType) => setPayoutForm((f) => ({ ...f, methodType }))} required />
-                <Input label="Account name" value={payoutForm.accountName} onChange={(accountNameValue) => setPayoutForm((f) => ({ ...f, accountName: accountNameValue }))} required />
-                <Input label="Notes" value={payoutForm.details} onChange={(details) => setPayoutForm((f) => ({ ...f, details }))} />
-                <Checkbox checked={payoutForm.isDefault} label="Default payout method" onChange={(isDefault) => setPayoutForm((f) => ({ ...f, isDefault }))} />
-                <div className="md:col-span-2"><PrimaryButton disabled={saving === 'payout'}>Save Payout Method</PrimaryButton></div>
-              </form>
-              <ListBlock>
-                {data.advisor.payoutMethods.map((method) => (
-                  <RemovableRow key={method.id} title={`${method.label}${method.isDefault ? ' (Default)' : ''}`} detail={`${method.methodType} · ${method.accountName}`} onRemove={() => void removeItem(`payout-methods/${method.id}`, 'Payout method removed.')} />
-                ))}
-                {data.advisor.payoutMethods.length === 0 && <EmptyText text="No payout methods saved yet." />}
-              </ListBlock>
-            </div>
-          )}
+          {activeSection === 'earnings' && isAdvisor && <AdvisorEarnings />}
+
+          {activeSection === 'payouts' && isAdvisor && <AdvisorPayoutDetails />}
 
           {activeSection === 'calls' && isAdvisor && data.advisor && (
             <div>
