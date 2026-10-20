@@ -151,6 +151,15 @@ model AdvisorProfile {
   callQueues          CallQueue[]
   callSessionsAsAdvisor CallSession[]        @relation("AdvisorSessions")
   payoutMethods       AdvisorPayoutMethod[]
+  earnings            AdvisorEarning[]
+  payouts             AdvisorPayout[]
+  // The advisor's share of what clients are charged, in percent. Empty = the platform default (Admin > Advisor payments).
+  sharePercent        Int?
+  // How the advisor is paid: PAYPAL (to paypalEmail) or DIRECT_DEPOSIT. The site never stores bank details: those are
+  // given to Support during onboarding, and bankOnFileAt records that Support has them, which unlocks Direct Deposit.
+  payoutMethod        String                 @default("PAYPAL")
+  paypalEmail         String?
+  bankOnFileAt        DateTime?
   appointments        Appointment[]          @relation("AdvisorAppointments")
   reviews             AdvisorReview[]
   favoritedBy         FavoriteAdvisor[]
@@ -246,6 +255,7 @@ model CallSession {
   advisor AdvisorProfile @relation("AdvisorSessions", fields: [advisorId], references: [id])
   client  ClientProfile  @relation("ClientSessions", fields: [clientId], references: [id])
   walletTransactions WalletTransaction[]
+  earning AdvisorEarning?
   appointment Appointment?
   queueAssignment QueueAssignment?
 
@@ -453,6 +463,45 @@ model AdvisorPayoutMethod {
 
   @@index([advisorId])
   @@map("advisor_payout_methods")
+}
+
+// What an advisor earned from one finished call: their share of the minutes the client actually paid for.
+// Free minutes are charged at $0, so they earn nothing. The percentage is fixed when the call ends.
+model AdvisorEarning {
+  id            String   @id @default(cuid())
+  advisorId     String
+  callSessionId String   @unique
+  billedMinutes Int
+  freeMinutes   Int
+  chargedCents  Int
+  sharePercent  Int
+  earnedCents   Int
+  createdAt     DateTime @default(now())
+
+  advisor     AdvisorProfile @relation(fields: [advisorId], references: [id])
+  callSession CallSession    @relation(fields: [callSessionId], references: [id])
+
+  @@index([advisorId, createdAt])
+  @@map("advisor_earnings")
+}
+
+// A payment made to an advisor, recorded by an admin. What an advisor is owed = earnings minus payouts.
+model AdvisorPayout {
+  id              String   @id @default(cuid())
+  advisorId       String
+  amountCents     Int
+  // How it was paid, as it was when it was recorded (e.g. "PayPal: name@example.com").
+  method          String
+  reference       String?
+  note            String?
+  paidAt          DateTime @default(now())
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  advisor AdvisorProfile @relation(fields: [advisorId], references: [id])
+
+  @@index([advisorId, paidAt])
+  @@map("advisor_payouts")
 }
 
 // ──────────────────────────────────────────────

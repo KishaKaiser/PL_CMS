@@ -12,7 +12,6 @@ import { publicName } from '../common/public-identity';
 import {
   SaveAddressDto,
   SavePaymentMethodDto,
-  SavePayoutMethodDto,
   UpdateAccountDto,
   UpdateAdvisorProfileDto,
   UpdateAdvisorScheduleDto,
@@ -81,14 +80,6 @@ export class AccountService {
         }),
       ]);
 
-    const payoutMethods =
-      user.advisorProfile
-        ? await this.prisma.advisorPayoutMethod.findMany({
-            where: { advisorId: user.advisorProfile.id },
-            orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
-          })
-        : [];
-
     const callTransactions =
       user.advisorProfile
         ? await this.prisma.callSession.findMany({
@@ -124,7 +115,6 @@ export class AccountService {
       advisor: user.advisorProfile
         ? {
             profile: { ...user.advisorProfile, slug: advisorSlug },
-            payoutMethods,
             callTransactions,
             schedule,
             // The hotline callers dial, which the advisor can share along with their extension.
@@ -320,38 +310,6 @@ export class AccountService {
       data: { profileImageUrl: media.url },
     });
     return { profile, media };
-  }
-
-  async createPayoutMethod(userId: string, dto: SavePayoutMethodDto) {
-    const advisor = await this.getAdvisorProfileForUser(userId);
-    return this.prisma.$transaction(async (tx) => {
-      if (dto.isDefault) {
-        await tx.advisorPayoutMethod.updateMany({
-          where: { advisorId: advisor.id },
-          data: { isDefault: false },
-        });
-      }
-
-      return tx.advisorPayoutMethod.create({
-        data: {
-          advisorId: advisor.id,
-          label: dto.label.trim(),
-          methodType: dto.methodType.trim(),
-          accountName: dto.accountName.trim(),
-          details: toJsonObject(dto.details),
-          isDefault: dto.isDefault ?? false,
-        },
-      });
-    });
-  }
-
-  async removePayoutMethod(userId: string, id: string) {
-    const advisor = await this.getAdvisorProfileForUser(userId);
-    const method = await this.prisma.advisorPayoutMethod.findFirst({
-      where: { id, advisorId: advisor.id },
-    });
-    if (!method) throw new NotFoundException(`Payout method ${id} not found`);
-    return this.prisma.advisorPayoutMethod.delete({ where: { id } });
   }
 
   private async ensureOwnedAddress(userId: string, id: string) {

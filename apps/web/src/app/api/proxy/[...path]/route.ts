@@ -30,6 +30,7 @@ const ALLOWED_PATH_PREFIXES = [
   'messages',
   'contact-lists',
   'free-minutes',
+  'payouts',
   'forms',
   'sliders',
   'newsletter',

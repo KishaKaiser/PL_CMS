@@ -21,6 +21,7 @@ import { AdminModule } from './admin/admin.module';
 import { PublicContentModule } from './public/public-content.module';
 import { FreeMinutesModule } from './free-minutes/free-minutes.module';
 import { MessagesModule } from './messages/messages.module';
+import { PayoutsModule } from './payouts/payouts.module';
 import { AccountModule } from './account/account.module';
 import { DefaultContentModule } from './bootstrap/default-content.module';
 import { FormsModule } from './forms/forms.module';
@@ -58,6 +59,7 @@ import { IdentityModule } from './identity/identity.module';
     AdminModule,
     PublicContentModule,
     MessagesModule,
+    PayoutsModule,
     FreeMinutesModule,
     AccountModule,
     DefaultContentModule,

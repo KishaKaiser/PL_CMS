@@ -152,25 +152,3 @@ export class UpdateAdvisorScheduleDto {
   @Type(() => ScheduleSlotDto)
   slots!: ScheduleSlotDto[];
 }
-
-export class SavePayoutMethodDto {
-  @IsString()
-  @MaxLength(80)
-  label!: string;
-
-  @IsString()
-  @MaxLength(80)
-  methodType!: string;
-
-  @IsString()
-  @MaxLength(120)
-  accountName!: string;
-
-  @IsOptional()
-  @IsObject()
-  details?: Record<string, unknown>;
-
-  @IsOptional()
-  @IsBoolean()
-  isDefault?: boolean;
-}
