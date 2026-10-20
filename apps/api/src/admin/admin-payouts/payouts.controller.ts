@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Request, UseGua
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
-import { RecordPayoutDto, SetAdvisorShareDto, SetDefaultShareDto } from '../../payouts/payouts.dto';
+import { BankOnFileDto, RecordPayoutDto, SetAdvisorShareDto, SetDefaultShareDto } from '../../payouts/payouts.dto';
 import { PayoutsService } from '../../payouts/payouts.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -30,11 +30,17 @@ export class AdminPayoutsController {
     return { defaultSharePercent: sharePercent };
   }
 
-  /** Includes the advisor's full payout details so they can be paid; viewing them is recorded in the audit log. */
+  /** One advisor: how they are paid right now (it follows whatever they last chose), what they are owed, and recent history. */
   @Get('advisors/:id')
-  async advisor(@Request() req: AuthedRequest, @Param('id') id: string) {
-    const detail = await this.payouts.adminAdvisor(id);
-    await this.audit.log(req.user.id, 'payouts.view-details', 'AdvisorProfile', id);
+  advisor(@Param('id') id: string) {
+    return this.payouts.adminAdvisor(id);
+  }
+
+  /** Support has received (or no longer has) the advisor's bank information from onboarding, which unlocks Direct Deposit for them. */
+  @Put('advisors/:id/bank-on-file')
+  async bankOnFile(@Request() req: AuthedRequest, @Param('id') id: string, @Body() dto: BankOnFileDto) {
+    const detail = await this.payouts.setBankOnFile(id, dto.onFile);
+    await this.audit.log(req.user.id, 'payouts.bank-on-file', 'AdvisorProfile', id, { onFile: dto.onFile });
     return detail;
   }
 

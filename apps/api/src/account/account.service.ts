@@ -7,7 +7,6 @@ import { normalizePhoneNumber } from '../telephony/phone-number';
 import { ensureAdvisorSlug } from '../billing/advisor-slug';
 import { ConfigService } from '@nestjs/config';
 import { FreeMinutesService } from '../free-minutes/free-minutes.service';
-import { PayoutsService } from '../payouts/payouts.service';
 import { MessagesService } from '../messages/messages.service';
 import { publicName } from '../common/public-identity';
 import {
@@ -25,7 +24,6 @@ export class AccountService {
     private readonly config: ConfigService,
     private readonly messages: MessagesService,
     private readonly freeMinutes: FreeMinutesService,
-    private readonly payouts: PayoutsService,
   ) {}
 
   async getDashboard(userId: string) {
@@ -82,17 +80,6 @@ export class AccountService {
         }),
       ]);
 
-    // Only what an advisor needs to recognise their payout details; full account numbers are never sent back.
-    const payoutMethods =
-      user.advisorProfile
-        ? (
-            await this.prisma.advisorPayoutMethod.findMany({
-              where: { advisorId: user.advisorProfile.id },
-              orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
-            })
-          ).map((method) => this.payouts.masked(method))
-        : [];
-
     const callTransactions =
       user.advisorProfile
         ? await this.prisma.callSession.findMany({
@@ -128,7 +115,6 @@ export class AccountService {
       advisor: user.advisorProfile
         ? {
             profile: { ...user.advisorProfile, slug: advisorSlug },
-            payoutMethods,
             callTransactions,
             schedule,
             // The hotline callers dial, which the advisor can share along with their extension.

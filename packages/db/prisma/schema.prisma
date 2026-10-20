@@ -155,6 +155,11 @@ model AdvisorProfile {
   payouts             AdvisorPayout[]
   // The advisor's share of what clients are charged, in percent. Empty = the platform default (Admin > Advisor payments).
   sharePercent        Int?
+  // How the advisor is paid: PAYPAL (to paypalEmail) or DIRECT_DEPOSIT. The site never stores bank details: those are
+  // given to Support during onboarding, and bankOnFileAt records that Support has them, which unlocks Direct Deposit.
+  payoutMethod        String                 @default("PAYPAL")
+  paypalEmail         String?
+  bankOnFileAt        DateTime?
   appointments        Appointment[]          @relation("AdvisorAppointments")
   reviews             AdvisorReview[]
   favoritedBy         FavoriteAdvisor[]

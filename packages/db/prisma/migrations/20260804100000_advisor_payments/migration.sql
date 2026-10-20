@@ -1,6 +1,9 @@
 -- Advisor earnings, payouts and a per-advisor revenue share. Idempotent: safe to re-run.
 
 ALTER TABLE "advisor_profiles" ADD COLUMN IF NOT EXISTS "sharePercent" INTEGER;
+ALTER TABLE "advisor_profiles" ADD COLUMN IF NOT EXISTS "payoutMethod" TEXT NOT NULL DEFAULT 'PAYPAL';
+ALTER TABLE "advisor_profiles" ADD COLUMN IF NOT EXISTS "paypalEmail" TEXT;
+ALTER TABLE "advisor_profiles" ADD COLUMN IF NOT EXISTS "bankOnFileAt" TIMESTAMP(3);
 
 CREATE TABLE IF NOT EXISTS "advisor_earnings" (
     "id" TEXT NOT NULL,

@@ -1,10 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import type { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../prisma/prisma.service';
-import { decryptJson, encryptJson } from './payout-crypto';
 import { startOfMonth, validZone } from './payout-time';
-import { RecordPayoutDto, SavePayoutDetailsDto } from './payouts.dto';
+import { RecordPayoutDto, SetPayoutMethodDto } from './payouts.dto';
 
 /**
  * Advisor earnings and payouts.
@@ -14,32 +11,44 @@ import { RecordPayoutDto, SavePayoutDetailsDto } from './payouts.dto';
  *    platform default, and it is fixed on the call when it ends (changing it later does not rewrite old calls).
  *  - Admin pays advisors outside the app and records each payment here. What an advisor is owed is everything they
  *    have earned minus everything recorded as paid.
+ *  - An advisor is paid by PayPal (to the email they give) or by Direct Deposit. This site never stores bank details:
+ *    they are given to Support during onboarding, and Support marks the advisor's bank information as received, which
+ *    is what lets the advisor choose Direct Deposit.
  */
 
 const SETTINGS_KEY = 'payout_settings';
 export const DEFAULT_SHARE_PERCENT = 50;
 export const EARNINGS_PAGE_SIZE = 25;
-const ENCRYPTION_ERROR = 'Bank details cannot be stored securely on this server yet. Use PayPal, or ask the site owner to set PAYOUT_ENCRYPTION_KEY.';
 
-export type PayoutMethodType = 'PAYPAL' | 'BANK' | 'OTHER';
+export const BANK_INSTRUCTIONS =
+  'Direct Deposit is not available yet. Bank information is given to Support during advisor onboarding, not on this site. ' +
+  'Once Support has received it and confirmed it, Direct Deposit will be available here. If you have already completed ' +
+  'onboarding, contact Support.';
 
-interface StoredMethod {
-  id: string;
-  label: string;
-  methodType: string;
-  accountName: string;
-  details: unknown;
-  isDefault: boolean;
+export type PayoutMethod = 'PAYPAL' | 'DIRECT_DEPOSIT';
+
+interface PayoutFields {
+  payoutMethod: string;
+  paypalEmail: string | null;
+  bankOnFileAt: Date | null;
+}
+
+/** The method that will actually be used: Direct Deposit only counts while Support has the bank information. */
+function effectiveMethod(advisor: PayoutFields): PayoutMethod {
+  return advisor.payoutMethod === 'DIRECT_DEPOSIT' && advisor.bankOnFileAt ? 'DIRECT_DEPOSIT' : 'PAYPAL';
+}
+
+/** Words for the method, for the advisor's history and the admin's payment records. */
+function describeMethod(advisor: PayoutFields): string {
+  if (effectiveMethod(advisor) === 'DIRECT_DEPOSIT') return 'Direct deposit';
+  return advisor.paypalEmail ? `PayPal: ${advisor.paypalEmail}` : 'PayPal (no email given)';
 }
 
 @Injectable()
 export class PayoutsService {
   private readonly logger = new Logger(PayoutsService.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ── Settings ───────────────────────────────────────────────────────────────
 
@@ -184,131 +193,68 @@ export class PayoutsService {
     return sum._sum.earnedCents ?? 0;
   }
 
-  // ── Payout details (how the advisor wants to be paid) ──────────────────────
+  // ── How the advisor is paid ────────────────────────────────────────────────
 
-  async listMethods(userId: string) {
-    const advisor = await this.advisorOf(userId);
-    const methods = await this.prisma.advisorPayoutMethod.findMany({
-      where: { advisorId: advisor.id },
-      orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
-    });
-    return methods.map((method) => this.masked(method));
+  /** The advisor's payout choice and whether Direct Deposit is available to them. */
+  async myDetails(userId: string) {
+    return this.detailsOf(await this.advisorOf(userId));
   }
 
-  async saveMethod(userId: string, dto: SavePayoutDetailsDto) {
+  /**
+   * Switches between PayPal and Direct Deposit. Either can be chosen at any time; Direct Deposit only once Support has
+   * the advisor's bank information. The PayPal email is kept when switching away, so switching back is one click.
+   */
+  async setMyMethod(userId: string, dto: SetPayoutMethodDto) {
     const advisor = await this.advisorOf(userId);
-    const accountName = dto.accountName.trim();
-    if (!accountName) throw new BadRequestException('Enter the name on the account.');
-
-    let label: string;
-    let details: Prisma.InputJsonObject;
-    if (dto.type === 'PAYPAL') {
-      const email = dto.email?.trim().toLowerCase() ?? '';
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException('Enter the email address of your PayPal account.');
-      label = `PayPal: ${email}`;
-      details = { email };
-    } else if (dto.type === 'BANK') {
-      const bankName = dto.bankName?.trim() ?? '';
-      const routing = (dto.routingNumber ?? '').replace(/[\s-]/g, '');
-      const account = (dto.accountNumber ?? '').replace(/[\s-]/g, '');
-      if (!bankName) throw new BadRequestException('Enter the name of your bank.');
-      if (!/^[A-Za-z0-9]{4,20}$/.test(routing)) throw new BadRequestException('Enter your bank routing (or sort code) number.');
-      if (!/^[A-Za-z0-9]{4,34}$/.test(account)) throw new BadRequestException('Enter your account number.');
-      const secret = this.encryptionSecret();
-      if (!secret) throw new BadRequestException(ENCRYPTION_ERROR);
-      label = `${bankName} account ending ${account.slice(-4)}`;
-      details = {
-        bankName,
-        routingLast4: routing.slice(-4),
-        accountLast4: account.slice(-4),
-        secret: encryptJson({ routingNumber: routing, accountNumber: account }, secret),
-      };
-    } else {
-      const notes = dto.notes?.trim() ?? '';
-      if (!notes) throw new BadRequestException('Tell us how you would like to be paid.');
-      label = notes.length > 60 ? `${notes.slice(0, 57)}...` : notes;
-      details = { notes };
+    const typedEmail = dto.paypalEmail?.trim().toLowerCase();
+    if (typedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(typedEmail)) {
+      throw new BadRequestException('Enter the email address of your PayPal account.');
     }
 
-    const saved = await this.prisma.$transaction(async (tx) => {
-      const first = (await tx.advisorPayoutMethod.count({ where: { advisorId: advisor.id } })) === 0;
-      const makeDefault = dto.isDefault === true || first;
-      if (makeDefault) await tx.advisorPayoutMethod.updateMany({ where: { advisorId: advisor.id }, data: { isDefault: false } });
-      return tx.advisorPayoutMethod.create({
-        data: { advisorId: advisor.id, label, methodType: dto.type, accountName, details, isDefault: makeDefault },
-      });
-    });
-    return this.masked(saved);
-  }
-
-  async removeMethod(userId: string, id: string) {
-    const advisor = await this.advisorOf(userId);
-    const method = await this.prisma.advisorPayoutMethod.findFirst({ where: { id, advisorId: advisor.id } });
-    if (!method) throw new NotFoundException('Payout details not found');
-    await this.prisma.advisorPayoutMethod.delete({ where: { id } });
-    // Keep a default if any are left.
-    if (method.isDefault) {
-      const next = await this.prisma.advisorPayoutMethod.findFirst({ where: { advisorId: advisor.id }, orderBy: { createdAt: 'desc' }, select: { id: true } });
-      if (next) await this.prisma.advisorPayoutMethod.update({ where: { id: next.id }, data: { isDefault: true } });
+    if (dto.method === 'DIRECT_DEPOSIT') {
+      if (!advisor.bankOnFileAt) throw new BadRequestException(BANK_INSTRUCTIONS);
+    } else if (!(typedEmail || advisor.paypalEmail)) {
+      throw new BadRequestException('Enter the email address of your PayPal account.');
     }
-    return { id, deleted: true };
+
+    const updated = await this.prisma.advisorProfile.update({
+      where: { id: advisor.id },
+      data: { payoutMethod: dto.method, ...(typedEmail ? { paypalEmail: typedEmail } : {}) },
+      select: ADVISOR_SELECT,
+    });
+    return this.detailsOf(updated);
   }
 
-  /** What the advisor sees: enough to recognise it, never the full account numbers. */
-  masked(method: StoredMethod) {
-    const details = (method.details ?? {}) as Record<string, unknown>;
-    let summary: string;
-    if (method.methodType === 'PAYPAL') summary = String(details.email ?? '');
-    else if (method.methodType === 'BANK') summary = `${String(details.bankName ?? 'Bank')} · account ending ${String(details.accountLast4 ?? '')}`;
-    else summary = String(details.notes ?? details.note ?? '');
+  private detailsOf(advisor: PayoutFields) {
     return {
-      id: method.id,
-      label: method.label,
-      methodType: method.methodType,
-      accountName: method.accountName,
-      isDefault: method.isDefault,
-      summary,
+      method: effectiveMethod(advisor),
+      paypalEmail: advisor.paypalEmail,
+      bankOnFile: advisor.bankOnFileAt !== null,
+      bankInstructions: advisor.bankOnFileAt ? null : BANK_INSTRUCTIONS,
     };
-  }
-
-  /** What admin sees when paying: the full details, decrypted. */
-  revealed(method: StoredMethod) {
-    const base = this.masked(method);
-    if (method.methodType !== 'BANK') return base;
-    const details = (method.details ?? {}) as Record<string, unknown>;
-    const secret = this.encryptionSecret();
-    const decrypted = secret && typeof details.secret === 'string' ? decryptJson<{ routingNumber: string; accountNumber: string }>(details.secret, secret) : null;
-    return {
-      ...base,
-      bankName: String(details.bankName ?? ''),
-      routingNumber: decrypted?.routingNumber ?? null,
-      accountNumber: decrypted?.accountNumber ?? null,
-    };
-  }
-
-  private encryptionSecret(): string | null {
-    return this.config.get<string>('PAYOUT_ENCRYPTION_KEY') || this.config.get<string>('JWT_REFRESH_SECRET') || null;
   }
 
   // ── Admin ──────────────────────────────────────────────────────────────────
 
-  /** Every advisor with what they have earned, been paid and are owed. */
+  /** Every advisor with what they have earned, been paid and are owed, and how each wants to be paid. */
   async adminOverview() {
-    const [defaultShare, advisors, earned, paid, methods] = await Promise.all([
+    const [defaultShare, advisors, earned, paid] = await Promise.all([
       this.getDefaultShare(),
-      this.prisma.advisorProfile.findMany({ select: { id: true, displayName: true, sharePercent: true }, orderBy: { displayName: 'asc' } }),
+      this.prisma.advisorProfile.findMany({
+        select: { id: true, displayName: true, sharePercent: true, payoutMethod: true, paypalEmail: true, bankOnFileAt: true },
+        orderBy: { displayName: 'asc' },
+      }),
       this.prisma.advisorEarning.groupBy({ by: ['advisorId'], _sum: { earnedCents: true, chargedCents: true }, _count: { _all: true } }),
       this.prisma.advisorPayout.groupBy({ by: ['advisorId'], _sum: { amountCents: true } }),
-      this.prisma.advisorPayoutMethod.groupBy({ by: ['advisorId'], _count: { _all: true } }),
     ]);
     const earnedBy = new Map(earned.map((row) => [row.advisorId, row]));
     const paidBy = new Map(paid.map((row) => [row.advisorId, row._sum.amountCents ?? 0]));
-    const hasMethod = new Set(methods.map((row) => row.advisorId));
 
     const rows = advisors.map((advisor) => {
       const e = earnedBy.get(advisor.id);
       const earnedCents = e?._sum.earnedCents ?? 0;
       const paidCents = paidBy.get(advisor.id) ?? 0;
+      const method = effectiveMethod(advisor);
       return {
         advisorId: advisor.id,
         displayName: advisor.displayName,
@@ -319,7 +265,10 @@ export class PayoutsService {
         earnedCents,
         paidCents,
         owedCents: earnedCents - paidCents,
-        hasPayoutDetails: hasMethod.has(advisor.id),
+        payoutMethod: method,
+        payoutSummary: describeMethod(advisor),
+        // Ready to be paid: PayPal needs an email; Direct Deposit needs the bank information to be on file (it is, by definition).
+        payoutReady: method === 'DIRECT_DEPOSIT' || !!advisor.paypalEmail,
       };
     });
     rows.sort((a, b) => b.owedCents - a.owedCents || a.displayName.localeCompare(b.displayName));
@@ -335,19 +284,18 @@ export class PayoutsService {
     };
   }
 
-  /** One advisor for the admin: how to pay them (in full), what they are owed, and recent history. */
+  /** One advisor for the admin: how to pay them right now, what they are owed, and recent history. */
   async adminAdvisor(advisorId: string) {
     const advisor = await this.prisma.advisorProfile.findUnique({
       where: { id: advisorId },
-      select: { id: true, displayName: true, sharePercent: true },
+      select: { id: true, displayName: true, sharePercent: true, ...ADVISOR_SELECT },
     });
     if (!advisor) throw new NotFoundException('Advisor not found');
 
-    const [defaultShare, earned, paid, methods, payouts, recent] = await Promise.all([
+    const [defaultShare, earned, paid, payouts, recent] = await Promise.all([
       this.getDefaultShare(),
       this.sumEarned(advisorId),
       this.prisma.advisorPayout.aggregate({ where: { advisorId }, _sum: { amountCents: true } }),
-      this.prisma.advisorPayoutMethod.findMany({ where: { advisorId }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }] }),
       this.prisma.advisorPayout.findMany({ where: { advisorId }, orderBy: { paidAt: 'desc' }, take: 50 }),
       this.prisma.advisorEarning.findMany({
         where: { advisorId },
@@ -374,7 +322,13 @@ export class PayoutsService {
       earnedCents: earned,
       paidCents,
       owedCents: earned - paidCents,
-      payoutMethods: methods.map((method) => this.revealed(method)),
+      payout: {
+        method: effectiveMethod(advisor),
+        summary: describeMethod(advisor),
+        paypalEmail: advisor.paypalEmail,
+        bankOnFile: advisor.bankOnFileAt !== null,
+        bankOnFileAt: advisor.bankOnFileAt,
+      },
       payouts: payouts.map((payout) => ({
         id: payout.id,
         amountCents: payout.amountCents,
@@ -396,6 +350,20 @@ export class PayoutsService {
     };
   }
 
+  /**
+   * Support has (or no longer has) the advisor's bank information from onboarding. Marking it received lets the advisor
+   * choose Direct Deposit; clearing it puts an advisor who had chosen Direct Deposit back on PayPal.
+   */
+  async setBankOnFile(advisorId: string, onFile: boolean) {
+    const advisor = await this.prisma.advisorProfile.findUnique({ where: { id: advisorId }, select: { id: true, payoutMethod: true } });
+    if (!advisor) throw new NotFoundException('Advisor not found');
+    await this.prisma.advisorProfile.update({
+      where: { id: advisorId },
+      data: onFile ? { bankOnFileAt: new Date() } : { bankOnFileAt: null, ...(advisor.payoutMethod === 'DIRECT_DEPOSIT' ? { payoutMethod: 'PAYPAL' } : {}) },
+    });
+    return this.adminAdvisor(advisorId);
+  }
+
   /** Sets one advisor's own share, or null to follow the platform default. Only affects calls from now on. */
   async setAdvisorShare(advisorId: string, percent: number | null | undefined) {
     if (percent != null && (!Number.isInteger(percent) || percent < 0 || percent > 100)) {
@@ -407,11 +375,8 @@ export class PayoutsService {
     return { advisorId, sharePercent: percent ?? null };
   }
 
-  /** Records a payment made to an advisor. It cannot be more than they are owed. */
+  /** Records a payment made to an advisor, along with how they were being paid at the time. It cannot be more than they are owed. */
   async recordPayout(adminId: string, advisorId: string, dto: RecordPayoutDto) {
-    const advisor = await this.prisma.advisorProfile.findUnique({ where: { id: advisorId }, select: { id: true } });
-    if (!advisor) throw new NotFoundException('Advisor not found');
-
     let paidAt = new Date();
     if (dto.paidAt) {
       paidAt = new Date(dto.paidAt);
@@ -419,30 +384,34 @@ export class PayoutsService {
       if (paidAt.getTime() > Date.now() + 24 * 60 * 60 * 1000) throw new BadRequestException('The payment date cannot be in the future.');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const [earned, paid, method] = await Promise.all([
-        tx.advisorEarning.aggregate({ where: { advisorId }, _sum: { earnedCents: true } }),
-        tx.advisorPayout.aggregate({ where: { advisorId }, _sum: { amountCents: true } }),
-        tx.advisorPayoutMethod.findFirst({ where: { advisorId }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }] }),
-      ]);
-      const owed = (earned._sum.earnedCents ?? 0) - (paid._sum.amountCents ?? 0);
-      if (dto.amountCents > owed) {
-        throw new BadRequestException(`This advisor is owed $${(Math.max(owed, 0) / 100).toFixed(2)}, so you cannot record a payment of $${(dto.amountCents / 100).toFixed(2)}.`);
-      }
-      return tx.advisorPayout.create({
-        data: {
-          advisorId,
-          amountCents: dto.amountCents,
-          method: method ? method.label : 'Not recorded',
-          reference: dto.reference?.trim() || null,
-          note: dto.note?.trim() || null,
-          paidAt,
-          createdByUserId: adminId,
-        },
-        select: { id: true, amountCents: true, method: true, reference: true, note: true, paidAt: true },
-      });
+    return this.prisma.$transaction(
+      async (tx) => {
+        const advisor = await tx.advisorProfile.findUnique({ where: { id: advisorId }, select: ADVISOR_SELECT_WITH_ID });
+        if (!advisor) throw new NotFoundException('Advisor not found');
+        const [earned, paid] = await Promise.all([
+          tx.advisorEarning.aggregate({ where: { advisorId }, _sum: { earnedCents: true } }),
+          tx.advisorPayout.aggregate({ where: { advisorId }, _sum: { amountCents: true } }),
+        ]);
+        const owed = (earned._sum.earnedCents ?? 0) - (paid._sum.amountCents ?? 0);
+        if (dto.amountCents > owed) {
+          throw new BadRequestException(`This advisor is owed $${(Math.max(owed, 0) / 100).toFixed(2)}, so you cannot record a payment of $${(dto.amountCents / 100).toFixed(2)}.`);
+        }
+        return tx.advisorPayout.create({
+          data: {
+            advisorId,
+            amountCents: dto.amountCents,
+            method: describeMethod(advisor),
+            reference: dto.reference?.trim() || null,
+            note: dto.note?.trim() || null,
+            paidAt,
+            createdByUserId: adminId,
+          },
+          select: { id: true, amountCents: true, method: true, reference: true, note: true, paidAt: true },
+        });
+      },
       // Serializable, so two payments recorded at the same moment cannot together exceed what is owed.
-    }, { isolationLevel: 'Serializable' });
+      { isolationLevel: 'Serializable' },
+    );
   }
 
   /** Removes a payment that was recorded by mistake; the amount goes back to what the advisor is owed. */
@@ -454,8 +423,14 @@ export class PayoutsService {
   }
 
   private async advisorOf(userId: string) {
-    const advisor = await this.prisma.advisorProfile.findUnique({ where: { userId }, select: { id: true, sharePercent: true } });
+    const advisor = await this.prisma.advisorProfile.findUnique({
+      where: { userId },
+      select: { id: true, sharePercent: true, ...ADVISOR_SELECT },
+    });
     if (!advisor) throw new NotFoundException('Advisor profile not found');
     return advisor;
   }
 }
+
+const ADVISOR_SELECT = { payoutMethod: true, paypalEmail: true, bankOnFileAt: true } as const;
+const ADVISOR_SELECT_WITH_ID = { id: true, ...ADVISOR_SELECT } as const;

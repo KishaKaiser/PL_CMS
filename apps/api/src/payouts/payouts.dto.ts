@@ -1,42 +1,19 @@
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
-export class SavePayoutDetailsDto {
-  @IsIn(['PAYPAL', 'BANK', 'OTHER'])
-  type!: 'PAYPAL' | 'BANK' | 'OTHER';
+export class SetPayoutMethodDto {
+  @IsIn(['PAYPAL', 'DIRECT_DEPOSIT'])
+  method!: 'PAYPAL' | 'DIRECT_DEPOSIT';
 
-  /** The name on the account. */
-  @IsString()
-  @MaxLength(120)
-  accountName!: string;
-
+  /** The PayPal account to pay. Kept when switching to Direct Deposit and back. */
   @IsOptional()
   @IsString()
   @MaxLength(254)
-  email?: string;
+  paypalEmail?: string;
+}
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  bankName?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  routingNumber?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  accountNumber?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  notes?: string;
-
-  @IsOptional()
+export class BankOnFileDto {
   @IsBoolean()
-  isDefault?: boolean;
+  onFile!: boolean;
 }
 
 export class SetDefaultShareDto {

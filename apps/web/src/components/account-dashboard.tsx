@@ -103,14 +103,6 @@ interface AdvisorProfile {
   slug?: string | null;
 }
 
-interface PayoutMethod {
-  id: string;
-  label: string;
-  methodType: string;
-  accountName: string;
-  isDefault: boolean;
-}
-
 interface CallTransaction {
   id: string;
   status: string;
@@ -149,7 +141,6 @@ interface DashboardData {
   downloads: AstrologyDownload[];
   advisor: null | {
     profile: AdvisorProfile;
-    payoutMethods: PayoutMethod[];
     callTransactions: CallTransaction[];
     schedule: ScheduleSlot[];
     hotlineNumber?: string | null;

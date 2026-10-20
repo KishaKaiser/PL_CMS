@@ -12,25 +12,15 @@ interface AdvisorRow {
   earnedCents: number;
   paidCents: number;
   owedCents: number;
-  hasPayoutDetails: boolean;
+  payoutMethod: 'PAYPAL' | 'DIRECT_DEPOSIT';
+  payoutSummary: string;
+  payoutReady: boolean;
 }
 
 interface Overview {
   defaultSharePercent: number;
   totals: { chargedCents: number; earnedCents: number; paidCents: number; owedCents: number };
   advisors: AdvisorRow[];
-}
-
-interface RevealedMethod {
-  id: string;
-  label: string;
-  methodType: string;
-  accountName: string;
-  isDefault: boolean;
-  summary: string;
-  bankName?: string;
-  routingNumber?: string | null;
-  accountNumber?: string | null;
 }
 
 interface Detail {
@@ -41,7 +31,7 @@ interface Detail {
   earnedCents: number;
   paidCents: number;
   owedCents: number;
-  payoutMethods: RevealedMethod[];
+  payout: { method: 'PAYPAL' | 'DIRECT_DEPOSIT'; summary: string; paypalEmail: string | null; bankOnFile: boolean; bankOnFileAt: string | null };
   payouts: { id: string; amountCents: number; method: string; reference: string | null; note: string | null; paidAt: string }[];
   recentEarnings: { id: string; at: string; client: string; billedMinutes: number; freeMinutes: number; chargedCents: number; sharePercent: number; earnedCents: number }[];
 }
@@ -213,7 +203,7 @@ export default function AdminAdvisorPaymentsPage() {
                   <th className="px-4 py-3 text-right">Earned</th>
                   <th className="px-4 py-3 text-right">Paid</th>
                   <th className="px-4 py-3 text-right">Owed</th>
-                  <th className="px-4 py-3">Payout details</th>
+                  <th className="px-4 py-3">Paid by</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -231,7 +221,7 @@ export default function AdminAdvisorPaymentsPage() {
                     <td className="px-4 py-3 text-right">{money(row.earnedCents)}</td>
                     <td className="px-4 py-3 text-right">{money(row.paidCents)}</td>
                     <td className={`px-4 py-3 text-right font-semibold ${row.owedCents > 0 ? 'text-amber-700' : ''}`}>{money(row.owedCents)}</td>
-                    <td className="px-4 py-3">{row.hasPayoutDetails ? 'Added' : <span className="text-gray-400">Not yet</span>}</td>
+                    <td className="px-4 py-3">{row.payoutReady ? row.payoutSummary : <span className="text-amber-700">{row.payoutSummary}</span>}</td>
                   </tr>
                 ))}
                 {overview.advisors.length === 0 && (
@@ -265,27 +255,32 @@ export default function AdminAdvisorPaymentsPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <div>
               <h3 className="font-semibold">How to pay them</h3>
-              <ul className="mt-2 space-y-2">
-                {detail.payoutMethods.map((method) => (
-                  <li key={method.id} className="rounded border p-3 text-sm">
-                    <p className="font-medium">
-                      {method.methodType === 'PAYPAL' ? 'PayPal' : method.methodType === 'BANK' ? 'Bank transfer' : method.methodType}
-                      {method.isDefault && <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-800">Default</span>}
-                    </p>
-                    <p className="text-gray-700">Name: {method.accountName}</p>
-                    {method.methodType === 'BANK' ? (
-                      <>
-                        <p className="text-gray-700">Bank: {method.bankName}</p>
-                        <p className="font-mono text-gray-900">Routing: {method.routingNumber ?? 'unavailable'}</p>
-                        <p className="font-mono text-gray-900">Account: {method.accountNumber ?? 'unavailable'}</p>
-                      </>
-                    ) : (
-                      <p className="text-gray-900">{method.summary}</p>
-                    )}
-                  </li>
-                ))}
-                {detail.payoutMethods.length === 0 && <li className="rounded border border-dashed p-3 text-sm text-gray-500">They have not added payout details yet.</li>}
-              </ul>
+              <div className="mt-2 rounded border p-3 text-sm">
+                <p className="font-medium">{detail.payout.method === 'DIRECT_DEPOSIT' ? 'Direct Deposit' : 'PayPal'}</p>
+                {detail.payout.method === 'PAYPAL' ? (
+                  <p className="text-gray-900">{detail.payout.paypalEmail ?? <span className="text-amber-700">They have not given a PayPal email yet.</span>}</p>
+                ) : (
+                  <p className="text-gray-700">Pay them with the bank information they gave Support during onboarding. It is not stored on this site.</p>
+                )}
+                <p className="mt-2 text-xs text-gray-500">This follows whatever the advisor last chose in their dashboard, so there is nothing to update here.</p>
+              </div>
+
+              <div className="mt-3 rounded border p-3 text-sm">
+                <p className="font-medium">Bank information from onboarding</p>
+                <p className="text-gray-700">
+                  {detail.payout.bankOnFile
+                    ? `Marked as received${detail.payout.bankOnFileAt ? ` on ${new Date(detail.payout.bankOnFileAt).toLocaleDateString()}` : ''}. The advisor can choose Direct Deposit.`
+                    : 'Not received. Direct Deposit is greyed out for this advisor until you mark it received.'}
+                </p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void send(`/advisors/${detail.advisorId}/bank-on-file`, 'PUT', { onFile: !detail.payout.bankOnFile }, detail.payout.bankOnFile ? 'Bank information cleared. This advisor is paid by PayPal.' : 'Marked as received. The advisor can now choose Direct Deposit.')}
+                  className="mt-2 rounded border px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {detail.payout.bankOnFile ? 'Clear: no longer on file' : 'Mark bank information received'}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-6">
