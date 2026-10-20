@@ -327,7 +327,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
 
   if (loading) {
     return (
-      <main className="mx-auto w-full max-w-7xl p-8">
+      <main className="mx-auto w-full max-w-[1600px] p-8">
         <div className="rounded-2xl border bg-white p-8 text-gray-500 shadow-sm">Loading dashboard...</div>
       </main>
     );
@@ -367,7 +367,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
 
   if (!data) {
     return (
-      <main className="mx-auto w-full max-w-7xl p-8">
+      <main className="mx-auto w-full max-w-[1600px] p-8">
         <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-red-700 shadow-sm">
           {error || 'Dashboard unavailable.'}
         </div>
@@ -403,7 +403,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
   const activeLabel = navItems.find((item) => item.id === activeSection)?.label ?? 'Messages';
 
   return (
-    <main className="mx-auto w-full max-w-7xl p-8">
+    <main className="mx-auto w-full max-w-[1600px] p-8">
       <header className="mb-10">
         <h1 className="text-5xl font-bold tracking-tight text-gray-950">Dashboard</h1>
         <p className="mt-4 text-2xl text-gray-700">
@@ -493,7 +493,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
         </TopCard>
       </section>
 
-      <section className="grid overflow-hidden rounded-2xl border bg-white shadow-sm lg:grid-cols-[350px_minmax(0,1fr)]">
+      <section className="grid overflow-hidden rounded-2xl border bg-white shadow-sm lg:grid-cols-[300px_minmax(0,1fr)]">
         <nav className="border-b bg-white p-4 lg:border-b-0 lg:border-r">
           <div className="grid gap-2">
             {navItems.map((item) => (
@@ -515,7 +515,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
           </div>
         </nav>
 
-        <section className="min-h-[640px] p-8">
+        <section className="min-h-[640px] min-w-0 overflow-x-auto p-6 lg:p-8">
           <div className="mb-8 flex items-center gap-5">
             <IconBubble icon={navItems.find((item) => item.id === activeSection)?.icon ?? 'fa-regular fa-comments'} small />
             <h2 className="text-3xl font-bold text-gray-950">{activeLabel}</h2>
