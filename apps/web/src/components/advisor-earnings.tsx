@@ -16,9 +16,12 @@ interface EarningRow {
 interface Overview {
   timeZone: string;
   sharePercent: number;
-  summary: { last7DaysCents: number; thisMonthCents: number; allTimeCents: number; paidCents: number; owedCents: number };
+  method: 'PAYPAL' | 'DIRECT_DEPOSIT';
+  paypalFeePercent: number;
+  directDepositFeePercent: number;
+  summary: { last7DaysCents: number; thisMonthCents: number; allTimeCents: number; paidCents: number; owedCents: number; owedAfterFeeCents: number };
   earnings: { page: number; pageSize: number; total: number; rows: EarningRow[] };
-  payouts: { id: string; amountCents: number; method: string; reference: string | null; paidAt: string }[];
+  payouts: { id: string; amountCents: number; feeCents: number; netCents: number; method: string; reference: string | null; paidAt: string }[];
 }
 
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
@@ -49,6 +52,7 @@ export function AdvisorEarnings() {
   if (!data) return <p className="text-sm text-gray-500">Loading your earnings…</p>;
 
   const { summary } = data;
+  const feePercent = data.method === 'PAYPAL' ? data.paypalFeePercent : data.directDepositFeePercent;
   const pages = Math.max(1, Math.ceil(data.earnings.total / data.earnings.pageSize));
   const cards = [
     { label: 'Last 7 days', value: summary.last7DaysCents },
@@ -65,6 +69,12 @@ export function AdvisorEarnings() {
           You have earned {money(summary.allTimeCents)} and been paid {money(summary.paidCents)}. You earn {data.sharePercent}% of what clients
           pay for each minute. Free minutes do not earn anything.
         </p>
+        {summary.owedCents > 0 && feePercent > 0 && (
+          <p className="mt-2 text-sm text-gray-600">
+            You are paid by {data.method === 'PAYPAL' ? 'PayPal' : 'Direct Deposit'}, which has a {feePercent}% fee taken from each payment, so
+            you would receive about <span className="font-semibold">{money(summary.owedAfterFeeCents)}</span> of this.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -135,7 +145,13 @@ export function AdvisorEarnings() {
             {data.payouts.map((payout) => (
               <li key={payout.id} className="flex flex-wrap justify-between gap-2 px-4 py-3 text-sm">
                 <span>
-                  <span className="font-semibold">{money(payout.amountCents)}</span>
+                  <span className="font-semibold">{money(payout.netCents)}</span>
+                  {payout.feeCents > 0 && (
+                    <span className="text-gray-500">
+                      {' '}
+                      ({money(payout.amountCents)} less a {money(payout.feeCents)} fee)
+                    </span>
+                  )}
                   <span className="text-gray-500"> · {payout.method}</span>
                   {payout.reference && <span className="text-gray-500"> · ref {payout.reference}</span>}
                 </span>

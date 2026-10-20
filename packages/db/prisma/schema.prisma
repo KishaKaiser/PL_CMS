@@ -489,7 +489,10 @@ model AdvisorEarning {
 model AdvisorPayout {
   id              String   @id @default(cuid())
   advisorId       String
+  // What was paid off the advisor's balance (what they were owed). The fee, if any, is kept out of what they receive.
   amountCents     Int
+  // PayPal charges a fee; it is taken from the payment, so the advisor receives amountCents - feeCents.
+  feeCents        Int      @default(0)
   // How it was paid, as it was when it was recorded (e.g. "PayPal: name@example.com").
   method          String
   reference       String?
