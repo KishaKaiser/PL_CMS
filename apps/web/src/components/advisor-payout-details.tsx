@@ -10,6 +10,7 @@ interface Details {
   bankOnFile: boolean;
   bankInstructions: string | null;
   paypalFeePercent: number;
+  directDepositFeePercent: number;
 }
 
 async function readError(res: Response, fallback: string): Promise<string> {
@@ -98,10 +99,14 @@ export function AdvisorPayoutDetails() {
       {!details.bankOnFile && details.bankInstructions && (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{details.bankInstructions}</p>
       )}
-      {details.paypalFeePercent > 0 && (
+      {(details.paypalFeePercent > 0 || details.directDepositFeePercent > 0) && (
         <p className="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700">
-          PayPal payments have a {details.paypalFeePercent}% fee, taken from each payment to cover PayPal&apos;s charges. For example, a
-          $100.00 payment reaches you as ${(100 - details.paypalFeePercent).toFixed(2)}. Direct Deposit has no fee.
+          A fee is taken from each payment to cover payment charges:{' '}
+          {details.paypalFeePercent > 0 ? `${details.paypalFeePercent}% for PayPal` : 'no fee for PayPal'}
+          {' and '}
+          {details.directDepositFeePercent > 0 ? `${details.directDepositFeePercent}% for Direct Deposit` : 'no fee for Direct Deposit'}. For example, a
+          $100.00 payment reaches you as ${(100 - details.paypalFeePercent).toFixed(2)} by PayPal and $
+          {(100 - details.directDepositFeePercent).toFixed(2)} by Direct Deposit.
         </p>
       )}
       {details.bankOnFile && (

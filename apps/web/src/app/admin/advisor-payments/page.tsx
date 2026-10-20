@@ -20,6 +20,7 @@ interface AdvisorRow {
 interface Overview {
   defaultSharePercent: number;
   paypalFeePercent: number;
+  directDepositFeePercent: number;
   totals: { chargedCents: number; earnedCents: number; paidCents: number; owedCents: number };
   advisors: AdvisorRow[];
 }
@@ -27,6 +28,7 @@ interface Overview {
 interface Detail {
   advisorId: string;
   paypalFeePercent: number;
+  directDepositFeePercent: number;
   displayName: string;
   sharePercentOverride: number | null;
   sharePercent: number;
@@ -51,6 +53,7 @@ export default function AdminAdvisorPaymentsPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [defaultShare, setDefaultShare] = useState('50');
   const [paypalFee, setPaypalFee] = useState('3');
+  const [directDepositFee, setDirectDepositFee] = useState('0');
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [shareInput, setShareInput] = useState('');
@@ -67,6 +70,7 @@ export default function AdminAdvisorPaymentsPage() {
       setOverview(data);
       setDefaultShare(String(data.defaultSharePercent));
       setPaypalFee(String(data.paypalFeePercent));
+      setDirectDepositFee(String(data.directDepositFeePercent));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unable to load advisor payments');
     }
@@ -120,9 +124,12 @@ export default function AdminAdvisorPaymentsPage() {
     void send('/settings/share', 'PUT', { sharePercent: Number(defaultShare) }, 'Default share saved. It applies to calls that end from now on.');
   }
 
-  function saveFee(event: FormEvent) {
+  function saveFees(event: FormEvent) {
     event.preventDefault();
-    void send('/settings/paypal-fee', 'PUT', { paypalFeePercent: Number(paypalFee) }, 'PayPal fee saved. It applies to payments you record from now on.');
+    void (async () => {
+      const first = await send('/settings/paypal-fee', 'PUT', { paypalFeePercent: Number(paypalFee) }, '');
+      if (first) await send('/settings/direct-deposit-fee', 'PUT', { directDepositFeePercent: Number(directDepositFee) }, 'Payment fees saved. They apply to payments you record from now on.');
+    })();
   }
 
   function saveAdvisorShare(event: FormEvent) {
@@ -155,6 +162,8 @@ export default function AdminAdvisorPaymentsPage() {
   }
 
   const field = 'mt-1 w-full rounded border border-gray-200 px-3 py-2 text-sm';
+  const feeFor = (method: 'PAYPAL' | 'DIRECT_DEPOSIT') => (method === 'PAYPAL' ? detail?.paypalFeePercent : detail?.directDepositFeePercent) ?? 0;
+  const feeOf = (dollars: string, percent: number) => Math.round((Math.round(Number(dollars) * 100) * percent) / 100);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-8">
@@ -189,15 +198,20 @@ export default function AdminAdvisorPaymentsPage() {
           </section>
 
           <section className="rounded-lg border bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold">PayPal fee</h2>
+            <h2 className="text-lg font-semibold">Payment fees</h2>
             <p className="mt-1 text-sm text-gray-600">
-              When you record a payment to an advisor who is paid by PayPal, this percentage is kept from it to cover PayPal&apos;s charges.
-              The advisor is owed less by the full amount you record, and receives that amount less the fee. Direct Deposit has no fee.
+              When you record a payment to an advisor, this percentage is kept from it, depending on how they are paid. The advisor is
+              owed less by the full amount you record, and receives that amount less the fee. A change only affects payments you record
+              from then on.
             </p>
-            <form onSubmit={saveFee} className="mt-4 flex flex-wrap items-end gap-3">
+            <form onSubmit={saveFees} className="mt-4 flex flex-wrap items-end gap-3">
               <label className="block text-sm font-medium text-gray-700">
                 PayPal fee (%)
                 <input type="number" min={0} max={50} step={0.01} value={paypalFee} onChange={(event) => setPaypalFee(event.target.value)} required className={`${field} w-32`} />
+              </label>
+              <label className="block text-sm font-medium text-gray-700">
+                Direct Deposit fee (%)
+                <input type="number" min={0} max={50} step={0.01} value={directDepositFee} onChange={(event) => setDirectDepositFee(event.target.value)} required className={`${field} w-32`} />
               </label>
               <button type="submit" disabled={busy} className="rounded bg-purple-700 px-5 py-2 text-sm font-medium text-white hover:bg-purple-800 disabled:opacity-50">
                 Save
@@ -345,10 +359,11 @@ export default function AdminAdvisorPaymentsPage() {
                     <input value={pay.note} onChange={(event) => setPay({ ...pay, note: event.target.value })} maxLength={500} className={field} />
                   </label>
                 </div>
-                {detail.payout.method === 'PAYPAL' && Number(pay.amount) > 0 && (
+                {Number(pay.amount) > 0 && feeFor(detail.payout.method) > 0 && (
                   <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                    PayPal fee ({detail.paypalFeePercent}%): {money(Math.round(Math.round(Number(pay.amount) * 100) * detail.paypalFeePercent / 100))}. Send the advisor{' '}
-                    <span className="font-semibold">{money(Math.round(Number(pay.amount) * 100) - Math.round(Math.round(Number(pay.amount) * 100) * detail.paypalFeePercent / 100))}</span> through PayPal.
+                    Fee ({feeFor(detail.payout.method)}%): {money(feeOf(pay.amount, feeFor(detail.payout.method)))}. Send the advisor{' '}
+                    <span className="font-semibold">{money(Math.round(Number(pay.amount) * 100) - feeOf(pay.amount, feeFor(detail.payout.method)))}</span>{' '}
+                    by {detail.payout.method === 'PAYPAL' ? 'PayPal' : 'Direct Deposit'}.
                   </p>
                 )}
                 <button type="submit" disabled={busy || detail.owedCents <= 0} className="rounded bg-purple-700 px-5 py-2 text-sm font-medium text-white hover:bg-purple-800 disabled:opacity-50">

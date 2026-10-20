@@ -18,6 +18,7 @@ interface Overview {
   sharePercent: number;
   method: 'PAYPAL' | 'DIRECT_DEPOSIT';
   paypalFeePercent: number;
+  directDepositFeePercent: number;
   summary: { last7DaysCents: number; thisMonthCents: number; allTimeCents: number; paidCents: number; owedCents: number; owedAfterFeeCents: number };
   earnings: { page: number; pageSize: number; total: number; rows: EarningRow[] };
   payouts: { id: string; amountCents: number; feeCents: number; netCents: number; method: string; reference: string | null; paidAt: string }[];
@@ -51,6 +52,7 @@ export function AdvisorEarnings() {
   if (!data) return <p className="text-sm text-gray-500">Loading your earnings…</p>;
 
   const { summary } = data;
+  const feePercent = data.method === 'PAYPAL' ? data.paypalFeePercent : data.directDepositFeePercent;
   const pages = Math.max(1, Math.ceil(data.earnings.total / data.earnings.pageSize));
   const cards = [
     { label: 'Last 7 days', value: summary.last7DaysCents },
@@ -67,10 +69,10 @@ export function AdvisorEarnings() {
           You have earned {money(summary.allTimeCents)} and been paid {money(summary.paidCents)}. You earn {data.sharePercent}% of what clients
           pay for each minute. Free minutes do not earn anything.
         </p>
-        {data.method === 'PAYPAL' && data.paypalFeePercent > 0 && summary.owedCents > 0 && (
+        {summary.owedCents > 0 && feePercent > 0 && (
           <p className="mt-2 text-sm text-gray-600">
-            You are paid by PayPal, which has a {data.paypalFeePercent}% fee taken from each payment, so you would receive about{' '}
-            <span className="font-semibold">{money(summary.owedAfterFeeCents)}</span> of this. Direct Deposit has no fee.
+            You are paid by {data.method === 'PAYPAL' ? 'PayPal' : 'Direct Deposit'}, which has a {feePercent}% fee taken from each payment, so
+            you would receive about <span className="font-semibold">{money(summary.owedAfterFeeCents)}</span> of this.
           </p>
         )}
       </div>

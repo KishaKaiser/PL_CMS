@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Request, UseGua
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
-import { BankOnFileDto, RecordPayoutDto, SetAdvisorShareDto, SetDefaultShareDto, SetPaypalFeeDto } from '../../payouts/payouts.dto';
+import { BankOnFileDto, RecordPayoutDto, SetAdvisorShareDto, SetDefaultShareDto, SetDirectDepositFeeDto, SetPaypalFeeDto } from '../../payouts/payouts.dto';
 import { PayoutsService } from '../../payouts/payouts.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -35,6 +35,13 @@ export class AdminPayoutsController {
     const paypalFeePercent = await this.payouts.setPaypalFeePercent(dto.paypalFeePercent);
     await this.audit.log(req.user.id, 'payouts.paypal-fee', 'Setting', 'payout_settings', { paypalFeePercent });
     return { paypalFeePercent };
+  }
+
+  @Put('settings/direct-deposit-fee')
+  async setDirectDepositFee(@Request() req: AuthedRequest, @Body() dto: SetDirectDepositFeeDto) {
+    const directDepositFeePercent = await this.payouts.setDirectDepositFeePercent(dto.directDepositFeePercent);
+    await this.audit.log(req.user.id, 'payouts.direct-deposit-fee', 'Setting', 'payout_settings', { directDepositFeePercent });
+    return { directDepositFeePercent };
   }
 
   /** One advisor: how they are paid right now (it follows whatever they last chose), what they are owed, and recent history. */

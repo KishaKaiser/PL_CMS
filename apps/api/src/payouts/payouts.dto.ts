@@ -31,6 +31,14 @@ export class SetPaypalFeeDto {
   paypalFeePercent!: number;
 }
 
+export class SetDirectDepositFeeDto {
+  /** Percent of each Direct Deposit payment kept as the fee, with at most two decimals. */
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(50)
+  directDepositFeePercent!: number;
+}
+
 export class SetAdvisorShareDto {
   /** null = use the platform default. */
   @IsOptional()
