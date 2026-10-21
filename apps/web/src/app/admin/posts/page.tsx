@@ -34,9 +34,14 @@ interface Post {
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  author: { id: string; name: string; username?: string | null; email: string };
+  author: { id: string; name: string; username?: string | null; email: string; role?: string };
   categories: { id: string; slug: string; name: string }[];
   tags: { id: string; slug: string; name: string }[];
+}
+
+/** How an author is named on the site: an admin's posts say "Admin", not their own name. */
+function authorLabel(author: { username?: string | null; name: string; role?: string }): string {
+  return author.role === 'ADMIN' ? 'Admin' : author.username || author.name;
 }
 
 interface User {
@@ -764,7 +769,7 @@ export default function AdminPostsPage() {
               >
                 {authors.map((author) => (
                   <option key={author.id} value={author.id}>
-                    {author.username || author.name}
+                    {authorLabel(author)}
                   </option>
                 ))}
               </select>
@@ -1039,7 +1044,7 @@ export default function AdminPostsPage() {
                   >
                     {authors.map((author) => (
                       <option key={author.id} value={author.id}>
-                        {author.username || author.name} ({author.email})
+                        {authorLabel(author)} ({author.email})
                       </option>
                     ))}
                   </select>
@@ -1245,7 +1250,7 @@ export default function AdminPostsPage() {
               permalink={`/blog/${form.slug || 'your-post'}`}
               status={form.editorialStatus}
               publishedAt={previewPublishedAt}
-              authorName={selectedAuthor?.name}
+              authorName={selectedAuthor ? authorLabel(selectedAuthor) : undefined}
             />
 
             <div className="flex flex-wrap gap-3">
@@ -1397,7 +1402,7 @@ export default function AdminPostsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">
-                        <p className="font-medium text-gray-800">{post.author.username || post.author.name}</p>
+                        <p className="font-medium text-gray-800">{authorLabel(post.author)}</p>
                         <p>{post.author.email}</p>
                       </td>
                       <td className="px-4 py-3">

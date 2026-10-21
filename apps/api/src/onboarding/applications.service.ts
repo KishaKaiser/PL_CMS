@@ -8,11 +8,11 @@ import { MailService, escapeHtml } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhoneNumber } from '../telephony/phone-number';
 import { SubmitApplicationDto } from './onboarding.dto';
-import { ONBOARDING_LINK_DAYS, newOnboardingToken } from './onboarding.constants';
+import { ONBOARDING_LINK_DAYS, hashToken, newOnboardingToken } from './onboarding.constants';
 import { OnboardingService } from './onboarding.service';
 
-export type ApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-const STATUSES: ApplicationStatus[] = ['PENDING', 'APPROVED', 'REJECTED'];
+export type ApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+const STATUSES: ApplicationStatus[] = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
 
 /** The public form allows this many applications from one address per hour. */
 const SUBMISSIONS_PER_HOUR = 5;
@@ -88,13 +88,13 @@ export class ApplicationsService {
         status: true,
         createdAt: true,
         reviewedAt: true,
-        onboarding: { select: { advisorId: true, activatedAt: true, completedAt: true } },
+        onboarding: { select: { advisorId: true, activatedAt: true, completedAt: true, cancelledAt: true } },
       },
     });
 
     const withProgress = await Promise.all(
       rows.map(async (row) => {
-        const progress = row.onboarding ? await this.onboarding.stepsFor(row.onboarding.advisorId) : null;
+        const progress = row.onboarding && !row.onboarding.cancelledAt ? await this.onboarding.stepsFor(row.onboarding.advisorId) : null;
         return {
           id: row.id,
           name: row.name,
@@ -125,7 +125,7 @@ export class ApplicationsService {
   async get(id: string) {
     const application = await this.prisma.advisorApplication.findUnique({
       where: { id },
-      include: { onboarding: { select: { advisorId: true, activatedAt: true, emailSentAt: true, tokenExpiresAt: true, completedAt: true } } },
+      include: { onboarding: { select: { advisorId: true, activatedAt: true, emailSentAt: true, tokenExpiresAt: true, completedAt: true, cancelledAt: true, cancelReason: true } } },
     });
     if (!application) throw new NotFoundException('Application not found');
 
@@ -149,6 +149,8 @@ export class ApplicationsService {
             emailSentAt: application.onboarding.emailSentAt,
             linkExpiresAt: application.onboarding.tokenExpiresAt,
             completedAt: application.onboarding.completedAt,
+            cancelledAt: application.onboarding.cancelledAt,
+            cancelReason: application.onboarding.cancelReason,
             steps: progress?.steps ?? [],
           }
         : null,
@@ -161,6 +163,7 @@ export class ApplicationsService {
     const application = await this.prisma.advisorApplication.findUnique({ where: { id } });
     if (!application) throw new NotFoundException('Application not found');
     if (application.status === 'APPROVED') throw new ConflictException('This application is already approved. Use "Send the link again" to resend the email.');
+    if (application.status === 'CANCELLED') throw new ConflictException('This onboarding was cancelled. Use "Reopen onboarding" to let them continue.');
 
     const existing = await this.prisma.user.findUnique({ where: { email: application.email }, select: { id: true } });
     if (existing) throw new ConflictException('An account with this email address already exists, so it cannot be turned into an advisor account here.');
@@ -198,11 +201,18 @@ export class ApplicationsService {
       where: { id },
       select: { id: true, name: true, email: true, status: true, onboarding: { select: { id: true, completedAt: true } } },
     });
-    if (!application || application.status !== 'APPROVED' || !application.onboarding) throw new NotFoundException('This application has not been approved.');
+    if (!application || !['APPROVED', 'CANCELLED'].includes(application.status) || !application.onboarding) throw new NotFoundException('This application has not been approved.');
     if (application.onboarding.completedAt) throw new BadRequestException('This advisor has already finished onboarding.');
 
     const { token, tokenHash, expiresAt } = newOnboardingToken();
-    await this.prisma.advisorOnboarding.update({ where: { id: application.onboarding.id }, data: { tokenHash, tokenExpiresAt: expiresAt, emailSentAt: null, activatedAt: null } });
+    // Reopening a cancelled onboarding clears the cancellation, so the account can be used again once they set a password.
+    await this.prisma.$transaction([
+      this.prisma.advisorOnboarding.update({
+        where: { id: application.onboarding.id },
+        data: { tokenHash, tokenExpiresAt: expiresAt, emailSentAt: null, activatedAt: null, cancelledAt: null, cancelReason: null },
+      }),
+      this.prisma.advisorApplication.update({ where: { id: application.id }, data: { status: 'APPROVED' } }),
+    ]);
     const link = this.linkFor(token);
     const emailSent = await this.sendOnboardingEmail(application.name, application.email, link, expiresAt);
     if (emailSent) await this.prisma.advisorOnboarding.update({ where: { id: application.onboarding.id }, data: { emailSentAt: new Date() } });
@@ -216,10 +226,43 @@ export class ApplicationsService {
     return this.onboarding.uploadForAdvisor(application.onboarding.advisorId, type, file);
   }
 
+  /**
+   * Cancels an approved advisor's onboarding. The link stops working, the account is locked (nobody can sign in with it, and any
+   * sign-in still open stops working), and the application shows as Cancelled. Anything the advisor already submitted is kept.
+   * "Reopen onboarding" (a new link) undoes it.
+   */
+  async cancelOnboarding(id: string, note: string | undefined) {
+    const application = await this.prisma.advisorApplication.findUnique({
+      where: { id },
+      select: { id: true, status: true, userId: true, onboarding: { select: { id: true, completedAt: true } } },
+    });
+    if (!application || !application.onboarding || !application.userId) throw new NotFoundException('This application has not been approved.');
+    if (application.status === 'CANCELLED') throw new ConflictException('This onboarding is already cancelled.');
+    if (application.onboarding.completedAt) throw new ConflictException('This advisor has already finished onboarding, so there is nothing to cancel.');
+
+    const lockedPassword = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
+    await this.prisma.$transaction([
+      this.prisma.advisorOnboarding.update({
+        where: { id: application.onboarding.id },
+        data: {
+          cancelledAt: new Date(),
+          cancelReason: note?.trim() || null,
+          // A replacement the advisor never received, so the emailed link can no longer be used.
+          tokenHash: hashToken(randomBytes(32).toString('base64url')),
+          tokenExpiresAt: new Date(),
+        },
+      }),
+      this.prisma.advisorApplication.update({ where: { id }, data: { status: 'CANCELLED' } }),
+      this.prisma.user.update({ where: { id: application.userId }, data: { passwordHash: lockedPassword } }),
+      this.prisma.advisorProfile.updateMany({ where: { userId: application.userId }, data: { isOnline: false } }),
+    ]);
+    return { id, status: 'CANCELLED' };
+  }
+
   async reject(adminId: string, id: string, note: string | undefined) {
     const application = await this.prisma.advisorApplication.findUnique({ where: { id }, select: { status: true } });
     if (!application) throw new NotFoundException('Application not found');
-    if (application.status === 'APPROVED') throw new ConflictException('This application was already approved.');
+    if (application.status === 'APPROVED' || application.status === 'CANCELLED') throw new ConflictException('This application was already approved. Cancel its onboarding instead.');
     await this.prisma.advisorApplication.update({
       where: { id },
       data: { status: 'REJECTED', reviewedById: adminId, reviewedAt: new Date(), reviewNote: note?.trim() || null },

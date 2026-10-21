@@ -69,14 +69,26 @@ export class AuthService {
   }
 
   async refresh(token: string) {
+    let payload: { sub: string; email: string; role: Role };
     try {
-      const payload = this.jwt.verify(token, {
+      payload = this.jwt.verify(token, {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
       });
-      return this.generateTokens(payload.sub, payload.email, payload.role);
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
+    if (await this.isLockedOut(payload.sub, payload.role)) throw new UnauthorizedException('This account is no longer active.');
+    return this.generateTokens(payload.sub, payload.email, payload.role);
+  }
+
+  /** An advisor whose onboarding an admin cancelled can no longer use the site, even with a sign-in that is still valid. */
+  async isLockedOut(userId: string, role: string): Promise<boolean> {
+    if (role !== 'ADVISOR') return false;
+    const cancelled = await this.prisma.advisorOnboarding.findFirst({
+      where: { cancelledAt: { not: null }, advisor: { userId } },
+      select: { id: true },
+    });
+    return !!cancelled;
   }
 
   private generateTokens(sub: string, email: string, role: Role) {

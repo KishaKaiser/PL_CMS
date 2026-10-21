@@ -521,7 +521,7 @@ model AdvisorApplication {
   // "Tell us about your gifts and experience" and "Describe your reading style".
   gifts           String
   readingStyle    String
-  // PENDING, APPROVED or REJECTED.
+  // PENDING, APPROVED, REJECTED or CANCELLED (approved, then the onboarding was cancelled).
   status          String    @default("PENDING")
   reviewNote      String?
   reviewedById    String?
@@ -553,6 +553,10 @@ model AdvisorOnboarding {
   paymentChosenAt     DateTime?
   // When every step was done. Until then the advisor stays hidden from clients and cannot go online.
   completedAt         DateTime?
+  // Set when an admin cancels the onboarding: the link stops working and the account is locked, but what the advisor
+  // submitted is kept. Reopening it clears these.
+  cancelledAt         DateTime?
+  cancelReason        String?
   createdAt           DateTime  @default(now())
 
   advisor     AdvisorProfile      @relation(fields: [advisorId], references: [id], onDelete: Cascade)

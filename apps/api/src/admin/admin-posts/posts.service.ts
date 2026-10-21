@@ -11,7 +11,7 @@ import { normalizeSlug, sanitizeCmsHtml } from '../admin-content/cms-content.uti
 import { BulkActionDto, CreatePostDto, UpdatePostDto } from './posts.dto';
 
 const POST_INCLUDE = {
-  author: { select: { id: true, name: true, username: true, email: true } },
+  author: { select: { id: true, name: true, username: true, email: true, role: true } },
   categories: { select: { id: true, slug: true, name: true } },
   tags: { select: { id: true, slug: true, name: true } },
   featuredMedia: { select: MEDIA_ASSET_SELECT },
