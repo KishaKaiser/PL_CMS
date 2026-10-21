@@ -19,6 +19,7 @@ import {
   type SiteSidebarsSettings,
   type SiteThemeSettings,
 } from '@pl-cms/shared';
+import { authorDisplayName } from '../common/public-identity';
 import { PrismaService } from '../prisma/prisma.service';
 import { HoroscopeService } from '../astrology/horoscope.service';
 import type { CreatePostCommentDto } from './public-content.dto';
@@ -76,7 +77,7 @@ const POST_SELECT = {
   featuredImageUrl: true,
   publishedAt: true,
   updatedAt: true,
-  author: { select: { id: true, name: true, username: true } },
+  author: { select: { id: true, name: true, username: true, role: true } },
   categories: { select: { id: true, slug: true, name: true } },
   tags: { select: { id: true, slug: true, name: true } },
 } as const;
@@ -406,6 +407,7 @@ export class PublicContentService {
         id: true,
         name: true,
         username: true,
+        role: true,
         posts: {
           where: { publishedAt: { not: null, lte: now } },
           select: { id: true },
@@ -415,7 +417,7 @@ export class PublicContentService {
 
     return authors.map((author) => ({
       id: author.id,
-      name: author.username || author.name,
+      name: authorDisplayName(author),
       postCount: author.posts.length,
     }));
   }
@@ -423,12 +425,12 @@ export class PublicContentService {
   async findPostsByAuthorId(authorId: string) {
     const author = await this.prisma.user.findUnique({
       where: { id: authorId },
-      select: { id: true, name: true, username: true },
+      select: { id: true, name: true, username: true, role: true },
     });
     if (!author) throw new NotFoundException(`Author ${authorId} not found`);
 
     const posts = await this.findPublishedPosts({ authorId });
-    return { author: { ...author, name: author.username || author.name }, posts };
+    return { author: { id: author.id, username: author.username, name: authorDisplayName(author) }, posts };
   }
 
   async findRelatedPosts(slug: string) {
@@ -488,8 +490,9 @@ export class PublicContentService {
     return {
       ...post,
       author: {
-        ...post.author,
-        name: post.author.username || post.author.name,
+        id: post.author.id,
+        username: post.author.username,
+        name: authorDisplayName(post.author),
       },
     };
   }

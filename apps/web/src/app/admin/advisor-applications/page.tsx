@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 
-type Status = 'PENDING' | 'APPROVED' | 'REJECTED';
+type Status = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 interface Row {
   id: string;
@@ -37,6 +37,8 @@ interface Detail {
     emailSentAt: string | null;
     linkExpiresAt: string;
     completedAt: string | null;
+    cancelledAt: string | null;
+    cancelReason: string | null;
     steps: { key: string; label: string; done: boolean; detail: string | null }[];
   } | null;
   documents: { id: string; type: string; source: string; fileName: string; sizeBytes: number; createdAt: string; supersededAt: string | null }[];
@@ -61,7 +63,9 @@ const STATUS_STYLE: Record<Status, string> = {
   PENDING: 'bg-amber-100 text-amber-900',
   APPROVED: 'bg-emerald-100 text-emerald-900',
   REJECTED: 'bg-gray-200 text-gray-700',
+  CANCELLED: 'bg-red-100 text-red-800',
 };
+const STATUS_LABEL: Record<Status, string> = { PENDING: 'Waiting', APPROVED: 'Approved', REJECTED: 'Rejected', CANCELLED: 'Cancelled' };
 const API = '/api/proxy/admin/advisor-applications';
 
 async function readMessage(res: Response, fallback: string): Promise<string> {
@@ -73,7 +77,7 @@ async function readMessage(res: Response, fallback: string): Promise<string> {
 const kb = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
 export default function AdminAdvisorApplicationsPage() {
-  const [tab, setTab] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'all' | 'agreement'>('PENDING');
+  const [tab, setTab] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'all' | 'agreement'>('PENDING');
   const [list, setList] = useState<List | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -203,6 +207,7 @@ export default function AdminAdvisorApplicationsPage() {
     ['PENDING', `Waiting${list ? ` (${list.counts.PENDING})` : ''}`],
     ['APPROVED', `Approved${list ? ` (${list.counts.APPROVED})` : ''}`],
     ['REJECTED', 'Rejected'],
+    ['CANCELLED', 'Cancelled'],
     ['all', 'All'],
     ['agreement', 'Agreement & forms'],
   ];
@@ -296,10 +301,12 @@ export default function AdminAdvisorApplicationsPage() {
                     <td className="px-4 py-3">{row.yearsExperience} yr{row.yearsExperience === 1 ? '' : 's'}</td>
                     <td className="whitespace-nowrap px-4 py-3">{new Date(row.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[row.status]}`}>{row.status === 'PENDING' ? 'Waiting' : row.status === 'APPROVED' ? 'Approved' : 'Rejected'}</span>
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[row.status]}`}>{STATUS_LABEL[row.status]}</span>
                     </td>
                     <td className="px-4 py-3">
-                      {row.onboarding ? (
+                      {row.status === 'CANCELLED' ? (
+                        <span className="text-red-700">Cancelled</span>
+                      ) : row.onboarding ? (
                         row.onboarding.completed ? (
                           <span className="font-medium text-emerald-700">Complete</span>
                         ) : (
@@ -349,7 +356,7 @@ export default function AdminAdvisorApplicationsPage() {
                 </div>
               </div>
 
-              {detail.status !== 'APPROVED' && (
+              {(detail.status === 'PENDING' || detail.status === 'REJECTED') && (
                 <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-gray-50 p-4">
                   <button type="button" disabled={busy} onClick={() => void approve(detail.id)} className="rounded bg-emerald-700 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50">
                     Approve and email the onboarding link
@@ -382,18 +389,53 @@ export default function AdminAdvisorApplicationsPage() {
                 </div>
               )}
 
-              {detail.status === 'APPROVED' && detail.onboarding && (
+              {detail.status === 'CANCELLED' && detail.onboarding && (
+                <div className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4">
+                  <p className="font-medium text-red-900">
+                    This onboarding was cancelled{detail.onboarding.cancelledAt ? ` on ${new Date(detail.onboarding.cancelledAt).toLocaleDateString()}` : ''}.
+                  </p>
+                  {detail.onboarding.cancelReason && <p className="text-sm text-red-900">Reason: {detail.onboarding.cancelReason}</p>}
+                  <p className="text-sm text-red-900">
+                    Their link no longer works and their account is locked: they cannot sign in or go live. Anything they submitted is still stored below until you delete it.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => window.confirm('Reopen this onboarding? Their account is unlocked once they use a new link to set a password.') && void resend(detail.id)}
+                    className="rounded border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
+                  >
+                    Reopen onboarding and send a new link
+                  </button>
+                </div>
+              )}
+
+              {(detail.status === 'APPROVED' || detail.status === 'CANCELLED') && detail.onboarding && (
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h3 className="text-lg font-semibold">Onboarding</h3>
-                    {!detail.onboarding.completedAt && (
+                    {detail.status === 'APPROVED' && !detail.onboarding.completedAt && (
+                      <div className="flex flex-wrap items-center gap-3">
                       <button type="button" disabled={busy} onClick={() => void resend(detail.id)} className="rounded border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50">
                         Send the link again
                       </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          const reason = window.prompt('Cancel this onboarding? Their link stops working and their account is locked; what they submitted is kept. You can reopen it later.\n\nReason (optional, only you see it):');
+                          if (reason !== null) void act(`/${detail.id}/cancel`, 'POST', { note: reason }, 'Onboarding cancelled. The account is locked.');
+                        }}
+                        className="rounded border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Cancel onboarding
+                      </button>
+                      </div>
                     )}
                   </div>
                   <p className="text-sm text-gray-600">
-                    {detail.onboarding.completedAt
+                    {detail.status === 'CANCELLED'
+                      ? 'Their progress when it was cancelled is shown below.'
+                      : detail.onboarding.completedAt
                       ? `Finished on ${new Date(detail.onboarding.completedAt).toLocaleDateString()}.`
                       : detail.onboarding.activatedAt
                         ? `They created their password on ${new Date(detail.onboarding.activatedAt).toLocaleDateString()}.`

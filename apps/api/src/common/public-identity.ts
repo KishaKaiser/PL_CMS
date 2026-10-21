@@ -18,6 +18,15 @@ export function displayNameFromUsername(username: string): string {
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 }
 
+/**
+ * The name shown on a blog post. An admin's posts are shown as "Admin" rather than their own name; anyone else is shown by
+ * their username, or their name if they have none.
+ */
+export function authorDisplayName(author: { username?: string | null; name?: string | null; role?: string | null }): string {
+  if (author.role === Role.ADMIN) return 'Admin';
+  return author.username || author.name?.trim() || 'Author';
+}
+
 /** What other people see for this account. */
 export function publicName(user: { username?: string | null; name?: string | null; role?: string | null }): string {
   if (user.username) return displayNameFromUsername(user.username);

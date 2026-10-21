@@ -93,6 +93,14 @@ export class AdminApplicationsController {
     return result;
   }
 
+  /** Cancels an approved advisor's onboarding: locks the account and the link, and keeps what they submitted. */
+  @Post(':id/cancel')
+  async cancel(@Request() req: AuthedRequest, @Param('id') id: string, @Body() dto: RejectApplicationDto) {
+    const result = await this.applications.cancelOnboarding(id, dto.note);
+    await this.audit.log(req.user.id, 'onboarding.cancel', 'AdvisorApplication', id, { reason: dto.note ?? null });
+    return result;
+  }
+
   @Post(':id/reject')
   async reject(@Request() req: AuthedRequest, @Param('id') id: string, @Body() dto: RejectApplicationDto) {
     const result = await this.applications.reject(req.user.id, id, dto.note);
