@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../auth/roles.guard';
@@ -9,6 +9,12 @@ import { PaypalService } from './paypal.service';
 @Roles(Role.ADMIN)
 export class PaypalAdminController {
   constructor(private readonly paypal: PaypalService) {}
+
+  /** How many saved wallets work with the PayPal the site is using now, and how many need their clients to connect again. */
+  @Get('wallet-summary')
+  walletSummary() {
+    return this.paypal.getWalletSummary();
+  }
 
   /**
    * Finds out whether this PayPal app is allowed to save customers' PayPal wallets. Uses the saved billing settings,

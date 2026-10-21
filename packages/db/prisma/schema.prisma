@@ -1040,6 +1040,9 @@ model PaypalWallet {
   userId     String   @unique
   vaultId    String   @unique
   payerEmail String?
+  // Which PayPal the wallet was saved in (sandbox or live). A saved wallet only exists in that one, so it can only be charged while
+  // the site is using the same one. Wallets saved before this was recorded were all made while testing, in sandbox.
+  environment String  @default("sandbox")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -1053,6 +1056,7 @@ model PaypalWalletSetup {
   id           String   @id @default(cuid())
   userId       String
   setupTokenId String   @unique
+  environment  String   @default("sandbox")
   createdAt    DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1074,6 +1078,8 @@ model WalletTopUp {
   paypalOrderId   String?
   paypalCaptureId String?  @unique
   failureReason   String?
+  // The PayPal it was charged in. A sandbox top-up is test money; it is not counted towards a live daily limit.
+  environment     String   @default("sandbox")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

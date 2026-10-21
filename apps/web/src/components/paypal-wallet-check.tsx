@@ -1,12 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 interface WalletCheck {
   environment: 'sandbox' | 'live';
   outcome: 'allowed' | 'not-enabled' | 'bad-credentials' | 'no-credentials' | 'inconclusive' | 'error';
   allowed: boolean;
   paypal: { name: string | null; message: string | null; debugId: string | null; status: number } | null;
+}
+
+interface WalletSummary {
+  environment: 'sandbox' | 'live';
+  usable: number;
+  needReconnect: number;
+  testTopUps: { clients: number; totalCents: number };
 }
 
 const RESULT: Record<WalletCheck['outcome'], { tone: 'good' | 'bad' | 'warn'; headline: string; detail: (env: string) => string }> = {
@@ -58,6 +65,20 @@ export function PaypalWalletCheck() {
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<WalletCheck | null>(null);
   const [error, setError] = useState('');
+  const [summary, setSummary] = useState<WalletSummary | null>(null);
+
+  const loadSummary = useCallback(async () => {
+    try {
+      const res = await fetch('/api/proxy/admin/paypal/wallet-summary');
+      if (res.ok) setSummary((await res.json()) as WalletSummary);
+    } catch {
+      // the summary is only a convenience
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSummary();
+  }, [loadSummary]);
 
   async function run() {
     setChecking(true);
@@ -74,6 +95,7 @@ export function PaypalWalletCheck() {
         throw new Error(Array.isArray(body.message) ? body.message.join(' ') : (body.message ?? `The check failed (HTTP ${res.status}).`));
       }
       setResult((await res.json()) as WalletCheck);
+      void loadSummary();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The check failed.');
     } finally {
@@ -100,6 +122,28 @@ export function PaypalWalletCheck() {
       </button>
 
       {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+
+      {summary && (
+        <div className="mt-4 space-y-2 text-sm">
+          <p className="text-gray-800">
+            The site is using PayPal <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium uppercase ring-1 ring-gray-200">{summary.environment}</span>.{' '}
+            {summary.usable} client{summary.usable === 1 ? ' has' : 's have'} a saved wallet that works.
+          </p>
+          {summary.needReconnect > 0 && (
+            <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+              {summary.needReconnect} saved wallet{summary.needReconnect === 1 ? ' was' : 's were'} saved in {summary.environment === 'live' ? 'sandbox (test)' : 'live'} PayPal, which
+              does not work here. Those clients are not offered to add money during calls, and see &ldquo;connect again&rdquo; on their account page, until they
+              reconnect. Nothing is lost or charged.
+            </p>
+          )}
+          {summary.environment === 'live' && summary.testTopUps.clients > 0 && (
+            <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-red-900">
+              Test (sandbox) top-ups put <span className="font-semibold">${(summary.testTopUps.totalCents / 100).toFixed(2)}</span> of pretend money into the wallet balances of{' '}
+              {summary.testTopUps.clients} client{summary.testTopUps.clients === 1 ? '' : 's'}. That is not real money. Review and correct those balances before taking live calls.
+            </p>
+          )}
+        </div>
+      )}
 
       {result && view && (
         <div className={`mt-3 rounded border px-4 py-3 text-sm ${TONES[view.tone]}`}>

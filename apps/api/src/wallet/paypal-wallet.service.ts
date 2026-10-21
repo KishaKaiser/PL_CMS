@@ -31,14 +31,18 @@ export class PaypalWalletService {
   // ── The client's saved wallet ──────────────────────────────────────────────
 
   async status(userId: string) {
+    const environment = await this.paypal.getEnvironment();
     const [wallet, used, capCents] = await Promise.all([
-      this.prisma.paypalWallet.findUnique({ where: { userId }, select: { payerEmail: true } }),
-      this.usedInLastDay(userId),
+      this.prisma.paypalWallet.findUnique({ where: { userId }, select: { payerEmail: true, environment: true } }),
+      this.usedInLastDay(userId, environment),
       this.dailyCapCents(),
     ]);
+    // A wallet saved in the other PayPal (sandbox versus live) cannot be charged here, so it counts as not connected.
+    const usable = wallet !== null && wallet.environment === environment;
     return {
-      connected: wallet !== null,
-      payerEmail: wallet?.payerEmail ? maskEmail(wallet.payerEmail) : null,
+      connected: usable,
+      needsReconnect: wallet !== null && !usable,
+      payerEmail: usable && wallet?.payerEmail ? maskEmail(wallet.payerEmail) : null,
       minTopUpCents: MIN_TOP_UP_CENTS,
       maxTopUpCents: MAX_TOP_UP_CENTS,
       dailyCapCents: capCents,
@@ -48,15 +52,20 @@ export class PaypalWalletService {
 
   /** Starts connecting a PayPal wallet: returns the PayPal page the client approves it on. */
   async startConnect(userId: string, returnUrl: string) {
-    await this.prisma.paypalWalletSetup.deleteMany({ where: { userId, createdAt: { lt: new Date(Date.now() - SETUP_VALID_MS) } } });
+    const environment = await this.paypal.getEnvironment();
+    await this.prisma.paypalWalletSetup.deleteMany({
+      where: { userId, OR: [{ createdAt: { lt: new Date(Date.now() - SETUP_VALID_MS) } }, { environment: { not: environment } }] },
+    });
     const { setupTokenId, approveUrl } = await this.paypal.createWalletSetup(returnUrl);
-    await this.prisma.paypalWalletSetup.create({ data: { userId, setupTokenId } });
+    await this.prisma.paypalWalletSetup.create({ data: { userId, setupTokenId, environment } });
     return { approveUrl };
   }
 
   /** The client came back from PayPal: turn what they approved into the wallet we can charge later. */
   async completeConnect(userId: string, approvedSetupTokenId?: string) {
-    const recent = { userId, createdAt: { gt: new Date(Date.now() - SETUP_VALID_MS) } };
+    const environment = await this.paypal.getEnvironment();
+    // Only a connection started in the PayPal the site is using now can be finished.
+    const recent = { userId, environment, createdAt: { gt: new Date(Date.now() - SETUP_VALID_MS) } };
     // PayPal sends the client back saying which connection they approved. A client who started more than once (a
     // second tab, a retry) must not have the wrong one finished, so use that one when it is theirs and still open.
     const approved = approvedSetupTokenId
@@ -78,11 +87,12 @@ export class PaypalWalletService {
     const existing = await this.prisma.paypalWallet.findUnique({ where: { userId } });
     await this.prisma.paypalWallet.upsert({
       where: { userId },
-      create: { userId, vaultId: token.vaultId, payerEmail: token.payerEmail },
-      update: { vaultId: token.vaultId, payerEmail: token.payerEmail },
+      create: { userId, vaultId: token.vaultId, payerEmail: token.payerEmail, environment },
+      update: { vaultId: token.vaultId, payerEmail: token.payerEmail, environment },
     });
     await this.prisma.paypalWalletSetup.deleteMany({ where: { userId } });
-    if (existing && existing.vaultId !== token.vaultId) await this.paypal.deletePaymentToken(existing.vaultId);
+    // The old wallet can only be removed from PayPal while the site is using the PayPal it was saved in.
+    if (existing && existing.vaultId !== token.vaultId && existing.environment === environment) await this.paypal.deletePaymentToken(existing.vaultId);
 
     return this.status(userId);
   }
@@ -91,7 +101,7 @@ export class PaypalWalletService {
     const wallet = await this.prisma.paypalWallet.findUnique({ where: { userId } });
     if (wallet) {
       await this.prisma.paypalWallet.delete({ where: { userId } });
-      await this.paypal.deletePaymentToken(wallet.vaultId);
+      if (wallet.environment === (await this.paypal.getEnvironment())) await this.paypal.deletePaymentToken(wallet.vaultId);
     }
     return this.status(userId);
   }
@@ -100,9 +110,13 @@ export class PaypalWalletService {
 
   /** Whether this client should be offered a top-up now: they have a wallet and room left under the daily limit. */
   async canOffer(userId: string): Promise<boolean> {
-    const wallet = await this.prisma.paypalWallet.findUnique({ where: { userId }, select: { id: true } });
-    if (!wallet) return false;
-    const [used, cap] = await Promise.all([this.usedInLastDay(userId), this.dailyCapCents()]);
+    const [environment, wallet] = await Promise.all([
+      this.paypal.getEnvironment(),
+      this.prisma.paypalWallet.findUnique({ where: { userId }, select: { environment: true } }),
+    ]);
+    // A wallet saved in the other PayPal cannot be charged, so the client is not offered a top-up they could not complete.
+    if (!wallet || wallet.environment !== environment) return false;
+    const [used, cap] = await Promise.all([this.usedInLastDay(userId, environment), this.dailyCapCents()]);
     return cap - used >= MIN_TOP_UP_CENTS;
   }
 
@@ -115,22 +129,24 @@ export class PaypalWalletService {
       return { ok: false, reason: 'amount' };
     }
 
-    const [wallet, profile] = await Promise.all([
+    const [environment, wallet, profile] = await Promise.all([
+      this.paypal.getEnvironment(),
       this.prisma.paypalWallet.findUnique({ where: { userId } }),
       this.prisma.clientProfile.findUnique({ where: { userId }, select: { id: true } }),
     ]);
-    if (!wallet || !profile) return { ok: false, reason: 'no-wallet' };
+    // A wallet saved in the other PayPal (sandbox versus live) does not exist where the charge would go: do not even try.
+    if (!wallet || !profile || wallet.environment !== environment) return { ok: false, reason: 'no-wallet' };
 
     const cap = await this.dailyCapCents();
-    const used = await this.usedInLastDay(userId);
+    const used = await this.usedInLastDay(userId, environment);
     if (used + amountCents > cap) return { ok: false, reason: 'limit', remainingCents: Math.max(0, cap - used) };
 
     const record = await this.prisma.walletTopUp.create({
-      data: { userId, amountCents, source: 'CALL', ...(callSessionId ? { callSessionId } : {}) },
+      data: { userId, amountCents, source: 'CALL', environment, ...(callSessionId ? { callSessionId } : {}) },
     });
 
     // Two top-ups started at the same moment could both pass the check above; look again now that this one is counted.
-    const usedWithThis = await this.usedInLastDay(userId);
+    const usedWithThis = await this.usedInLastDay(userId, environment);
     if (usedWithThis > cap) {
       await this.prisma.walletTopUp.update({ where: { id: record.id }, data: { status: 'FAILED', failureReason: 'Daily limit reached' } });
       return { ok: false, reason: 'limit', remainingCents: Math.max(0, cap - (usedWithThis - amountCents)) };
@@ -208,9 +224,10 @@ export class PaypalWalletService {
     return DEFAULT_DAILY_CAP_DOLLARS * 100;
   }
 
-  private async usedInLastDay(userId: string): Promise<number> {
+  /** What has been charged to this client in the last 24 hours in this PayPal (test top-ups do not count against the live limit). */
+  private async usedInLastDay(userId: string, environment: 'sandbox' | 'live'): Promise<number> {
     const sum = await this.prisma.walletTopUp.aggregate({
-      where: { userId, status: { in: ['PENDING', 'COMPLETED'] }, createdAt: { gt: new Date(Date.now() - DAY_MS) } },
+      where: { userId, environment, status: { in: ['PENDING', 'COMPLETED'] }, createdAt: { gt: new Date(Date.now() - DAY_MS) } },
       _sum: { amountCents: true },
     });
     return sum._sum.amountCents ?? 0;
