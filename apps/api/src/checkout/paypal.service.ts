@@ -98,6 +98,36 @@ export class PaypalService {
     return settings.paypalClientId || this.config.get<string>('PAYPAL_CLIENT_ID') || '';
   }
 
+  /** Which PayPal the site is using right now. */
+  async getEnvironment(): Promise<'sandbox' | 'live'> {
+    const credentials = await this.getCredentials();
+    return credentials.environment === 'live' ? 'live' : 'sandbox';
+  }
+
+  /**
+   * How saved wallets stand against the PayPal the site is using now, for the admin: those that work, those saved in the other
+   * PayPal (their clients must connect again), and, on live, the sandbox test top-ups that put pretend money in clients' balances.
+   */
+  async getWalletSummary() {
+    const environment = await this.getEnvironment();
+    const [usable, needReconnect, testTopUps] = await Promise.all([
+      this.prisma.paypalWallet.count({ where: { environment } }),
+      this.prisma.paypalWallet.count({ where: { environment: { not: environment } } }),
+      environment === 'live'
+        ? this.prisma.walletTopUp.groupBy({ by: ['userId'], where: { environment: 'sandbox', status: 'COMPLETED' }, _sum: { amountCents: true } })
+        : Promise.resolve([]),
+    ]);
+    return {
+      environment,
+      usable,
+      needReconnect,
+      testTopUps: {
+        clients: testTopUps.length,
+        totalCents: testTopUps.reduce((sum, row) => sum + (row._sum.amountCents ?? 0), 0),
+      },
+    };
+  }
+
   async getPublicConfig(): Promise<{ clientId: string; environment: 'sandbox' | 'live' }> {
     const credentials = await this.getCredentials();
     return {

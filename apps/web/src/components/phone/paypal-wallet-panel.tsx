@@ -5,6 +5,8 @@ import { readMessage } from './phone-format';
 
 interface WalletStatus {
   connected: boolean;
+  /** A wallet was saved, but in a different PayPal than the site uses now, so it has to be connected again. */
+  needsReconnect?: boolean;
   payerEmail: string | null;
   minTopUpCents: number;
   maxTopUpCents: number;
@@ -94,14 +96,22 @@ export function PaypalWalletPanel() {
           </button>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => void connect()}
-          disabled={busy}
-          className="rounded-lg bg-purple-700 px-6 py-2.5 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-50"
-        >
-          {busy ? 'Opening PayPal…' : 'Connect my PayPal wallet'}
-        </button>
+        <div className="space-y-3">
+          {status.needsReconnect && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Your saved PayPal wallet needs to be connected again. We have updated our payment system, so the wallet you saved before no longer works.
+              Connect it again to add money during calls. Nothing was charged.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void connect()}
+            disabled={busy}
+            className="rounded-lg bg-purple-700 px-6 py-2.5 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-50"
+          >
+            {busy ? 'Opening PayPal…' : status.needsReconnect ? 'Connect my PayPal wallet again' : 'Connect my PayPal wallet'}
+          </button>
+        </div>
       )}
     </div>
   );
