@@ -37,14 +37,14 @@ export function ActivateForm() {
     if (password !== confirm) return setError('The two passwords do not match.');
     setBusy(true);
     try {
-      const res = await fetch('/api/auth/activate', {
+      const res = await fetch('/api/proxy/advisor-onboarding/activate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password }),
       });
       if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as { message?: string } | null;
-        throw new Error(data?.message ?? 'This link could not be used.');
+        const data = (await res.json().catch(() => null)) as { message?: string | string[] } | null;
+        throw new Error(Array.isArray(data?.message) ? data.message.join(' ') : (data?.message ?? 'This link could not be used.'));
       }
       window.location.href = '/advisor/onboarding';
     } catch (err: unknown) {
