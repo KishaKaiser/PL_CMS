@@ -31,6 +31,8 @@ const ALLOWED_PATH_PREFIXES = [
   'contact-lists',
   'free-minutes',
   'payouts',
+  'advisor-applications',
+  'advisor-onboarding',
   'forms',
   'sliders',
   'newsletter',
@@ -67,6 +69,9 @@ async function proxy(req: NextRequest, { params }: Context) {
     if (token) headers.set('authorization', 'Bearer ' + token);
   }
 
+  const forwardedFor = req.headers.get('x-forwarded-for');
+  if (forwardedFor) headers.set('x-forwarded-for', forwardedFor);
+
   const cookie = req.headers.get('cookie');
   if (cookie) headers.set('cookie', cookie);
 
@@ -83,10 +88,14 @@ async function proxy(req: NextRequest, { params }: Context) {
     });
 
     const upstreamBody = await upstream.arrayBuffer();
-    return new NextResponse(upstreamBody, {
-      status: upstream.status,
-      headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json' },
-    });
+    const responseHeaders: Record<string, string> = { 'content-type': upstream.headers.get('content-type') ?? 'application/json' };
+    // Downloads (such as onboarding forms) keep their file name, and are never cached.
+    const disposition = upstream.headers.get('content-disposition');
+    if (disposition) {
+      responseHeaders['content-disposition'] = disposition;
+      responseHeaders['cache-control'] = 'no-store';
+    }
+    return new NextResponse(upstreamBody, { status: upstream.status, headers: responseHeaders });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'The API service did not respond.';
     return NextResponse.json(

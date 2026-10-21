@@ -144,6 +144,8 @@ interface DashboardData {
     callTransactions: CallTransaction[];
     schedule: ScheduleSlot[];
     hotlineNumber?: string | null;
+    /** Set while the advisor still has onboarding steps to finish. */
+    onboarding?: { done: number; total: number } | null;
   };
 }
 
@@ -411,6 +413,12 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
         </p>
       </header>
 
+      {isAdvisor && data.advisor?.onboarding && (
+        <a href="/advisor/onboarding" className="mb-4 block rounded-xl border border-amber-300 bg-amber-50 px-5 py-4 text-amber-900 hover:bg-amber-100">
+          <strong>Finish your onboarding.</strong> {data.advisor.onboarding.done} of {data.advisor.onboarding.total} steps are done. You cannot go online or appear to
+          clients until it is complete. Continue &rarr;
+        </a>
+      )}
       {error && <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
       {success && (
         <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">

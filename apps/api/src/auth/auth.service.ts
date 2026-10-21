@@ -61,6 +61,13 @@ export class AuthService {
     return this.generateTokens(user.id, user.email, user.role as Role);
   }
 
+  /** Signs a user in without a password: for flows that have just proven who they are another way (the emailed onboarding link). */
+  async issueSession(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, role: true } });
+    if (!user) throw new UnauthorizedException('Invalid credentials');
+    return this.generateTokens(user.id, user.email, user.role as Role);
+  }
+
   async refresh(token: string) {
     try {
       const payload = this.jwt.verify(token, {
