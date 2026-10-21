@@ -202,7 +202,7 @@ export class ApplicationsService {
     if (application.onboarding.completedAt) throw new BadRequestException('This advisor has already finished onboarding.');
 
     const { token, tokenHash, expiresAt } = newOnboardingToken();
-    await this.prisma.advisorOnboarding.update({ where: { id: application.onboarding.id }, data: { tokenHash, tokenExpiresAt: expiresAt, emailSentAt: null } });
+    await this.prisma.advisorOnboarding.update({ where: { id: application.onboarding.id }, data: { tokenHash, tokenExpiresAt: expiresAt, emailSentAt: null, activatedAt: null } });
     const link = this.linkFor(token);
     const emailSent = await this.sendOnboardingEmail(application.name, application.email, link, expiresAt);
     if (emailSent) await this.prisma.advisorOnboarding.update({ where: { id: application.onboarding.id }, data: { emailSentAt: new Date() } });

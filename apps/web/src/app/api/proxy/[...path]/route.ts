@@ -88,6 +88,26 @@ async function proxy(req: NextRequest, { params }: Context) {
     });
 
     const upstreamBody = await upstream.arrayBuffer();
+
+    // Using the emailed onboarding link sets the advisor's password and signs them in: the API returns the sign-in tokens, and
+    // they are kept here as the usual cookies instead of being handed to the page. (This path is used rather than a separate
+    // /api/auth/ route because the server in front of the site sends only /api/proxy/ and a few fixed /api/auth/ paths here.)
+    if (upstream.ok && req.method === 'POST' && targetPath === 'advisor-onboarding/activate') {
+      try {
+        const data = JSON.parse(Buffer.from(upstreamBody).toString('utf8')) as { accessToken?: string; refreshToken?: string; role?: string };
+        if (data.accessToken && data.refreshToken) {
+          const res = NextResponse.json({ ok: true, role: data.role });
+          // Cookies are only marked secure when the visitor really came in over https, so the site also works over plain http.
+          const secure = process.env.NODE_ENV === 'production' && (req.headers.get('x-forwarded-proto') ?? '') === 'https';
+          res.cookies.set('access_token', data.accessToken, { httpOnly: true, secure, sameSite: 'lax', path: '/', maxAge: 60 * 15 });
+          res.cookies.set('refresh_token', data.refreshToken, { httpOnly: true, secure, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 7 });
+          return res;
+        }
+      } catch {
+        // fall through and return the response as it came
+      }
+    }
+
     const responseHeaders: Record<string, string> = { 'content-type': upstream.headers.get('content-type') ?? 'application/json' };
     // Downloads (such as onboarding forms) keep their file name, and are never cached.
     const disposition = upstream.headers.get('content-disposition');

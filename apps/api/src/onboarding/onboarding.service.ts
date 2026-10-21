@@ -93,11 +93,14 @@ export class OnboardingService {
     if (onboarding.activatedAt) throw new BadRequestException('Your account is already set up. Please sign in.');
     if (onboarding.tokenExpiresAt < new Date()) throw new BadRequestException('This link has expired. Ask Support to send you a new one.');
 
-    // Claim the link so two requests cannot both set a password with it.
-    const claim = await this.prisma.advisorOnboarding.updateMany({ where: { id: onboarding.id, activatedAt: null }, data: { activatedAt: new Date() } });
-    if (claim.count === 0) throw new BadRequestException('Your account is already set up. Please sign in.');
-
-    await this.prisma.user.update({ where: { id: onboarding.advisor.userId }, data: { passwordHash: await bcrypt.hash(password, 12) } });
+    const passwordHash = await bcrypt.hash(password, 12);
+    // The link is marked used and the password set together, so a failure part-way cannot leave the advisor with a used link
+    // and no password. Claiming it first also stops two requests from both setting a password with it.
+    await this.prisma.$transaction(async (tx) => {
+      const claim = await tx.advisorOnboarding.updateMany({ where: { id: onboarding.id, activatedAt: null }, data: { activatedAt: new Date() } });
+      if (claim.count === 0) throw new BadRequestException('Your account is already set up. Please sign in.');
+      await tx.user.update({ where: { id: onboarding.advisor.userId }, data: { passwordHash } });
+    });
     return this.auth.issueSession(onboarding.advisor.userId);
   }
 
