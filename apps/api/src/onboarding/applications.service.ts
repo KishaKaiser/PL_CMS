@@ -160,10 +160,11 @@ export class ApplicationsService {
 
   /** Approves an application: creates the advisor's account and emails them the link to start onboarding. */
   async approve(adminId: string, id: string) {
-    const application = await this.prisma.advisorApplication.findUnique({ where: { id } });
+    const application = await this.prisma.advisorApplication.findUnique({ where: { id }, include: { onboarding: { select: { id: true } } } });
     if (!application) throw new NotFoundException('Application not found');
-    if (application.status === 'APPROVED') throw new ConflictException('This application is already approved. Use "Send the link again" to resend the email.');
-    if (application.status === 'CANCELLED') throw new ConflictException('This onboarding was cancelled. Use "Reopen onboarding" to let them continue.');
+    // An approved (or cancelled) application whose advisor account no longer exists, because it was deleted, can be approved again.
+    if (application.status === 'APPROVED' && application.onboarding) throw new ConflictException('This application is already approved. Use "Send the link again" to resend the email.');
+    if (application.status === 'CANCELLED' && application.onboarding) throw new ConflictException('This onboarding was cancelled. Use "Reopen onboarding" to let them continue.');
 
     const existing = await this.prisma.user.findUnique({ where: { email: application.email }, select: { id: true } });
     if (existing) throw new ConflictException('An account with this email address already exists, so it cannot be turned into an advisor account here.');
@@ -236,8 +237,13 @@ export class ApplicationsService {
       where: { id },
       select: { id: true, status: true, userId: true, onboarding: { select: { id: true, completedAt: true } } },
     });
-    if (!application || !application.onboarding || !application.userId) throw new NotFoundException('This application has not been approved.');
+    if (!application || !['APPROVED', 'CANCELLED'].includes(application.status)) throw new NotFoundException('This application has not been approved.');
     if (application.status === 'CANCELLED') throw new ConflictException('This onboarding is already cancelled.');
+    // The advisor account was deleted, so there is nothing left to lock: just record that it is cancelled.
+    if (!application.onboarding || !application.userId) {
+      await this.prisma.advisorApplication.update({ where: { id }, data: { status: 'CANCELLED', reviewNote: note?.trim() || 'The advisor account no longer exists.' } });
+      return { id, status: 'CANCELLED' };
+    }
     if (application.onboarding.completedAt) throw new ConflictException('This advisor has already finished onboarding, so there is nothing to cancel.');
 
     const lockedPassword = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
@@ -260,9 +266,9 @@ export class ApplicationsService {
   }
 
   async reject(adminId: string, id: string, note: string | undefined) {
-    const application = await this.prisma.advisorApplication.findUnique({ where: { id }, select: { status: true } });
+    const application = await this.prisma.advisorApplication.findUnique({ where: { id }, select: { status: true, onboarding: { select: { id: true } } } });
     if (!application) throw new NotFoundException('Application not found');
-    if (application.status === 'APPROVED' || application.status === 'CANCELLED') throw new ConflictException('This application was already approved. Cancel its onboarding instead.');
+    if ((application.status === 'APPROVED' || application.status === 'CANCELLED') && application.onboarding) throw new ConflictException('This application was already approved. Cancel its onboarding instead.');
     await this.prisma.advisorApplication.update({
       where: { id },
       data: { status: 'REJECTED', reviewedById: adminId, reviewedAt: new Date(), reviewNote: note?.trim() || null },
