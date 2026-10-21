@@ -90,9 +90,12 @@ export class OnboardingMeController {
     return this.onboarding.signAgreement(req.user.id, dto, clientIp(req));
   }
 
+  /** The official W-9, filled in with these answers but not signed, as a PDF to print. Nothing is stored. */
   @Post('w9')
-  w9(@Request() req: AuthedRequest, @Body() dto: W9Dto) {
-    return this.onboarding.submitW9(req.user.id, dto);
+  async w9(@Request() req: AuthedRequest, @Body() dto: W9Dto, @Res({ passthrough: true }) res: Response) {
+    const { bytes, fileName } = await this.onboarding.fillW9ForPrinting(req.user.id, dto);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${fileName}"`, 'Cache-Control': 'no-store' });
+    return new StreamableFile(Buffer.from(bytes));
   }
 
   @Post('direct-deposit')

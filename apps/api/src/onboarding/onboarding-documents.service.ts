@@ -34,7 +34,7 @@ export class OnboardingDocumentsService {
   }
 
   /** Stores a completed form; any earlier one of the same type is kept but marked as replaced. */
-  async save(advisorId: string, type: DocumentType, source: 'ONLINE' | 'UPLOADED', fileName: string, mimeType: string, bytes: Uint8Array): Promise<DocumentMeta> {
+  async save(advisorId: string, type: DocumentType, source: 'ONLINE' | 'UPLOADED' | 'ADMIN_UPLOAD', fileName: string, mimeType: string, bytes: Uint8Array): Promise<DocumentMeta> {
     const data = encryptBuffer(Buffer.from(bytes), this.secret());
     return this.prisma.$transaction(async (tx) => {
       await tx.onboardingDocument.updateMany({ where: { advisorId, type, supersededAt: null }, data: { supersededAt: new Date() } });

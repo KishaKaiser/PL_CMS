@@ -1,10 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Request, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Request, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@pl-cms/shared';
 import type { Response } from 'express';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { AgreementSettingsService } from '../../onboarding/agreement-settings.service';
 import { ApplicationsService } from '../../onboarding/applications.service';
+import { MAX_UPLOAD_BYTES } from '../../onboarding/onboarding.constants';
 import { AgreementSettingsDto, RejectApplicationDto } from '../../onboarding/onboarding.dto';
 import { OnboardingDocumentsService } from '../../onboarding/onboarding-documents.service';
 import { AuditService } from '../audit/audit.service';
@@ -55,6 +58,20 @@ export class AdminApplicationsController {
     const removed = await this.documents.remove(docId);
     await this.audit.log(req.user.id, 'onboarding.document-delete', 'OnboardingDocument', docId, { advisorId: removed.advisorId, type: removed.type });
     return { id: docId, deleted: true };
+  }
+
+  /** Adds a signed form the advisor emailed (for example the W-9) so it is stored with the rest. */
+  @Post(':id/documents/:type')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES } }))
+  async addDocument(
+    @Request() req: AuthedRequest,
+    @Param('id') id: string,
+    @Param('type') type: string,
+    @UploadedFile() file: { buffer?: Buffer } | undefined,
+  ) {
+    const result = await this.applications.addDocument(id, type, file);
+    await this.audit.log(req.user.id, 'onboarding.document-add', 'AdvisorApplication', id, { type });
+    return result;
   }
 
   @Get(':id')

@@ -1,12 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { pdfSafe } from './pdf-writer';
 
 /**
  * Fills in the official IRS Form W-9 (Rev. March 2024) that ships with the site (apps/api/assets/forms/fw9.pdf), using
- * the form's own fields, then flattens it so the answers cannot be edited. The signature and date are not form fields on
- * the IRS form, so they are written onto the signature line.
+ * the form's own fields. It is NOT signed: the W-9 has to be signed by hand, so the filled-in form is printed, signed and
+ * dated by the advisor, and the signed copy is uploaded (or emailed to Support). The fields are left editable, so a typing
+ * mistake can be fixed in any PDF viewer before printing.
  */
 
 export type W9Classification = 'INDIVIDUAL' | 'C_CORP' | 'S_CORP' | 'PARTNERSHIP' | 'TRUST_ESTATE' | 'LLC' | 'OTHER';
@@ -34,9 +35,6 @@ export interface W9Input {
   tinType: 'SSN' | 'EIN';
   /** Nine digits. */
   tin: string;
-  /** The typed signature. */
-  signature: string;
-  signedAt: Date;
 }
 
 const F = 'topmostSubform[0].Page1[0].';
@@ -51,11 +49,6 @@ const CLASSIFICATION_BOX: Record<W9Classification, string> = {
   LLC: `${BOXES}c1_1[5]`,
   OTHER: `${BOXES}c1_1[6]`,
 };
-
-/** Where the signature and date go on the "Sign Here" line of page 1. */
-/** The box runs from y=192 to 216 on the page; its signature cell is x=72-381 (after the label) and its date cell x=381-576. */
-const SIGNATURE_AT = { x: 150, y: 198 };
-const DATE_AT = { x: 430, y: 198 };
 
 function formPath(): string {
   const candidates = [
@@ -107,12 +100,6 @@ export async function fillW9(input: W9Input): Promise<Uint8Array> {
 
   const helvetica = await pdf.embedFont(StandardFonts.Helvetica);
   form.updateFieldAppearances(helvetica);
-  form.flatten();
-
-  const script = await pdf.embedFont(StandardFonts.TimesRomanItalic);
-  const page = pdf.getPage(0);
-  page.drawText(pdfSafe(input.signature), { x: SIGNATURE_AT.x, y: SIGNATURE_AT.y, size: 14, font: script, color: rgb(0.05, 0.05, 0.3) });
-  page.drawText(input.signedAt.toISOString().slice(0, 10), { x: DATE_AT.x, y: DATE_AT.y, size: 10, font: helvetica, color: rgb(0.05, 0.05, 0.3) });
 
   return pdf.save();
 }

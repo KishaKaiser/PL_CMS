@@ -149,18 +149,6 @@ export class W9Dto {
   @IsString()
   @MaxLength(20)
   tin!: string;
-
-  @IsString()
-  @Length(2, 120)
-  signature!: string;
-
-  /** "Under penalties of perjury, I certify that..." */
-  @IsBoolean()
-  certify!: boolean;
-
-  /** Ticked to confirm the IRS has not told them they are subject to backup withholding. */
-  @IsBoolean()
-  notBackupWithholding!: boolean;
 }
 
 export class DirectDepositDto {
@@ -215,4 +203,10 @@ export class AgreementSettingsDto {
   @IsString()
   @MaxLength(120)
   representativeTitle?: string;
+
+  /** Where advisors can email a signed form instead of uploading it. Empty hides it. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(254)
+  formsEmail?: string;
 }

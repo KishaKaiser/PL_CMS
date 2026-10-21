@@ -25,6 +25,7 @@ interface Status {
     paymentMethod: 'PAYPAL' | 'DIRECT_DEPOSIT';
     paypalEmail: string | null;
   };
+  formsEmail: string | null;
   limits: { minRate: number; maxRate: number; maxUploadMb: number };
   documents: Record<string, { fileName: string; source: string; submittedAt: string } | null>;
   agreement: {
@@ -78,19 +79,37 @@ function ErrorLine({ message }: { message: string }) {
   return message ? <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{message}</p> : null;
 }
 
-/** Download the blank form, fill it in outside the site, and upload it here instead of filling it in online. */
-function UploadAlternative({ type, formName, status, reload }: { type: 'agreement' | 'w9' | 'direct-deposit'; formName: string; status: Status; reload: () => Promise<void> }) {
+/** Download the blank form, complete (and sign) it outside the site, and upload it here. */
+function UploadAlternative({
+  type,
+  formName,
+  status,
+  reload,
+  title,
+  intro,
+  blankLabel,
+  uploadLabel,
+}: {
+  type: 'agreement' | 'w9' | 'direct-deposit';
+  formName?: string;
+  status: Status;
+  reload: () => Promise<void>;
+  title?: string;
+  intro?: string;
+  blankLabel?: string;
+  uploadLabel?: string;
+}) {
   const { busy, error, run } = useAction(reload);
   const [file, setFile] = useState<File | null>(null);
   return (
     <div className="mt-6 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
-      <p className="text-sm font-semibold text-gray-800">Prefer to complete the {formName} yourself?</p>
+      <p className="text-sm font-semibold text-gray-800">{title ?? `Prefer to complete the ${formName} yourself?`}</p>
       <p className="mt-1 text-sm text-gray-600">
-        Download the blank form, fill it in and sign it, then upload it here as a PDF or a JPG/PNG photo or scan (up to {status.limits.maxUploadMb} MB).
+        {intro ?? `Download the blank form, fill it in and sign it, then upload it here as a PDF or a JPG/PNG photo or scan (up to ${status.limits.maxUploadMb} MB).`}
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <a href={`${API}/forms/${type}/blank`} className={secondary}>
-          Download the blank form
+          {blankLabel ?? 'Download the blank form'}
         </a>
         <input type="file" accept="application/pdf,image/png,image/jpeg" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="text-sm" />
         <button
@@ -106,7 +125,7 @@ function UploadAlternative({ type, formName, status, reload }: { type: 'agreemen
             })
           }
         >
-          {busy ? 'Uploading...' : 'Upload completed form'}
+          {busy ? 'Uploading...' : (uploadLabel ?? 'Upload completed form')}
         </button>
       </div>
       <div className="mt-3">
@@ -118,13 +137,14 @@ function UploadAlternative({ type, formName, status, reload }: { type: 'agreemen
 
 function SubmittedNote({ type, doc, label }: { type: 'agreement' | 'w9' | 'direct-deposit'; doc: { fileName: string; source: string; submittedAt: string } | null; label: string }) {
   if (!doc) return null;
+  const how = doc.source === 'ONLINE' ? 'completed on the site' : doc.source === 'ADMIN_UPLOAD' ? 'received by email' : 'uploaded';
   return (
     <p className="mb-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-      Your {label} was {doc.source === 'ONLINE' ? 'completed on the site' : 'uploaded'} on {new Date(doc.submittedAt).toLocaleDateString()}.{' '}
+      Your {label} was {how} on {new Date(doc.submittedAt).toLocaleDateString()}.{' '}
       <a href={`${API}/documents/${type}`} className="font-medium underline">
         Download your copy
       </a>
-      . You can submit it again below to replace it.
+      . You can submit it again to replace it.
     </p>
   );
 }
@@ -223,8 +243,14 @@ const CLASSIFICATIONS: [string, string][] = [
   ['OTHER', 'Other'],
 ];
 
+/**
+ * A W-9 has to be signed by hand. So this fills in the official form with the advisor's answers as a PDF to print, and the
+ * step is only done once the signed copy comes back (uploaded here, or emailed to Support who add it).
+ */
 function W9Panel({ status, reload }: { status: Status; reload: () => Promise<void> }) {
-  const { busy, error, run } = useAction(reload);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [downloaded, setDownloaded] = useState(false);
   const [form, setForm] = useState({
     name: status.agreement.advisor.name,
     businessName: '',
@@ -239,38 +265,70 @@ function W9Panel({ status, reload }: { status: Status; reload: () => Promise<voi
     accountNumbers: '',
     tinType: 'SSN',
     tin: '',
-    signature: '',
-    certify: false,
-    notBackupWithholding: false,
   });
   const [showTin, setShowTin] = useState(false);
   const set = <K extends keyof typeof form>(key: K) => (event: { target: { value: string } }) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const submitted = status.documents.W9;
 
-  function submit(event: FormEvent) {
+  async function create(event: FormEvent) {
     event.preventDefault();
-    const { llcTaxClass, otherClassification, foreignPartners, businessName, exemptPayeeCode, fatcaCode, accountNumbers, ...rest } = form;
-    void run(() =>
-      postJson('/w9', {
-        ...rest,
-        ...(businessName.trim() ? { businessName } : {}),
-        ...(form.classification === 'LLC' ? { llcTaxClass } : {}),
-        ...(form.classification === 'OTHER' ? { otherClassification } : {}),
-        ...(['PARTNERSHIP', 'TRUST_ESTATE'].includes(form.classification) ? { foreignPartners } : {}),
-        ...(exemptPayeeCode.trim() ? { exemptPayeeCode } : {}),
-        ...(fatcaCode.trim() ? { fatcaCode } : {}),
-        ...(accountNumbers.trim() ? { accountNumbers } : {}),
-      }),
-    );
+    setBusy(true);
+    setError('');
+    try {
+      const { llcTaxClass, otherClassification, foreignPartners, businessName, exemptPayeeCode, fatcaCode, accountNumbers, ...rest } = form;
+      const res = await fetch(`${API}/w9`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...rest,
+          ...(businessName.trim() ? { businessName } : {}),
+          ...(form.classification === 'LLC' ? { llcTaxClass } : {}),
+          ...(form.classification === 'OTHER' ? { otherClassification } : {}),
+          ...(['PARTNERSHIP', 'TRUST_ESTATE'].includes(form.classification) ? { foreignPartners } : {}),
+          ...(exemptPayeeCode.trim() ? { exemptPayeeCode } : {}),
+          ...(fatcaCode.trim() ? { fatcaCode } : {}),
+          ...(accountNumbers.trim() ? { accountNumbers } : {}),
+        }),
+      });
+      if (!res.ok) throw new Error(await readError(res, 'We could not create your W-9. Please try again.'));
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'W-9-to-sign.pdf';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 15_000);
+      setDownloaded(true);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'We could not create your W-9. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <div>
-      <SubmittedNote type="w9" doc={status.documents.W9} label="W-9" />
-      <p className="mb-4 text-sm text-gray-600">
-        The Psychic Link needs a Form W-9 from every advisor to report what we pay you. This fills in the official IRS Form W-9 with your answers.
-        Your Social Security number or EIN is stored encrypted, and only authorized staff can open the form.
-      </p>
-      <form onSubmit={submit} className="space-y-5">
+    <div className="space-y-6">
+      <SubmittedNote type="w9" doc={submitted} label="signed W-9" />
+
+      <ol className="space-y-1 rounded-xl bg-purple-50 p-4 text-sm text-purple-950">
+        <li>
+          <strong>1.</strong> Fill in your details below. We fill in the official IRS Form W-9 for you.
+        </li>
+        <li>
+          <strong>2.</strong> Print it, then <strong>sign and date</strong> it by hand. A W-9 must be signed.
+        </li>
+        <li>
+          <strong>3.</strong> Upload the signed copy here{status.formsEmail ? <>, or email it to <strong>{status.formsEmail}</strong> and we will add it for you</> : ''}.
+        </li>
+      </ol>
+
+      <form onSubmit={create} className="space-y-5">
+        <p className="text-sm text-gray-600">
+          Your Social Security number or EIN is only used to fill in this form for you to print. We do not keep it until you send the signed copy, and
+          then it is stored encrypted, where only authorized staff can open it.
+        </p>
         <label className="block text-sm font-medium text-gray-700">
           1. Name (as shown on your income tax return)
           <input value={form.name} onChange={set('name')} required maxLength={100} className={field} />
@@ -369,34 +427,40 @@ function W9Panel({ status, reload }: { status: Status; reload: () => Promise<voi
           </div>
         </fieldset>
 
-        <fieldset className="rounded-xl border p-4">
-          <legend className="px-2 text-sm font-bold text-gray-800">Part II: Certification</legend>
-          <p className="text-xs text-gray-600">
-            Under penalties of perjury, I certify that: (1) the number shown on this form is my correct taxpayer identification number; (2) I am
-            not subject to backup withholding, or I have not been notified by the IRS that I am subject to backup withholding as a result of a
-            failure to report all interest or dividends, or the IRS has notified me that I am no longer subject to backup withholding; (3) I am
-            a U.S. citizen or other U.S. person; and (4) the FATCA code(s) entered on this form (if any) are correct.
+        <div className="rounded-xl border bg-gray-50 p-4 text-xs text-gray-600">
+          <p className="font-semibold text-gray-800">Part II: Certification (you sign this on the printed form)</p>
+          <p className="mt-1">
+            Under penalties of perjury, I certify that: (1) the number shown on this form is my correct taxpayer identification number; (2) I am not
+            subject to backup withholding, or I have not been notified by the IRS that I am subject to backup withholding as a result of a failure to
+            report all interest or dividends, or the IRS has notified me that I am no longer subject to backup withholding; (3) I am a U.S. citizen or
+            other U.S. person; and (4) the FATCA code(s) entered on this form (if any) are correct. <strong>If the IRS has told you that you are
+            subject to backup withholding, cross out item 2 on the printed form before you sign.</strong>
           </p>
-          <label className="mt-3 flex items-start gap-3 text-sm text-gray-800">
-            <input type="checkbox" className="mt-1" checked={form.certify} onChange={(event) => setForm((c) => ({ ...c, certify: event.target.checked }))} />
-            I certify the statements above are true, correct and complete.
-          </label>
-          <label className="mt-2 flex items-start gap-3 text-sm text-gray-800">
-            <input type="checkbox" className="mt-1" checked={form.notBackupWithholding} onChange={(event) => setForm((c) => ({ ...c, notBackupWithholding: event.target.checked }))} />
-            The IRS has not told me that I am currently subject to backup withholding. (If it has, use the upload option below instead.)
-          </label>
-          <label className="mt-4 block text-sm font-medium text-gray-700">
-            Signature of U.S. person: type your full legal name
-            <input value={form.signature} onChange={set('signature')} required minLength={2} maxLength={120} autoComplete="off" className={`${field} font-serif text-lg italic`} />
-          </label>
-        </fieldset>
+        </div>
 
         <ErrorLine message={error} />
-        <button type="submit" disabled={busy || !form.certify || !form.notBackupWithholding} className={primary}>
-          {busy ? 'Submitting...' : 'Submit W-9'}
+        <button type="submit" disabled={busy} className={primary}>
+          {busy ? 'Creating...' : 'Create my W-9 to print and sign'}
         </button>
       </form>
-      <UploadAlternative type="w9" formName="W-9" status={status} reload={reload} />
+
+      {downloaded && (
+        <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          Your W-9 was downloaded. Check it over, print it, sign and date the &ldquo;Sign Here&rdquo; line, then upload the signed copy below.
+        </p>
+      )}
+
+      <UploadAlternative
+        type="w9"
+        status={status}
+        reload={reload}
+        title="Upload your signed W-9"
+        intro={`When you have signed and dated the printed form, upload a PDF, or a JPG or PNG photo or scan of it (up to ${status.limits.maxUploadMb} MB). This step is not done until the signed copy is here.${
+          status.formsEmail ? ` You can also email it to ${status.formsEmail}.` : ''
+        }`}
+        blankLabel="Download a blank W-9 instead"
+        uploadLabel="Upload signed W-9"
+      />
     </div>
   );
 }

@@ -47,6 +47,7 @@ interface Agreement {
   body: string;
   representativeName: string;
   representativeTitle: string;
+  formsEmail: string;
 }
 
 interface LinkResult {
@@ -80,6 +81,8 @@ export default function AdminAdvisorApplicationsPage() {
   const [rejectNote, setRejectNote] = useState('');
   const [agreement, setAgreement] = useState<Agreement | null>(null);
   const [busy, setBusy] = useState(false);
+  const [addType, setAddType] = useState('W9');
+  const [addFile, setAddFile] = useState<File | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -167,6 +170,27 @@ export default function AdminAdvisorApplicationsPage() {
     void act(`/documents/${id}`, 'DELETE', null, 'The document was deleted.');
   }
 
+  async function addEmailedForm(id: string) {
+    if (!addFile) return;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const body = new FormData();
+      body.append('file', addFile);
+      const res = await fetch(`${API}/${id}/documents/${addType}`, { method: 'POST', body });
+      if (!res.ok) throw new Error(await readMessage(res, 'The form could not be added'));
+      setAddFile(null);
+      setMessage('The form was added and stored with the advisor\'s other forms.');
+      await loadList();
+      await loadDetail(id);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'The form could not be added');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveAgreement(event: FormEvent) {
     event.preventDefault();
     if (!agreement) return;
@@ -180,7 +204,7 @@ export default function AdminAdvisorApplicationsPage() {
     ['APPROVED', `Approved${list ? ` (${list.counts.APPROVED})` : ''}`],
     ['REJECTED', 'Rejected'],
     ['all', 'All'],
-    ['agreement', 'Agreement text'],
+    ['agreement', 'Agreement & forms'],
   ];
 
   return (
@@ -236,7 +260,14 @@ export default function AdminAdvisorApplicationsPage() {
                 <input value={agreement.representativeTitle} onChange={(event) => setAgreement({ ...agreement, representativeTitle: event.target.value })} maxLength={120} className={field} />
               </label>
             </div>
-            <p className="text-xs text-gray-500">The company signature and date lines are left blank on the PDF for you to sign.</p>
+            <label className="block text-sm font-medium text-gray-700">
+              Email address for signed forms (optional)
+              <input type="email" value={agreement.formsEmail} onChange={(event) => setAgreement({ ...agreement, formsEmail: event.target.value })} maxLength={254} className={field} placeholder="onboarding@yourdomain.com" />
+              <span className="mt-1 block text-xs font-normal text-gray-500">
+                Shown to advisors in the W-9 step as another way to send their signed form. When one arrives, open the advisor here and use &ldquo;Add a form received by email&rdquo;.
+              </span>
+            </label>
+            <p className="text-xs text-gray-500">The company signature and date lines are left blank on the agreement PDF for you to sign.</p>
             <button type="submit" disabled={busy} className="rounded bg-purple-700 px-5 py-2 text-sm font-medium text-white hover:bg-purple-800 disabled:opacity-50">
               Save agreement
             </button>
@@ -390,7 +421,7 @@ export default function AdminAdvisorApplicationsPage() {
                             <span className="font-medium">{TYPE_LABEL[doc.type] ?? doc.type}</span>
                             <span className="text-gray-500">
                               {' '}
-                              · {doc.source === 'ONLINE' ? 'filled in on the site' : 'uploaded'} · {kb(doc.sizeBytes)} · {new Date(doc.createdAt).toLocaleDateString()}
+                              · {doc.source === 'ONLINE' ? 'completed on the site' : doc.source === 'ADMIN_UPLOAD' ? 'received by email' : 'uploaded by the advisor'} · {kb(doc.sizeBytes)} · {new Date(doc.createdAt).toLocaleDateString()}
                             </span>
                             {doc.supersededAt && <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">replaced</span>}
                           </span>
@@ -406,6 +437,20 @@ export default function AdminAdvisorApplicationsPage() {
                       ))}
                       {detail.documents.length === 0 && <li className="px-3 py-3 text-sm text-gray-500">Nothing submitted yet.</li>}
                     </ul>
+                    <div className="mt-3 flex flex-wrap items-end gap-3 rounded border bg-gray-50 p-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Add a form received by email
+                        <select value={addType} onChange={(event) => setAddType(event.target.value)} className={field}>
+                          <option value="W9">Signed W-9</option>
+                          <option value="AGREEMENT">Signed Advisor Agreement</option>
+                          <option value="DIRECT_DEPOSIT">Direct Deposit form</option>
+                        </select>
+                      </label>
+                      <input type="file" accept="application/pdf,image/png,image/jpeg" onChange={(event) => setAddFile(event.target.files?.[0] ?? null)} className="text-sm" />
+                      <button type="button" disabled={busy || !addFile} onClick={() => void addEmailedForm(detail.id)} className="rounded border px-4 py-2 text-sm hover:bg-white disabled:opacity-50">
+                        Add form
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

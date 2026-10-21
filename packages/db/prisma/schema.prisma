@@ -568,7 +568,8 @@ model OnboardingDocument {
   advisorId    String
   // AGREEMENT, W9 or DIRECT_DEPOSIT.
   type         String
-  // ONLINE (filled in on the site) or UPLOADED (a completed file the advisor uploaded).
+  // ONLINE (filled in and signed on the site), UPLOADED (a completed file the advisor uploaded) or ADMIN_UPLOAD (a form the
+  // advisor emailed, added by an admin).
   source       String
   fileName     String
   mimeType     String

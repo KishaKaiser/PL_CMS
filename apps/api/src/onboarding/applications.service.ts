@@ -209,6 +209,13 @@ export class ApplicationsService {
     return { id: application.id, link, emailSent, linkExpiresAt: expiresAt };
   }
 
+  /** Adds a form the advisor emailed instead of uploading (the signed W-9, for example). Stored like any other form. */
+  async addDocument(id: string, type: string, file: { buffer?: Buffer } | undefined) {
+    const application = await this.prisma.advisorApplication.findUnique({ where: { id }, select: { onboarding: { select: { advisorId: true } } } });
+    if (!application?.onboarding) throw new NotFoundException('This application has no onboarding yet.');
+    return this.onboarding.uploadForAdvisor(application.onboarding.advisorId, type, file);
+  }
+
   async reject(adminId: string, id: string, note: string | undefined) {
     const application = await this.prisma.advisorApplication.findUnique({ where: { id }, select: { status: true } });
     if (!application) throw new NotFoundException('Application not found');

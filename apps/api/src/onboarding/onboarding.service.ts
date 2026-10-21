@@ -143,7 +143,7 @@ export class OnboardingService {
 
     const steps: OnboardingStep[] = [
       { key: 'agreement', label: 'Advisor Agreement signed', done: !!docs.AGREEMENT, detail: docs.AGREEMENT ? (docs.AGREEMENT.source === 'ONLINE' ? 'Signed on the site' : 'Signed copy uploaded') : null },
-      { key: 'w9', label: 'W-9 form submitted', done: !!docs.W9, detail: docs.W9 ? (docs.W9.source === 'ONLINE' ? 'Completed on the site' : 'Completed form uploaded') : null },
+      { key: 'w9', label: 'Signed W-9 submitted', done: !!docs.W9, detail: docs.W9 ? (docs.W9.source === 'ADMIN_UPLOAD' ? 'Signed copy received by email' : 'Signed copy uploaded') : null },
       { key: 'displayName', label: 'Choose your display name', done: !!o.displayNameChosenAt, detail: o.displayNameChosenAt ? advisor.displayName : null },
       { key: 'photo', label: 'Add a profile photo', done: !!advisor.profileImageUrl, detail: advisor.profileImageUrl ? 'Photo added' : null },
       { key: 'rate', label: 'Set your rate per minute', done: !!o.rateSetAt && rate > 0, detail: o.rateSetAt && rate > 0 ? `$${rate.toFixed(2)} per minute` : null },
@@ -207,6 +207,7 @@ export class OnboardingService {
         paymentMethod: advisor.payoutMethod,
         paypalEmail: advisor.paypalEmail,
       },
+      formsEmail: settings.formsEmail || null,
       limits: { minRate: MIN_RATE_PER_MINUTE, maxRate: MAX_RATE_PER_MINUTE, maxUploadMb: MAX_UPLOAD_BYTES / (1024 * 1024) },
       documents: Object.fromEntries(
         (Object.keys(documents) as DocumentType[]).map((type) => [
@@ -304,13 +305,12 @@ export class OnboardingService {
     return { signedAt };
   }
 
-  /** Fills in the official W-9 from the answers given, and stores it. */
-  async submitW9(userId: string, dto: W9Dto) {
+  /**
+   * Fills in the official W-9 from the answers given and hands it back, unsigned, to print. A W-9 has to be signed by hand,
+   * so nothing is stored (and the Social Security number goes nowhere) until the advisor uploads, or emails us, the signed copy.
+   */
+  async fillW9ForPrinting(userId: string, dto: W9Dto): Promise<{ bytes: Uint8Array; fileName: string }> {
     const advisor = await this.load(userId);
-    if (!dto.certify) throw new BadRequestException('Confirm the certification to submit the form.');
-    if (!dto.notBackupWithholding) {
-      throw new BadRequestException('If the IRS has told you that you are subject to backup withholding, download the blank W-9, complete it by hand and upload it instead.');
-    }
     const tin = dto.tin.replace(/[\s-]/g, '');
     if (!/^\d{9}$/.test(tin)) throw new BadRequestException('Enter your 9-digit Social Security number or EIN.');
     if (dto.tinType === 'SSN' && !plausibleSsn(tin)) throw new BadRequestException('That Social Security number does not look right. Please check it.');
@@ -318,7 +318,7 @@ export class OnboardingService {
     if (dto.classification === 'LLC' && !dto.llcTaxClass) throw new BadRequestException('Choose the LLC tax classification (C, S or P).');
     if (dto.classification === 'OTHER' && !dto.otherClassification?.trim()) throw new BadRequestException('Describe the "Other" tax classification.');
 
-    const pdf = await fillW9({
+    const bytes = await fillW9({
       name: clean(dto.name),
       businessName: dto.businessName ? clean(dto.businessName) : undefined,
       classification: dto.classification,
@@ -332,12 +332,8 @@ export class OnboardingService {
       accountNumbers: dto.accountNumbers ? clean(dto.accountNumbers) : undefined,
       tinType: dto.tinType,
       tin,
-      signature: clean(dto.signature),
-      signedAt: new Date(),
     });
-    await this.docs.save(advisor.id, 'W9', 'ONLINE', this.fileName('w9', advisor.user.username, 'pdf'), 'application/pdf', pdf);
-    await this.refresh(advisor.id);
-    return { submitted: true };
+    return { bytes, fileName: this.fileName('W-9-to-sign', advisor.user.username, 'pdf') };
   }
 
   /** Fills in the direct deposit form, stores it, and makes Direct Deposit the advisor's way of being paid. */
@@ -369,20 +365,41 @@ export class OnboardingService {
     return { submitted: true };
   }
 
-  /** A completed form uploaded instead of filling it in on the site. */
+  /** A completed (and, where needed, signed) form uploaded by the advisor. */
   async upload(userId: string, typeInput: string, file: { buffer?: Buffer; size?: number } | undefined) {
     const advisor = await this.load(userId);
-    const type = this.parseType(typeInput);
+    await this.storeUpload(advisor.id, advisor.onboarding.id, advisor.user.username, this.parseType(typeInput), file, 'UPLOADED');
+    return { submitted: true };
+  }
+
+  /** The same, added by an admin for an advisor who emailed the signed form instead of uploading it. */
+  async uploadForAdvisor(advisorId: string, typeInput: string, file: { buffer?: Buffer; size?: number } | undefined) {
+    const advisor = await this.prisma.advisorProfile.findUnique({
+      where: { id: advisorId },
+      select: { id: true, user: { select: { username: true } }, onboarding: { select: { id: true } } },
+    });
+    if (!advisor?.onboarding) throw new NotFoundException('This advisor has no onboarding.');
+    await this.storeUpload(advisor.id, advisor.onboarding.id, advisor.user.username, this.parseType(typeInput), file, 'ADMIN_UPLOAD');
+    return { submitted: true };
+  }
+
+  private async storeUpload(
+    advisorId: string,
+    onboardingId: string,
+    username: string | null,
+    type: DocumentType,
+    file: { buffer?: Buffer } | undefined,
+    source: 'UPLOADED' | 'ADMIN_UPLOAD',
+  ) {
     if (!file?.buffer || file.buffer.length === 0) throw new BadRequestException('Choose the completed form to upload.');
     if (file.buffer.length > MAX_UPLOAD_BYTES) throw new BadRequestException(`The file can be up to ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB.`);
     const kind = sniffFile(file.buffer);
     if (!kind) throw new UnsupportedMediaTypeException('Upload a PDF, or a JPG or PNG photo or scan of the completed form.');
 
-    const base = type === 'AGREEMENT' ? 'advisor-agreement' : type === 'W9' ? 'w9' : 'direct-deposit';
-    await this.docs.save(advisor.id, type, 'UPLOADED', this.fileName(`${base}-uploaded`, advisor.user.username, kind.extension), kind.mimeType, file.buffer);
-    if (type === 'DIRECT_DEPOSIT') await this.markDirectDeposit(advisor.id, advisor.onboarding.id);
-    await this.refresh(advisor.id);
-    return { submitted: true };
+    const base = type === 'AGREEMENT' ? 'advisor-agreement' : type === 'W9' ? 'w9-signed' : 'direct-deposit';
+    await this.docs.save(advisorId, type, source, this.fileName(`${base}-${source === 'UPLOADED' ? 'uploaded' : 'received'}`, username, kind.extension), kind.mimeType, file.buffer);
+    if (type === 'DIRECT_DEPOSIT') await this.markDirectDeposit(advisorId, onboardingId);
+    await this.refresh(advisorId);
   }
 
   /** The blank form to print or fill in outside the site (the agreement, the official W-9, the direct deposit form). */

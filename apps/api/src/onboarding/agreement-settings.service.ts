@@ -11,6 +11,8 @@ export interface AgreementSettings {
   /** Who signs for the company; printed on the agreement (the signature line is left for them). */
   representativeName: string;
   representativeTitle: string;
+  /** An address advisors can email a signed form to (shown in the W-9 step); empty = not offered. */
+  formsEmail: string;
 }
 
 /** The wording of the Advisor Agreement, which admin can edit. A signed copy keeps the wording it was signed with. */
@@ -19,7 +21,7 @@ export class AgreementSettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async get(): Promise<AgreementSettings> {
-    const defaults: AgreementSettings = { title: DEFAULT_AGREEMENT_TITLE, body: DEFAULT_AGREEMENT_BODY, representativeName: '', representativeTitle: '' };
+    const defaults: AgreementSettings = { title: DEFAULT_AGREEMENT_TITLE, body: DEFAULT_AGREEMENT_BODY, representativeName: '', representativeTitle: '', formsEmail: '' };
     const row = await this.prisma.setting.findUnique({ where: { key: SETTINGS_KEY } });
     if (!row) return defaults;
     try {
@@ -29,6 +31,7 @@ export class AgreementSettingsService {
         body: typeof saved.body === 'string' && saved.body.trim() ? saved.body : defaults.body,
         representativeName: typeof saved.representativeName === 'string' ? saved.representativeName : '',
         representativeTitle: typeof saved.representativeTitle === 'string' ? saved.representativeTitle : '',
+        formsEmail: typeof saved.formsEmail === 'string' ? saved.formsEmail : '',
       };
     } catch {
       return defaults;
@@ -42,7 +45,9 @@ export class AgreementSettingsService {
       body: (input.body ?? current.body).replace(/\r\n/g, '\n').trim(),
       representativeName: (input.representativeName ?? current.representativeName).trim(),
       representativeTitle: (input.representativeTitle ?? current.representativeTitle).trim(),
+      formsEmail: (input.formsEmail ?? current.formsEmail).trim().toLowerCase(),
     };
+    if (next.formsEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next.formsEmail)) throw new BadRequestException('Enter a valid email address for signed forms, or leave it empty.');
     if (!next.title || next.title.length > 150) throw new BadRequestException('Give the agreement a title of up to 150 characters.');
     if (!next.body) throw new BadRequestException('The agreement cannot be empty.');
     if (next.body.length > MAX_BODY_LENGTH) throw new BadRequestException(`The agreement can be up to ${MAX_BODY_LENGTH} characters.`);
