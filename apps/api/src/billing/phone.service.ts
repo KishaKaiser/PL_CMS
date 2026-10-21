@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FreeMinutesService } from '../free-minutes/free-minutes.service';
+import { ONBOARDED_ADVISOR } from '../onboarding/onboarding.constants';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhoneNumber } from '../telephony/phone-number';
 import { publicName } from '../common/public-identity';
@@ -32,6 +33,7 @@ export class PhoneService {
         isOnline: true,
         phoneNumber: { not: null },
         ratePerMinute: { gt: 0 },
+        AND: [ONBOARDED_ADVISOR],
       },
       select: {
         id: true,
@@ -316,6 +318,7 @@ export class PhoneService {
         OR: [{ slug: slugOrId }, { id: slugOrId }],
         phoneNumber: { not: null },
         ratePerMinute: { gt: 0 },
+        AND: [ONBOARDED_ADVISOR],
       },
       select: {
         id: true,

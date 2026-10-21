@@ -8,6 +8,7 @@ import {
   toCents,
 } from '../billing/billing.service';
 import { CallbacksService } from '../callbacks/callbacks.service';
+import { ONBOARDED_ADVISOR } from '../onboarding/onboarding.constants';
 import { PrismaService } from '../prisma/prisma.service';
 import { PhonePromptService } from '../telephony/phone-prompt.service';
 import { normalizePhoneNumber } from '../telephony/phone-number';
@@ -197,7 +198,7 @@ export class HotlineService implements OnModuleInit {
     if (digits === '0') return this.connectToFirstAvailable(callControlId, state);
 
     const advisor = await this.prisma.advisorProfile.findFirst({
-      where: { sipExtension: digits, phoneNumber: { not: null }, ratePerMinute: { gt: 0 } },
+      where: { sipExtension: digits, phoneNumber: { not: null }, ratePerMinute: { gt: 0 }, AND: [ONBOARDED_ADVISOR] },
       select: { id: true, displayName: true },
     });
 
@@ -221,7 +222,7 @@ export class HotlineService implements OnModuleInit {
     if (!client) return this.finish(callControlId, GENERIC_FAILURE_MESSAGE);
 
     const online = await this.prisma.advisorProfile.findMany({
-      where: { isOnline: true, phoneNumber: { not: null }, ratePerMinute: { gt: 0 } },
+      where: { isOnline: true, phoneNumber: { not: null }, ratePerMinute: { gt: 0 }, AND: [ONBOARDED_ADVISOR] },
       select: { id: true, ratePerMinute: true },
     });
     if (online.length === 0) {

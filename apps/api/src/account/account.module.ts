@@ -4,9 +4,10 @@ import { AccountService } from './account.service';
 import { AstrologyModule } from '../astrology/astrology.module';
 import { FreeMinutesModule } from '../free-minutes/free-minutes.module';
 import { MessagesModule } from '../messages/messages.module';
+import { OnboardingModule } from '../onboarding/onboarding.module';
 
 @Module({
-  imports: [AstrologyModule, MessagesModule, FreeMinutesModule],
+  imports: [AstrologyModule, MessagesModule, FreeMinutesModule, OnboardingModule],
   controllers: [AccountController],
   providers: [AccountService],
 })

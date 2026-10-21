@@ -8,6 +8,7 @@ import { ensureAdvisorSlug } from '../billing/advisor-slug';
 import { ConfigService } from '@nestjs/config';
 import { FreeMinutesService } from '../free-minutes/free-minutes.service';
 import { MessagesService } from '../messages/messages.service';
+import { OnboardingService } from '../onboarding/onboarding.service';
 import { publicName } from '../common/public-identity';
 import {
   SaveAddressDto,
@@ -24,6 +25,7 @@ export class AccountService {
     private readonly config: ConfigService,
     private readonly messages: MessagesService,
     private readonly freeMinutes: FreeMinutesService,
+    private readonly onboarding: OnboardingService,
   ) {}
 
   async getDashboard(userId: string) {
@@ -115,6 +117,8 @@ export class AccountService {
       advisor: user.advisorProfile
         ? {
             profile: { ...user.advisorProfile, slug: advisorSlug },
+            // Set while the advisor still has onboarding steps to do, so the dashboard can point them back to the checklist.
+            onboarding: await this.onboarding.progressFor(user.advisorProfile.id),
             callTransactions,
             schedule,
             // The hotline callers dial, which the advisor can share along with their extension.
@@ -275,6 +279,8 @@ export class AccountService {
     if (dto.isOnline === true && !finalPhoneNumber) {
       throw new BadRequestException('Add your phone number before turning on calls, so we know where to reach you.');
     }
+    // Newly approved advisors stay offline until their onboarding checklist is finished.
+    if (dto.isOnline === true) await this.onboarding.assertCanGoOnline(userId);
 
     return this.prisma.advisorProfile.update({
       where: { id: advisor.id },
@@ -309,6 +315,8 @@ export class AccountService {
       where: { id: advisor.id },
       data: { profileImageUrl: media.url },
     });
+    // The photo is the last step for some advisors, so adding it may finish their onboarding.
+    await this.onboarding.refreshForUser(userId);
     return { profile, media };
   }
 

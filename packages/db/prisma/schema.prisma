@@ -158,6 +158,10 @@ model AdvisorProfile {
   // How the advisor is paid: PAYPAL (to paypalEmail) or DIRECT_DEPOSIT. The site never stores bank details: those are
   // given to Support during onboarding, and bankOnFileAt records that Support has them, which unlocks Direct Deposit.
   payoutMethod        String                 @default("PAYPAL")
+  // Set while a newly approved advisor is working through onboarding; they cannot be seen by clients or go online
+  // until it is complete. Advisors who joined another way have none.
+  onboarding          AdvisorOnboarding?
+  onboardingDocuments OnboardingDocument[]
   paypalEmail         String?
   bankOnFileAt        DateTime?
   appointments        Appointment[]          @relation("AdvisorAppointments")
@@ -505,6 +509,78 @@ model AdvisorPayout {
 
   @@index([advisorId, paidAt])
   @@map("advisor_payouts")
+}
+
+// Someone asking to become an advisor. Admin approves or rejects it; approving creates their account and starts onboarding.
+model AdvisorApplication {
+  id              String    @id @default(cuid())
+  name            String
+  email           String
+  phone           String
+  yearsExperience Int
+  // "Tell us about your gifts and experience" and "Describe your reading style".
+  gifts           String
+  readingStyle    String
+  // PENDING, APPROVED or REJECTED.
+  status          String    @default("PENDING")
+  reviewNote      String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  // The account created when the application was approved.
+  userId          String?   @unique
+  ipAddress       String?
+  createdAt       DateTime  @default(now())
+
+  onboarding AdvisorOnboarding?
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@map("advisor_applications")
+}
+
+// An approved advisor's onboarding. The link emailed to them carries a token whose hash is stored here.
+model AdvisorOnboarding {
+  id                  String    @id @default(cuid())
+  advisorId           String    @unique
+  applicationId       String?   @unique
+  tokenHash           String    @unique
+  tokenExpiresAt      DateTime
+  emailSentAt         DateTime?
+  // When they set their password from the emailed link.
+  activatedAt         DateTime?
+  displayNameChosenAt DateTime?
+  rateSetAt           DateTime?
+  paymentChosenAt     DateTime?
+  // When every step was done. Until then the advisor stays hidden from clients and cannot go online.
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+
+  advisor     AdvisorProfile      @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+  application AdvisorApplication? @relation(fields: [applicationId], references: [id])
+
+  @@map("advisor_onboardings")
+}
+
+// A signed agreement, W-9 or direct deposit form, filled in on the site or uploaded. The file is stored encrypted and is
+// only ever downloaded by an admin (or by the advisor it belongs to). A newer submission supersedes the older one.
+model OnboardingDocument {
+  id           String    @id @default(cuid())
+  advisorId    String
+  // AGREEMENT, W9 or DIRECT_DEPOSIT.
+  type         String
+  // ONLINE (filled in on the site) or UPLOADED (a completed file the advisor uploaded).
+  source       String
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  data         Bytes
+  createdAt    DateTime  @default(now())
+  supersededAt DateTime?
+
+  advisor AdvisorProfile @relation(fields: [advisorId], references: [id], onDelete: Cascade)
+
+  @@index([advisorId, type, supersededAt])
+  @@map("onboarding_documents")
 }
 
 // ──────────────────────────────────────────────

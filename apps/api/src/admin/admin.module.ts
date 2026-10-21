@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AdminApplicationsController } from './admin-applications/applications.controller';
 import { AdminAdvisorsController } from './admin-advisors/advisors.controller';
 import { AdminAdvisorsService } from './admin-advisors/advisors.service';
 import { DashboardController } from './admin-dashboard/dashboard.controller';
@@ -30,12 +31,13 @@ import { AuditService } from './audit/audit.service';
 import { ThemeBuilderController } from './theme-builder/theme-builder.controller';
 import { ThemeBuilderService } from './theme-builder/theme-builder.service';
 import { BillingModule } from '../billing/billing.module';
+import { OnboardingModule } from '../onboarding/onboarding.module';
 import { PayoutsModule } from '../payouts/payouts.module';
 import { TelephonyModule } from '../telephony/telephony.module';
 import { DefaultContentModule } from '../bootstrap/default-content.module';
 
 @Module({
-  imports: [DefaultContentModule, BillingModule, TelephonyModule, PayoutsModule],
+  imports: [DefaultContentModule, BillingModule, TelephonyModule, PayoutsModule, OnboardingModule],
   controllers: [
     DashboardController,
     PagesController,
@@ -53,6 +55,7 @@ import { DefaultContentModule } from '../bootstrap/default-content.module';
     AdminCallsController,
     AdminPhonePromptsController,
     AdminPayoutsController,
+    AdminApplicationsController,
   ],
   providers: [
     DashboardService,
