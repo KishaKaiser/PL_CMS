@@ -306,6 +306,8 @@ export default function AdminAdvisorApplicationsPage() {
                     <td className="px-4 py-3">
                       {row.status === 'CANCELLED' ? (
                         <span className="text-red-700">Cancelled</span>
+                      ) : row.status === 'APPROVED' && !row.onboarding ? (
+                        <span className="text-amber-700">Account missing</span>
                       ) : row.onboarding ? (
                         row.onboarding.completed ? (
                           <span className="font-medium text-emerald-700">Complete</span>
@@ -386,6 +388,31 @@ export default function AdminAdvisorApplicationsPage() {
                   <p className="font-medium">{linkResult.emailSent ? 'The onboarding email was sent.' : 'The email was not sent (the site has no email server set up).'} The link, which works until {new Date(linkResult.linkExpiresAt).toLocaleDateString()}:</p>
                   <input readOnly value={linkResult.link} onFocus={(event) => event.target.select()} className="mt-2 w-full rounded border border-gray-300 bg-white px-3 py-2 font-mono text-xs" />
                   <p className="mt-2 text-xs text-gray-600">This link is shown only now. To email automatically, set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM in the site&apos;s environment.</p>
+                </div>
+              )}
+
+              {(detail.status === 'APPROVED' || detail.status === 'CANCELLED') && !detail.onboarding && (
+                <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
+                  <p className="font-medium text-amber-900">
+                    {detail.status === 'CANCELLED' ? 'This application was cancelled, and there is no advisor account for it.' : 'This application was approved, but there is no advisor account for it now.'}
+                  </p>
+                  <p className="text-sm text-amber-900">The account was probably deleted from the Users page. You can approve it again to create a new account and email a fresh link, or cancel it.</p>
+                  {detail.reviewNote && <p className="text-sm text-amber-900">Note: {detail.reviewNote}</p>}
+                  <div className="flex flex-wrap gap-3">
+                    <button type="button" disabled={busy} onClick={() => void approve(detail.id)} className="rounded bg-emerald-700 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50">
+                      Approve again and email the onboarding link
+                    </button>
+                    {detail.status === 'APPROVED' && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => window.confirm('Mark this application as cancelled?') && void act(`/${detail.id}/cancel`, 'POST', {}, 'The application was cancelled.')}
+                        className="rounded border border-red-300 bg-white px-5 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Cancel this application
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 

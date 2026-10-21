@@ -154,6 +154,11 @@ export class AdminUsersService {
     await this.findOne(id);
     try {
       await this.prisma.user.delete({ where: { id } });
+      // An advisor application approved for this account would otherwise stay "Approved" with nothing behind it.
+      await this.prisma.advisorApplication.updateMany({
+        where: { userId: id, status: 'APPROVED' },
+        data: { status: 'CANCELLED', reviewNote: 'The advisor account was deleted.' },
+      });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
         throw new BadRequestException(
