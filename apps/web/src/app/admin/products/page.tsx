@@ -46,6 +46,7 @@ interface Product {
   saleEndsAt?: string | null;
   minutesPack: number;
   isActive: boolean;
+  hiddenFromShop?: boolean;
   weightOz?: number | string | null;
   lengthIn?: number | string | null;
   widthIn?: number | string | null;
@@ -73,6 +74,7 @@ const emptyProductForm = {
   saleEndsAt: '',
   minutesPack: '0',
   isActive: true,
+  hiddenFromShop: false,
   weightOz: '',
   lengthIn: '',
   widthIn: '',
@@ -198,6 +200,7 @@ export default function AdminProductsPage() {
       saleEndsAt: toDatetimeLocal(product.saleEndsAt),
       minutesPack: String(product.minutesPack ?? 0),
       isActive: product.isActive,
+      hiddenFromShop: !!product.hiddenFromShop,
       weightOz: product.weightOz == null ? '' : String(product.weightOz),
       lengthIn: product.lengthIn == null ? '' : String(product.lengthIn),
       widthIn: product.widthIn == null ? '' : String(product.widthIn),
@@ -741,6 +744,11 @@ export default function AdminProductsPage() {
                 onChange={(isActive) => setForm((current) => ({ ...current, isActive }))}
               />
               <Checkbox
+                label="Hide from the shop (still works, and can be bought with its direct link)"
+                checked={form.hiddenFromShop}
+                onChange={(hiddenFromShop) => setForm((current) => ({ ...current, hiddenFromShop }))}
+              />
+              <Checkbox
                 label="Track stock"
                 checked={form.trackStock}
                 onChange={(trackStock) =>
@@ -823,6 +831,7 @@ export default function AdminProductsPage() {
                         <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
                           <span>{product.variants.length} variant{product.variants.length === 1 ? '' : 's'}</span>
                           {!product.isActive && <span className="text-red-600">Inactive</span>}
+                          {product.hiddenFromShop && <span className="rounded bg-amber-100 px-1.5 text-amber-800">Hidden from shop</span>}
                         </div>
                       </div>
                     </div>
@@ -926,6 +935,7 @@ function buildProductPayload(form: typeof emptyProductForm, clearBlankValues: bo
     saleEndsAt: optionalString(form.saleEndsAt, clearBlankValues),
     minutesPack: parseInt(form.minutesPack || '0', 10),
     isActive: form.isActive,
+    hiddenFromShop: form.hiddenFromShop,
     weightOz: optionalNumber(form.weightOz, clearBlankValues),
     lengthIn: optionalNumber(form.lengthIn, clearBlankValues),
     widthIn: optionalNumber(form.widthIn, clearBlankValues),

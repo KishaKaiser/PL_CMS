@@ -288,7 +288,7 @@ export class StoreService {
     }
 
     const products = await this.prisma.product.findMany({
-      where: { isActive: true },
+      where: { isActive: true, hiddenFromShop: false },
       orderBy: { updatedAt: 'desc' },
       include: { featuredMedia: true, categories: true, tags: true },
     });
