@@ -72,6 +72,11 @@ export class CreateProductDto {
   @IsBoolean()
   isActive?: boolean;
 
+  /** Leave the product out of the shop and its lists and filters; it can still be bought with its direct link. */
+  @IsOptional()
+  @IsBoolean()
+  hiddenFromShop?: boolean;
+
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -191,6 +196,11 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /** Leave the product out of the shop and its lists and filters; it can still be bought with its direct link. */
+  @IsOptional()
+  @IsBoolean()
+  hiddenFromShop?: boolean;
 
   @IsOptional()
   @IsNumber()

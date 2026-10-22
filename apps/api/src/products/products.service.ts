@@ -19,7 +19,8 @@ export class ProductsService {
 
   async findActive() {
     const products = await this.prisma.product.findMany({
-      where: { isActive: true },
+      // Hidden products (such as the wallet credit product) are left out of the shop, its filters and every list built from this.
+      where: { isActive: true, hiddenFromShop: false },
       orderBy: { createdAt: 'desc' },
       include: activeProductInclude,
     });
@@ -215,6 +216,7 @@ function createProductData(dto: CreateProductDto): Prisma.ProductCreateInput {
     currency: dto.currency ?? 'USD',
     minutesPack: dto.minutesPack,
     isActive: dto.isActive ?? true,
+    hiddenFromShop: dto.hiddenFromShop ?? false,
     weightOz: dto.weightOz ?? null,
     lengthIn: dto.lengthIn ?? null,
     widthIn: dto.widthIn ?? null,
@@ -250,6 +252,7 @@ function updateProductData(dto: UpdateProductDto): Prisma.ProductUpdateInput {
     ...(dto.currency !== undefined ? { currency: dto.currency } : {}),
     ...(dto.minutesPack !== undefined ? { minutesPack: dto.minutesPack } : {}),
     ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+    ...(dto.hiddenFromShop !== undefined ? { hiddenFromShop: dto.hiddenFromShop } : {}),
     ...(dto.weightOz !== undefined ? { weightOz: dto.weightOz } : {}),
     ...(dto.lengthIn !== undefined ? { lengthIn: dto.lengthIn } : {}),
     ...(dto.widthIn !== undefined ? { widthIn: dto.widthIn } : {}),

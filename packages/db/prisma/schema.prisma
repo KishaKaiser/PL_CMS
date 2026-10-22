@@ -971,6 +971,9 @@ model Product {
   saleEndsAt   DateTime?
   currency    String   @default("USD")
   isActive    Boolean  @default(true)
+  // Left out of the shop, product lists, filters, search and the Google feed, but still there: it can be bought with its direct
+  // link and by features that use it (like the wallet credit product behind Add Funds).
+  hiddenFromShop Boolean @default(false)
   minutesPack Int      @default(0)
   weightOz     Decimal?
   lengthIn     Decimal?

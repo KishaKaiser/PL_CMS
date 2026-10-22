@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MediaAsset } from '../admin/media-library';
+import { AccordionBlockView, ButtonBlockView, buttonAlign, buttonWidth, getAccordionItems } from './block-views';
 import { PublicSliderEmbed, type CmsSlider } from './public-slider-embed';
 
 export type BuilderBlockType =
@@ -26,7 +27,8 @@ export type BuilderBlockType =
   | 'product-grid'
   | 'product-categories'
   | 'product-tags'
-  | 'blog-posts';
+  | 'blog-posts'
+  | 'accordion';
 
 export type ResponsiveMode = 'desktop' | 'tablet' | 'mobile';
 
@@ -148,6 +150,7 @@ export const DEFAULT_THEME_PREVIEW_STYLES: ThemePreviewStyles = {
 export const defaultWidgets: BuilderWidget[] = [
   { type: 'heading', label: 'Heading', category: 'content', enabled: true },
   { type: 'text', label: 'Text', category: 'content', enabled: true },
+  { type: 'accordion', label: 'Accordion', category: 'content', enabled: true },
   { type: 'image', label: 'Image', category: 'media', enabled: true },
   { type: 'image-slider', label: 'Saved Slider / Video', category: 'media', enabled: true },
   { type: 'video', label: 'Video Embed', category: 'media', enabled: true },
@@ -183,7 +186,24 @@ export function createBlock(type: BuilderBlockType, widget?: BuilderWidget): Bui
   if (type === 'image') return { id, type, props: { mediaId: '', src: '', alt: '', width: 100, height: 320, objectFit: 'cover', align: 'center', borderRadius: 8 } };
   if (type === 'image-slider') return { id, type, props: { mode: 'saved-slider', sliderId: '', sliderSlug: '', sliderTitle: '', videoUrl: '', height: 420, displayWidth: 'content' } };
   if (type === 'video') return { id, type, props: { url: '', aspectRatio: '16 / 9' } };
-  if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#' } };
+  if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#', align: 'left', width: 'auto' } };
+  if (type === 'accordion') {
+    return {
+      id,
+      type,
+      props: {
+        title: '',
+        singleOpen: true,
+        openFirst: false,
+        style: 'boxed',
+        items: [
+          { id: createId('item'), title: 'First question', body: '<p>Write the answer here.</p>' },
+          { id: createId('item'), title: 'Second question', body: '<p>Write the answer here.</p>' },
+          { id: createId('item'), title: 'Third question', body: '<p>Write the answer here.</p>' },
+        ],
+      },
+    };
+  }
   if (type === 'spacer') return { id, type, props: { height: 48, showGuide: false } };
   if (type === 'icon') return { id, type, props: { iconClass: 'fa-solid fa-star', label: 'Icon label', size: 36, color: '#6f21b6' } };
   if (type === 'announcement-bar') return { id, type, props: { text: 'Free shipping on all domestic orders over $35', background: '#6f21b6', color: '#ffffff' } };
@@ -573,7 +593,10 @@ export function PreviewBlock({
     ) : <div className="mb-4 rounded bg-gray-100 p-12 text-center text-sm text-gray-500">Image</div>;
   }
   if (block.type === 'button') {
-    return <a href={String(block.props.href ?? '#')} className="mb-4 inline-block rounded px-4 py-2 text-white" style={{ backgroundColor: theme.primaryColor }}>{String(block.props.label ?? 'Button')}</a>;
+    return <ButtonBlockView block={block} color={theme.primaryColor} />;
+  }
+  if (block.type === 'accordion') {
+    return <AccordionBlockView block={block} accent={theme.primaryColor} />;
   }
   if (block.type === 'spacer') {
     const height = Math.min(400, Math.max(4, Number(block.props.height ?? 48)));
@@ -962,6 +985,72 @@ export function MediaSlidePicker({
   );
 }
 
+/** Edit an accordion: its heading, how it opens, and its items (add, remove and reorder them). */
+function AccordionInspector({ block, onChange }: { block: BuilderBlock; onChange: (props: Record<string, unknown>) => void }) {
+  const items = getAccordionItems(block);
+  const input = 'mt-1 w-full rounded border px-3 py-2 text-sm';
+  const update = (index: number, patch: Record<string, unknown>) => onChange({ items: items.map((item, i) => (i === index ? { ...item, ...patch } : item)) });
+  const move = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= items.length) return;
+    const next = [...items];
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange({ items: next });
+  };
+  return (
+    <div className="space-y-3">
+      <label className="block text-sm font-medium text-gray-700">
+        Heading above the accordion (optional)
+        <input value={String(block.props.title ?? '')} onChange={(event) => onChange({ title: event.target.value })} className={input} />
+      </label>
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" checked={block.props.singleOpen !== false} onChange={(event) => onChange({ singleOpen: event.target.checked })} />
+        Only one open at a time
+      </label>
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" checked={block.props.openFirst === true} onChange={(event) => onChange({ openFirst: event.target.checked })} />
+        Start with the first one open
+      </label>
+      <label className="block text-sm font-medium text-gray-700">
+        Style
+        <select value={block.props.style === 'lines' ? 'lines' : 'boxed'} onChange={(event) => onChange({ style: event.target.value })} className={input}>
+          <option value="boxed">Boxed</option>
+          <option value="lines">Simple lines</option>
+        </select>
+      </label>
+      <div className="space-y-3">
+        {items.map((item, index) => (
+          <div key={item.id} className="rounded border bg-gray-50 p-3">
+            <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <span>Item {index + 1}</span>
+              <span className="flex gap-1">
+                <button type="button" onClick={() => move(index, -1)} disabled={index === 0} className="rounded border bg-white px-2 py-0.5 disabled:opacity-40" aria-label="Move up">↑</button>
+                <button type="button" onClick={() => move(index, 1)} disabled={index === items.length - 1} className="rounded border bg-white px-2 py-0.5 disabled:opacity-40" aria-label="Move down">↓</button>
+                <button type="button" onClick={() => onChange({ items: items.filter((_, i) => i !== index) })} className="rounded border border-red-200 bg-white px-2 py-0.5 text-red-700" aria-label="Remove item">Remove</button>
+              </span>
+            </div>
+            <label className="block text-sm font-medium text-gray-700">
+              Title
+              <input value={item.title} onChange={(event) => update(index, { title: event.target.value })} className={input} />
+            </label>
+            <label className="mt-2 block text-sm font-medium text-gray-700">
+              Content (text or HTML)
+              <textarea value={item.body} rows={5} onChange={(event) => update(index, { body: event.target.value })} className={input} />
+            </label>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange({ items: [...items, { id: createId('item'), title: 'New question', body: '<p>Write the answer here.</p>' }] })}
+        className="w-full rounded border border-indigo-300 bg-white px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+      >
+        Add item
+      </button>
+    </div>
+  );
+}
+
 export function BlockEditor({
   block,
   onChange,
@@ -1074,8 +1163,27 @@ export function BlockEditor({
         </>
       )}
       {block.type === 'button' && (
-        <label className="block text-sm font-medium text-gray-700">Link<input value={href} onChange={(event) => onChange({ href: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+        <>
+          <label className="block text-sm font-medium text-gray-700">Link<input value={href} onChange={(event) => onChange({ href: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
+          <label className="block text-sm font-medium text-gray-700">
+            Button position
+            <select value={buttonAlign(block.props.align)} onChange={(event) => onChange({ align: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+              <option value="left">Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select>
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            Button width
+            <select value={buttonWidth(block.props.width)} onChange={(event) => onChange({ width: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+              <option value="auto">Fit the text</option>
+              <option value="full">Full width</option>
+            </select>
+          </label>
+          <p className="text-xs text-gray-500">The text is always centered inside the button.</p>
+        </>
       )}
+      {block.type === 'accordion' && <AccordionInspector block={block} onChange={onChange} />}
       {block.type === 'icon' && (
         <>
           <label className="block text-sm font-medium text-gray-700">Font Awesome Class<input value={String(block.props.iconClass ?? 'fa-solid fa-star')} onChange={(event) => onChange({ iconClass: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
