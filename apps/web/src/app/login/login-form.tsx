@@ -37,6 +37,7 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const signedOutForInactivity = searchParams.get('expired') === '1';
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -86,6 +87,12 @@ export function LoginForm() {
               </h1>
               <p className="mt-3 text-sm text-gray-500">Sign in to continue your journey</p>
             </div>
+
+            {signedOutForInactivity && !error && (
+              <div role="status" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                You were signed out because you were inactive for a while. Please sign in again to carry on.
+              </div>
+            )}
 
             {error && (
               <div

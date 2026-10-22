@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { SessionGuard } from '../../components/session-guard';
 
 const NAV_GROUPS = [
   {
@@ -72,7 +73,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   if (isFullScreenEditor) {
-    return <main className="min-h-screen bg-gray-100">{children}</main>;
+    return (
+      <main className="min-h-screen bg-gray-100">
+        {children}
+        <SessionGuard />
+      </main>
+    );
   }
 
   return (
@@ -131,6 +137,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
       <main className="flex-1 overflow-auto bg-gray-50">{children}</main>
+      <SessionGuard />
     </div>
   );
 }
