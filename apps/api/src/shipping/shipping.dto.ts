@@ -77,6 +77,11 @@ export class QuoteItemDto {
   @IsInt()
   @Min(1)
   heightIn?: number;
+
+  /** A custom candle: its type, so its weight can be looked up. */
+  @IsOptional()
+  @IsString()
+  customTypeId?: string;
 }
 
 export class GetShippingQuoteDto {

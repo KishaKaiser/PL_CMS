@@ -12,6 +12,8 @@ import { PaypalService } from './paypal.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { StoreService } from '../store/store.service';
 import { AstrologyReportsService } from '../astrology/astrology-reports.service';
+import { CandlesService, ResolvedCandle } from '../candles/candles.service';
+import { Prisma } from '@pl-cms/db';
 
 @Injectable()
 export class CheckoutService {
@@ -23,11 +25,24 @@ export class CheckoutService {
     private readonly config: ConfigService,
     private readonly store: StoreService,
     private readonly astrologyReports: AstrologyReportsService,
+    private readonly candles: CandlesService,
   ) {}
 
   /** Build and persist an Order row; returns it with items. */
   private async buildOrder(userId: string, dto: CreateCheckoutDto) {
-    const productIds = dto.items.map((i) => i.productId);
+    // A custom candle line is a hidden product plus what the customer chose. The server decides the product and
+    // the price: nothing the browser says about either is trusted, and no stock is reserved for it (made to order).
+    const customPricing = new Map<number, ResolvedCandle>();
+    let items = dto.items;
+    if (items.some((item) => item.custom)) {
+      const customProductId = await this.candles.ensureCustomProductId();
+      items = items.map((item) => (item.custom ? { ...item, productId: customProductId, variantId: undefined } : item));
+      for (const [index, item] of items.entries()) {
+        if (item.custom) customPricing.set(index, await this.candles.resolveSelection(item.custom));
+      }
+    }
+
+    const productIds = items.map((i) => i.productId);
     const uniqueProductIds = [...new Set(productIds)];
     const products = await this.prisma.product.findMany({
       where: { id: { in: uniqueProductIds }, isActive: true },
@@ -48,7 +63,7 @@ export class CheckoutService {
     }
 
     // Validate variants exist and are active
-    const variantIds = dto.items.map((i) => i.variantId).filter(Boolean) as string[];
+    const variantIds = items.map((i) => i.variantId).filter(Boolean) as string[];
     const variants =
       variantIds.length > 0
         ? await this.prisma.productVariant.findMany({
@@ -58,7 +73,7 @@ export class CheckoutService {
         : [];
     const variantMap = new Map(variants.map((v) => [v.id, v]));
 
-    for (const item of dto.items) {
+    for (const item of items) {
       if (!item.variantId) continue;
       if (!variantMap.has(item.variantId)) {
         throw new BadRequestException(
@@ -68,10 +83,10 @@ export class CheckoutService {
     }
 
     const productMap = new Map(products.map((p) => [p.id, p]));
-    const itemSubtotalBeforeTx = dto.items.reduce((sum, item) => {
+    const itemSubtotalBeforeTx = items.reduce((sum, item, index) => {
       const product = productMap.get(item.productId)!;
       const variant = item.variantId ? variantMap.get(item.variantId) : undefined;
-      const unitPrice = variant?.priceOverride ?? getEffectiveProductPrice(product);
+      const unitPrice = customPricing.get(index)?.unitPrice ?? variant?.priceOverride ?? getEffectiveProductPrice(product);
       return sum.add(unitPrice.mul(item.quantity));
     }, new Decimal(0));
 
@@ -115,15 +130,17 @@ export class CheckoutService {
 
     const totalAmount = Decimal.max(new Decimal(0), taxableSubtotal.add(taxDecimal).add(shippingDecimal));
 
-    const orderItems = dto.items.map((item) => {
+    const orderItems = items.map((item, index) => {
       const product = productMap.get(item.productId)!;
       const variant = item.variantId ? variantMap.get(item.variantId) : undefined;
-      const unitPrice = variant?.priceOverride ?? getEffectiveProductPrice(product);
+      const custom = customPricing.get(index);
+      const unitPrice = custom?.unitPrice ?? variant?.priceOverride ?? getEffectiveProductPrice(product);
       return {
         productId: item.productId,
         variantId: item.variantId ?? null,
         quantity: item.quantity,
         unitPrice,
+        ...(custom ? { customization: custom.snapshot as Prisma.InputJsonObject } : {}),
       };
     });
 
@@ -131,7 +148,7 @@ export class CheckoutService {
     const order = await this.prisma.$transaction(async (tx) => {
       // Re-validate and reserve stock inside transaction to reduce race conditions.
       // The UPDATE is atomic: it only increments reserved if sufficient stock exists.
-      for (const item of dto.items) {
+      for (const item of items) {
         if (!item.variantId) continue;
         const count = await tx.$executeRaw`
           UPDATE inventory

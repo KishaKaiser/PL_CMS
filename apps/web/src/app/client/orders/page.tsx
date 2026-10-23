@@ -25,6 +25,8 @@ interface OrderItem {
   unitPrice: number;
   product: Product;
   variant?: Variant | null;
+  /** A custom candle: what the customer chose. */
+  customization?: { summary?: string } | null;
 }
 
 interface Shipment {
@@ -217,6 +219,9 @@ export default function ClientOrdersPage() {
                             {item.product.name}
                             {item.variant && (
                               <span className="ml-1 text-gray-400">({item.variant.color})</span>
+                            )}
+                            {item.customization?.summary && (
+                              <span className="ml-1 text-gray-500">({item.customization.summary})</span>
                             )}
                             {' × '}
                             {item.quantity}

@@ -269,7 +269,9 @@ type OrderExportRecord = Prisma.OrderGetPayload<{
 }>;
 
 function renderItem(item: OrderExportRecord['items'][number], baseUrl: string) {
-  const variantName = item.variant ? ` - ${item.variant.color}` : '';
+  // A custom candle is named by what the customer chose (type, colors, height, herbs).
+  const customSummary = (item.customization as { summary?: unknown } | null)?.summary;
+  const variantName = typeof customSummary === 'string' ? ` - ${customSummary}` : item.variant ? ` - ${item.variant.color}` : '';
   return [
     '<Item>',
     xmlCdata('SKU', item.variant?.sku ?? item.product.id),

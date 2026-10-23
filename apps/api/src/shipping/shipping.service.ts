@@ -393,6 +393,13 @@ export class ShippingService {
       : [];
     const productMap = new Map(products.map((product) => [product.id, product]));
 
+    // A custom candle weighs what its candle type says.
+    const customTypeIds = Array.from(new Set(items.map((item) => item.customTypeId).filter((id): id is string => !!id)));
+    const customTypes = customTypeIds.length > 0
+      ? await this.prisma.candleType.findMany({ where: { id: { in: customTypeIds } }, select: { id: true, weightOz: true } })
+      : [];
+    const customWeights = new Map(customTypes.map((type) => [type.id, type.weightOz]));
+
     let weightOz = 0;
     let maxLength = 0;
     let maxWidth = 0;
@@ -401,7 +408,8 @@ export class ShippingService {
 
     for (const item of items) {
       const product = productMap.get(item.productId);
-      const itemWeight = Number(product?.weightOz ?? item.weightOz ?? DEFAULT_ITEM_WEIGHT_OZ);
+      const customWeight = item.customTypeId ? customWeights.get(item.customTypeId) : undefined;
+      const itemWeight = Number(customWeight ?? product?.weightOz ?? item.weightOz ?? DEFAULT_ITEM_WEIGHT_OZ);
       weightOz += Math.max(1, itemWeight) * item.quantity;
 
       const length = Number(product?.lengthIn ?? item.lengthIn ?? 0);

@@ -39,6 +39,8 @@ interface OrderItem {
   unitPrice: number;
   product: Product;
   variant?: Variant | null;
+  /** A custom candle: what the customer chose. */
+  customization?: { summary?: string } | null;
 }
 
 interface Payment {
@@ -357,6 +359,7 @@ export default function AdminOrderDetailPage() {
                   <tr key={item.id} className="border-b last:border-0">
                     <td className="py-2">
                       <div className="font-medium">{item.product.name}</div>
+                      {item.customization?.summary && <div className="text-sm font-medium text-purple-700">{item.customization.summary}</div>}
                       <div className="text-xs text-gray-400">{item.product.type}</div>
                     </td>
                     <td className="py-2">
