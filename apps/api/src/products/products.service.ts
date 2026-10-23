@@ -1,14 +1,35 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@pl-cms/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto, CreateProductReviewDto, UpdateProductDto } from './products.dto';
 import { normalizeSlug, sanitizeCmsHtml } from '../admin/admin-content/cms-content.util';
 import { downloadRemoteImageToMedia } from '../admin/admin-media/media-import.util';
-import { serializeMediaAsset } from '../admin/admin-media/media.util';
+import { isPdfMimeType, serializeMediaAsset } from '../admin/admin-media/media.util';
+import { RESERVED_PRODUCT_SLUGS, uniqueProductSlug } from './product-slug';
+
+const MAX_REDIRECT_DEPTH = 5;
 
 @Injectable()
-export class ProductsService {
+export class ProductsService implements OnModuleInit {
+  private readonly logger = new Logger(ProductsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Products that predate web addresses get one (from their name) the first time the API starts with this feature. */
+  async onModuleInit() {
+    try {
+      const missing = await this.prisma.product.findMany({
+        where: { slug: null },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, name: true },
+      });
+      for (const product of missing) {
+        await this.prisma.product.update({ where: { id: product.id }, data: { slug: await uniqueProductSlug(this.prisma, product.name) } });
+      }
+    } catch (error) {
+      this.logger.warn(`Could not give products their web addresses: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
   findAll() {
     return this.prisma.product.findMany({
@@ -36,20 +57,117 @@ export class ProductsService {
     return applyEffectiveSalePrice(serializeProduct(product));
   }
 
-  create(dto: CreateProductDto) {
-    return this.prisma.product.create({
-      data: createProductData(dto),
+  /**
+   * The product behind a shop address: its slug, its id (older links), or a slug it used to have. The caller compares the
+   * product's own slug with what was asked for and redirects when they differ, so every old address leads to the current one.
+   */
+  async findByKey(key: string) {
+    const direct = await this.prisma.product.findFirst({
+      where: { OR: [{ slug: key }, { id: key }] },
       include: productInclude,
-    }).then(serializeProduct);
+    });
+    if (direct) return applyEffectiveSalePrice(serializeProduct(direct));
+
+    const visited = new Set([key]);
+    let current = key;
+    for (let depth = 0; depth < MAX_REDIRECT_DEPTH; depth += 1) {
+      const redirect = await this.prisma.slugRedirect.findUnique({
+        where: { contentType_sourceSlug: { contentType: 'PRODUCT', sourceSlug: current } },
+        select: { targetSlug: true },
+      });
+      if (!redirect || visited.has(redirect.targetSlug)) break;
+      const target = await this.prisma.product.findUnique({ where: { slug: redirect.targetSlug }, include: productInclude });
+      if (target) return applyEffectiveSalePrice(serializeProduct(target));
+      visited.add(redirect.targetSlug);
+      current = redirect.targetSlug;
+    }
+    throw new NotFoundException(`Product ${key} not found`);
+  }
+
+  async create(dto: CreateProductDto) {
+    const slug = await this.resolveSlugForCreate(dto);
+    await this.assertPdfMedia(dto.instructionsMediaId);
+    const product = await this.prisma.product.create({
+      data: createProductData(dto, slug),
+      include: productInclude,
+    });
+    // An address that used to redirect somewhere else now belongs to this product.
+    await this.prisma.slugRedirect.deleteMany({ where: { contentType: 'PRODUCT', sourceSlug: slug } });
+    return serializeProduct(product);
   }
 
   async update(id: string, dto: UpdateProductDto) {
     await this.findOne(id);
-    return this.prisma.product.update({
-      where: { id },
-      data: updateProductData(dto),
-      include: productInclude,
-    }).then(serializeProduct);
+    await this.assertPdfMedia(dto.instructionsMediaId);
+    const existing = await this.prisma.product.findUnique({ where: { id }, select: { slug: true, name: true } });
+    const nextSlug = await this.resolveSlugForUpdate(id, existing?.slug ?? null, existing?.name ?? '', dto);
+
+    return this.prisma.$transaction(async (tx) => {
+      if (nextSlug && nextSlug !== existing?.slug) {
+        await tx.slugRedirect.deleteMany({ where: { contentType: 'PRODUCT', sourceSlug: nextSlug } });
+      }
+
+      const product = await tx.product.update({
+        where: { id },
+        data: { ...updateProductData(dto), ...(nextSlug ? { slug: nextSlug } : {}) },
+        include: productInclude,
+      });
+
+      // Keep links people have shared (and search engines have saved) working when the address changes.
+      const oldSlug = existing?.slug;
+      if (nextSlug && oldSlug && nextSlug !== oldSlug) {
+        await tx.slugRedirect.upsert({
+          where: { contentType_sourceSlug: { contentType: 'PRODUCT', sourceSlug: oldSlug } },
+          update: { targetSlug: nextSlug },
+          create: { contentType: 'PRODUCT', sourceSlug: oldSlug, targetSlug: nextSlug },
+        });
+        await tx.slugRedirect.updateMany({
+          where: { contentType: 'PRODUCT', targetSlug: oldSlug, sourceSlug: { not: oldSlug } },
+          data: { targetSlug: nextSlug },
+        });
+      }
+      return serializeProduct(product);
+    });
+  }
+
+  /** The address for a new product: the one the admin typed (checked), or one built from the name. */
+  private async resolveSlugForCreate(dto: CreateProductDto) {
+    const typed = dto.slug?.trim() ? normalizeSlug(dto.slug) : '';
+    if (!typed) return uniqueProductSlug(this.prisma, dto.name);
+    await this.assertSlugAvailable(typed);
+    return typed;
+  }
+
+  /**
+   * The address after an edit: unchanged unless the admin typed a different one. Clearing it builds a new one from the name,
+   * and a product that never had one gets one now. Returns undefined when nothing changes.
+   */
+  private async resolveSlugForUpdate(id: string, current: string | null, name: string, dto: UpdateProductDto) {
+    if (dto.slug !== undefined) {
+      const typed = dto.slug.trim() ? normalizeSlug(dto.slug) : '';
+      if (!typed) return uniqueProductSlug(this.prisma, dto.name ?? name, id);
+      if (typed === current) return undefined;
+      await this.assertSlugAvailable(typed, id);
+      return typed;
+    }
+    if (!current) return uniqueProductSlug(this.prisma, dto.name ?? name, id);
+    return undefined;
+  }
+
+  private async assertSlugAvailable(slug: string, excludeId?: string) {
+    if (RESERVED_PRODUCT_SLUGS.has(slug)) throw new BadRequestException(`"${slug}" is used by the shop itself. Choose another web address.`);
+    const taken = await this.prisma.product.findFirst({
+      where: { slug, ...(excludeId ? { id: { not: excludeId } } : {}) },
+      select: { id: true },
+    });
+    if (taken) throw new ConflictException(`The web address "${slug}" is already used by another product.`);
+  }
+
+  /** The instructions must be a PDF from the media library. */
+  private async assertPdfMedia(mediaId: string | null | undefined) {
+    if (!mediaId) return;
+    const asset = await this.prisma.mediaAsset.findUnique({ where: { id: mediaId }, select: { mimeType: true } });
+    if (!asset || !isPdfMimeType(asset.mimeType)) throw new BadRequestException('Choose a PDF from the media library for the instructions.');
   }
 
   async remove(id: string) {
@@ -99,7 +217,7 @@ export class ProductsService {
           featuredMediaId: downloadedMedia?.id ?? null,
           categoryIds,
           tagIds,
-        }),
+        }, await uniqueProductSlug(this.prisma, name)),
       });
       results.push({ name, status: 'created' });
     }
@@ -178,6 +296,7 @@ export class ProductsService {
 const productInclude = {
   variants: { include: { inventory: true }, orderBy: { createdAt: 'asc' as const } },
   featuredMedia: true,
+  instructionsMedia: true,
   categories: { orderBy: { name: 'asc' as const } },
   tags: { orderBy: { name: 'asc' as const } },
   _count: { select: { orderItems: true } },
@@ -200,10 +319,13 @@ const reviewSelect = {
   user: { select: { id: true, username: true, name: true } },
 } as const;
 
-function createProductData(dto: CreateProductDto): Prisma.ProductCreateInput {
+function createProductData(dto: CreateProductDto, slug: string): Prisma.ProductCreateInput {
   const regularPrice = dto.regularPrice ?? dto.price;
   return {
     name: dto.name,
+    slug,
+    metaTitle: normalizeMetaField(dto.metaTitle),
+    metaDescription: normalizeMetaField(dto.metaDescription),
     type: dto.type ?? 'DIGITAL',
     digitalDelivery: dto.digitalDelivery ?? 'NONE',
     description: dto.description ? sanitizeCmsHtml(dto.description) : null,
@@ -228,6 +350,7 @@ function createProductData(dto: CreateProductDto): Prisma.ProductCreateInput {
     featuredMedia: dto.featuredMediaId
       ? { connect: { id: dto.featuredMediaId } }
       : undefined,
+    instructionsMedia: dto.instructionsMediaId ? { connect: { id: dto.instructionsMediaId } } : undefined,
     categories: dto.categoryIds ? { connect: dto.categoryIds.map((id) => ({ id })) } : undefined,
     tags: dto.tagIds ? { connect: dto.tagIds.map((id) => ({ id })) } : undefined,
   };
@@ -236,6 +359,8 @@ function createProductData(dto: CreateProductDto): Prisma.ProductCreateInput {
 function updateProductData(dto: UpdateProductDto): Prisma.ProductUpdateInput {
   return {
     ...(dto.name !== undefined ? { name: dto.name } : {}),
+    ...(dto.metaTitle !== undefined ? { metaTitle: normalizeMetaField(dto.metaTitle) } : {}),
+    ...(dto.metaDescription !== undefined ? { metaDescription: normalizeMetaField(dto.metaDescription) } : {}),
     ...(dto.type !== undefined ? { type: dto.type } : {}),
     ...(dto.digitalDelivery !== undefined ? { digitalDelivery: dto.digitalDelivery } : {}),
     ...(dto.description !== undefined ? { description: dto.description ? sanitizeCmsHtml(dto.description) : null } : {}),
@@ -268,11 +393,20 @@ function updateProductData(dto: UpdateProductDto): Prisma.ProductUpdateInput {
             : { disconnect: true },
         }
       : {}),
+    ...(dto.instructionsMediaId !== undefined
+      ? { instructionsMedia: dto.instructionsMediaId ? { connect: { id: dto.instructionsMediaId } } : { disconnect: true } }
+      : {}),
     ...(dto.categoryIds !== undefined
       ? { categories: { set: dto.categoryIds.map((id) => ({ id })) } }
       : {}),
     ...(dto.tagIds !== undefined ? { tags: { set: dto.tagIds.map((id) => ({ id })) } } : {}),
   };
+}
+
+/** Search engine fields: trimmed, and empty means "use the default". */
+function normalizeMetaField(value?: string | null) {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed || null;
 }
 
 type TaxonomyKind = 'category' | 'tag';
@@ -353,6 +487,16 @@ function serializeProduct<
       createdAt: Date;
       updatedAt: Date;
     } | null;
+    instructionsMedia: {
+      id: string;
+      originalName: string;
+      title: string;
+      altText: string | null;
+      mimeType: string;
+      sizeBytes: number;
+      createdAt: Date;
+      updatedAt: Date;
+    } | null;
   },
 >(product: T) {
   return {
@@ -360,5 +504,6 @@ function serializeProduct<
     orderCount: product._count?.orderItems ?? 0,
     _count: undefined,
     featuredMedia: product.featuredMedia ? serializeMediaAsset(product.featuredMedia) : null,
+    instructionsMedia: product.instructionsMedia ? serializeMediaAsset(product.instructionsMedia) : null,
   };
 }

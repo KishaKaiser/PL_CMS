@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   Max,
   IsIn,
@@ -118,6 +119,28 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   imageUrl?: string | null;
+
+  /** The product's web address (/shop/<slug>). Built from the name when left out. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  slug?: string;
+
+  /** What search engines show as the title and description; the name and short description are used when empty. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  metaTitle?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(400)
+  metaDescription?: string | null;
+
+  /** A PDF from the media library (such as the instructions), linked from the product page. */
+  @IsOptional()
+  @IsString()
+  instructionsMediaId?: string | null;
 
   @IsOptional()
   @IsString()
@@ -243,6 +266,28 @@ export class UpdateProductDto {
   @IsOptional()
   @IsString()
   imageUrl?: string | null;
+
+  /** The product's web address (/shop/<slug>). Built from the name when left out. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  slug?: string;
+
+  /** What search engines show as the title and description; the name and short description are used when empty. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  metaTitle?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(400)
+  metaDescription?: string | null;
+
+  /** A PDF from the media library (such as the instructions), linked from the product page. */
+  @IsOptional()
+  @IsString()
+  instructionsMediaId?: string | null;
 
   @IsOptional()
   @IsString()

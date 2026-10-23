@@ -7,6 +7,7 @@ import { addToCart } from '../../lib/cart';
 interface Product {
   id: string;
   name: string;
+  slug?: string | null;
   type?: 'PHYSICAL' | 'DIGITAL' | 'MINUTE_PACK';
   digitalDelivery?: 'NONE' | 'ASTROLOGY_REPORT';
   shortDescription?: string | null;
@@ -44,11 +45,11 @@ export function ProductGrid({ products }: Props) {
             key={product.id}
             role="link"
             tabIndex={0}
-            onClick={() => router.push(`/shop/${product.id}`)}
+            onClick={() => router.push(`/shop/${product.slug || product.id}`)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                router.push(`/shop/${product.id}`);
+                router.push(`/shop/${product.slug || product.id}`);
               }
             }}
             className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-purple-500"

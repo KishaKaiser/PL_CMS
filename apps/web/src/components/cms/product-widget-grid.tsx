@@ -6,6 +6,7 @@ import { addToCart } from '../../lib/cart';
 
 export interface ProductWidgetItem {
   id: string;
+  slug?: string | null;
   name: string;
   price: string | number;
   regularPrice?: string | number | null;
@@ -47,7 +48,7 @@ export function ProductWidgetGrid({ products, primaryColor = '#6f21b6' }: Props)
             key={product.id}
             className="group flex h-full flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
-            <Link href={`/shop/${product.id}`} className="block aspect-[4/3] bg-gray-100">
+            <Link href={`/shop/${product.slug || product.id}`} className="block aspect-[4/3] bg-gray-100">
               {product.imageSrc ? (
                 <img
                   src={product.imageSrc}
@@ -59,7 +60,7 @@ export function ProductWidgetGrid({ products, primaryColor = '#6f21b6' }: Props)
               )}
             </Link>
             <div className="flex flex-1 flex-col p-5">
-              <Link href={`/shop/${product.id}`} className="text-lg font-semibold text-gray-950 hover:underline" style={{ textDecorationColor: primaryColor }}>
+              <Link href={`/shop/${product.slug || product.id}`} className="text-lg font-semibold text-gray-950 hover:underline" style={{ textDecorationColor: primaryColor }}>
                 {product.name}
               </Link>
               <div className="mt-3">

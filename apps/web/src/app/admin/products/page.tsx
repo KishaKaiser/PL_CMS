@@ -30,11 +30,16 @@ interface MediaAsset {
   originalName: string;
   url: string;
   isImage: boolean;
+  mimeType?: string;
 }
 
 interface Product {
   id: string;
   name: string;
+  slug?: string | null;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  instructionsMediaId?: string | null;
   type: 'PHYSICAL' | 'DIGITAL' | 'MINUTE_PACK';
   digitalDelivery?: 'NONE' | 'ASTROLOGY_REPORT';
   description?: string | null;
@@ -83,6 +88,10 @@ const emptyProductForm = {
   stockQuantity: '0',
   stockStatus: 'IN_STOCK',
   featuredMediaId: '',
+  instructionsMediaId: '',
+  slug: '',
+  metaTitle: '',
+  metaDescription: '',
   categoryIds: [] as string[],
   tagIds: [] as string[],
 };
@@ -123,6 +132,11 @@ export default function AdminProductsPage() {
 
   const imageMedia = useMemo(
     () => mediaAssets.filter((asset) => asset.isImage),
+    [mediaAssets],
+  );
+
+  const pdfMedia = useMemo(
+    () => mediaAssets.filter((asset) => asset.mimeType === 'application/pdf'),
     [mediaAssets],
   );
 
@@ -209,6 +223,10 @@ export default function AdminProductsPage() {
       stockQuantity: String(product.stockQuantity ?? 0),
       stockStatus: product.stockStatus ?? 'IN_STOCK',
       featuredMediaId: product.featuredMediaId ?? '',
+      instructionsMediaId: product.instructionsMediaId ?? '',
+      slug: product.slug ?? '',
+      metaTitle: product.metaTitle ?? '',
+      metaDescription: product.metaDescription ?? '',
       categoryIds: product.categories.map((category) => category.id),
       tagIds: product.tags.map((tag) => tag.id),
     });
@@ -537,6 +555,23 @@ export default function AdminProductsPage() {
               required
               className="md:col-span-2"
             />
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Web address
+                <div className="mt-1 flex items-center rounded border focus-within:ring-2 focus-within:ring-indigo-200">
+                  <span className="shrink-0 border-r bg-gray-50 px-3 py-2 text-sm text-gray-500">/shop/</span>
+                  <input
+                    value={form.slug}
+                    onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
+                    placeholder={editingProductId ? '' : 'built from the name'}
+                    className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"
+                  />
+                </div>
+              </label>
+              <p className="mt-1 text-xs text-gray-500">
+                Leave it blank and it is built from the product name. If you change it, the old address keeps working and sends people to the new one.
+              </p>
+            </div>
             <label className="block text-sm font-medium text-gray-700">
               Product Type
               <select
@@ -598,6 +633,16 @@ export default function AdminProductsPage() {
                 className="mt-1 w-full rounded border px-3 py-2 text-sm"
               />
             </label>
+
+            <SeoFields
+              name={form.name}
+              slug={form.slug}
+              shortDescription={form.shortDescription}
+              description={form.description}
+              metaTitle={form.metaTitle}
+              metaDescription={form.metaDescription}
+              onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+            />
 
             <TextInput
               label="Regular Price"
@@ -724,6 +769,25 @@ export default function AdminProductsPage() {
               )}
             </label>
 
+            <label className="block text-sm font-medium text-gray-700 md:col-span-2">
+              Instructions PDF (shown as a link on the product page)
+              <select
+                value={form.instructionsMediaId}
+                onChange={(event) => setForm((current) => ({ ...current, instructionsMediaId: event.target.value }))}
+                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              >
+                <option value="">No instructions</option>
+                {pdfMedia.map((asset) => (
+                  <option key={asset.id} value={asset.id}>
+                    {asset.title || asset.originalName}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs font-normal text-gray-500">
+                {pdfMedia.length === 0 ? 'No PDFs yet. Upload one in the Media Library, then reload this page.' : 'Upload more PDFs in the Media Library, then reload this page.'}
+              </span>
+            </label>
+
             <TaxonomyChooser
               label="Product Categories"
               items={categories}
@@ -832,6 +896,8 @@ export default function AdminProductsPage() {
                           <span>{product.variants.length} variant{product.variants.length === 1 ? '' : 's'}</span>
                           {!product.isActive && <span className="text-red-600">Inactive</span>}
                           {product.hiddenFromShop && <span className="rounded bg-amber-100 px-1.5 text-amber-800">Hidden from shop</span>}
+                          {product.slug && <span className="font-mono">/shop/{product.slug}</span>}
+                          {product.instructionsMediaId && <span className="rounded bg-sky-100 px-1.5 text-sky-800">Instructions PDF</span>}
                         </div>
                       </div>
                     </div>
@@ -944,6 +1010,11 @@ function buildProductPayload(form: typeof emptyProductForm, clearBlankValues: bo
     stockQuantity: Math.max(0, parseInt(form.stockQuantity || '0', 10)),
     stockStatus: form.stockStatus,
     featuredMediaId: optionalString(form.featuredMediaId, clearBlankValues),
+    instructionsMediaId: optionalString(form.instructionsMediaId, clearBlankValues),
+    // Blank on a new product builds the address from the name; blank on an existing one rebuilds it from the name.
+    slug: clearBlankValues ? form.slug.trim() : form.slug.trim() || undefined,
+    metaTitle: optionalString(form.metaTitle.trim(), clearBlankValues),
+    metaDescription: optionalString(form.metaDescription.trim(), clearBlankValues),
     categoryIds: form.categoryIds,
     tagIds: form.tagIds,
   };
@@ -1118,6 +1189,69 @@ function toDatetimeLocal(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return date.toISOString().slice(0, 16);
+}
+
+/** The title and description search engines show for the product, with a preview of how the listing will look. */
+function SeoFields({
+  name,
+  slug,
+  shortDescription,
+  description,
+  metaTitle,
+  metaDescription,
+  onChange,
+}: {
+  name: string;
+  slug: string;
+  shortDescription: string;
+  description: string;
+  metaTitle: string;
+  metaDescription: string;
+  onChange: (patch: { metaTitle?: string; metaDescription?: string }) => void;
+}) {
+  const plain = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  const fallbackDescription = plain(shortDescription) || plain(description) || (name ? `Shop ${name}` : '');
+  const shownTitle = metaTitle.trim() || name || 'Product name';
+  const shownDescription = (metaDescription.trim() || fallbackDescription).slice(0, 160);
+  const counter = (value: string, limit: number) => (
+    <span className={`text-xs font-normal ${value.length > limit ? 'text-amber-600' : 'text-gray-500'}`}>
+      {value.length} / {limit}
+    </span>
+  );
+  return (
+    <fieldset className="space-y-3 rounded border border-gray-200 bg-gray-50 p-4 md:col-span-2">
+      <legend className="px-1 text-sm font-semibold text-gray-800">Search engine listing (SEO)</legend>
+      <label className="block text-sm font-medium text-gray-700">
+        <span className="flex items-center justify-between">
+          Page title {counter(metaTitle, 60)}
+        </span>
+        <input
+          value={metaTitle}
+          onChange={(event) => onChange({ metaTitle: event.target.value })}
+          placeholder={name || 'Uses the product name when left blank'}
+          className="mt-1 w-full rounded border px-3 py-2 text-sm"
+        />
+      </label>
+      <label className="block text-sm font-medium text-gray-700">
+        <span className="flex items-center justify-between">
+          Description {counter(metaDescription, 160)}
+        </span>
+        <textarea
+          value={metaDescription}
+          onChange={(event) => onChange({ metaDescription: event.target.value })}
+          rows={2}
+          placeholder="Uses the short description when left blank"
+          className="mt-1 w-full rounded border px-3 py-2 text-sm"
+        />
+      </label>
+      <div className="rounded border bg-white p-3">
+        <p className="text-xs uppercase tracking-wide text-gray-400">Preview</p>
+        <p className="mt-1 truncate text-lg text-blue-700">{shownTitle}</p>
+        <p className="truncate text-xs text-green-700">/shop/{slug.trim() || 'your-product-name'}</p>
+        <p className="mt-0.5 text-sm text-gray-600">{shownDescription || 'No description yet.'}</p>
+      </div>
+    </fieldset>
+  );
 }
 
 function TextInput({

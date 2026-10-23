@@ -8,10 +8,22 @@ import {
   getPublicSiteConfig,
   getTags,
 } from '../lib/public-cms';
+import { fetchApi } from '../lib/server-api';
 import { toAbsoluteUrl } from '../lib/seo';
 
+/** The shop's products that are on sale (the API leaves out inactive and hidden ones). */
+async function getShopProducts(): Promise<Array<{ id: string; slug?: string | null; updatedAt?: string }>> {
+  try {
+    const res = await fetchApi('/products', { cache: 'no-store' });
+    if (!res.ok) return [];
+    return (await res.json()) as Array<{ id: string; slug?: string | null; updatedAt?: string }>;
+  } catch {
+    return [];
+  }
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [siteConfig, pages, posts, categories, tags, authors, archives] = await Promise.all([
+  const [siteConfig, pages, posts, categories, tags, authors, archives, products] = await Promise.all([
     getPublicSiteConfig(),
     getPublishedPages(),
     getPublishedPosts(),
@@ -19,6 +31,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     getTags(),
     getAuthors(),
     getArchives(),
+    getShopProducts(),
   ]);
 
   const entries = new Map<string, MetadataRoute.Sitemap[number]>();
@@ -35,6 +48,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   addEntry('/', { changeFrequency: 'daily', priority: 1 });
   addEntry(siteConfig.postsPage.path, { changeFrequency: 'daily', priority: 0.9 });
   addEntry('/blog/archive', { changeFrequency: 'weekly', priority: 0.5 });
+
+  addEntry('/shop', { changeFrequency: 'daily', priority: 0.9 });
+
+  for (const product of products) {
+    addEntry(`/shop/${product.slug || product.id}`, {
+      lastModified: product.updatedAt,
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    });
+  }
 
   for (const page of pages) {
     if (page.slug === 'home' || page.slug === siteConfig.postsPage.pageSlug) continue;

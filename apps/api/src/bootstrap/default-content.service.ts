@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { uniqueProductSlug } from '../products/product-slug';
 import type { Prisma } from '@pl-cms/db';
 import {
   DEFAULT_SITE_EXTENSION_POINTS,
@@ -262,6 +263,7 @@ export class DefaultContentService implements OnModuleInit {
     await this.prisma.product.create({
       data: {
         name: 'Astrology Chart',
+        slug: await uniqueProductSlug(this.prisma, 'Astrology Chart'),
         type: 'DIGITAL',
         digitalDelivery: 'ASTROLOGY_REPORT',
         description: '<p>Personal astrology chart report generated from customer birth details.</p>',
