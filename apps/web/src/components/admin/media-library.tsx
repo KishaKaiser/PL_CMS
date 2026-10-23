@@ -233,7 +233,7 @@ export function MediaLibrary({
             />
           </div>
 
-          <p className="text-xs text-gray-500">Supports JPG, PNG, GIF, WEBP, and PDF files up to 8 MB.</p>
+          <p className="text-xs text-gray-500">Supports JPG, PNG, GIF, and WEBP images up to 8 MB, and PDF files up to 25 MB. Show a PDF on a page with the PDF Viewer block in the page editor.</p>
         </form>
 
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -316,6 +316,16 @@ export function MediaLibrary({
                         >
                           {asset.isImage ? 'Insert image' : 'Insert link'}
                         </button>
+                      )}
+                      {!asset.isImage && (
+                        <a
+                          href={asset.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          View
+                        </a>
                       )}
                       <button
                         type="button"

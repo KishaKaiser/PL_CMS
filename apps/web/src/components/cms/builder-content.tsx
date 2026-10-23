@@ -9,7 +9,7 @@ import { AnnouncementBar, StorefrontHeader } from './storefront-header';
 import { fetchApi } from '../../lib/server-api';
 import { getAccountLinkFromToken } from '../../lib/account-routing';
 import { ProductWidgetGrid, type ProductWidgetItem } from './product-widget-grid';
-import { AccordionBlockView, ButtonBlockView } from './block-views';
+import { AccordionBlockView, ButtonBlockView, PdfBlockView } from './block-views';
 
 interface Product {
   id: string;
@@ -141,6 +141,9 @@ function BuilderBlockView({ block, storeData, accountLink, menus }: { block: Bui
   }
   if (block.type === 'accordion') {
     return <AccordionBlockView block={block} accent={storeData.primaryColor} />;
+  }
+  if (block.type === 'pdf') {
+    return <PdfBlockView block={block} />;
   }
   if (block.type === 'spacer') {
     return <div aria-hidden="true" style={{ height: `${Math.min(400, Math.max(4, Number(block.props.height ?? 48)))}px` }} />;

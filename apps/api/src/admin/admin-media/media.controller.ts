@@ -9,10 +9,11 @@ import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { ListMediaDto, UploadMediaDto } from './media.dto';
 import {
   ALLOWED_MEDIA_MIME_TYPES,
-  MAX_MEDIA_FILE_SIZE,
+  MAX_PDF_FILE_SIZE,
   generateMediaStorageKey,
   getMediaUploadDirectory,
   isImageMimeType,
+  isPdfMimeType,
   sanitizeDownloadName,
 } from './media.util';
 import { MediaService } from './media.service';
@@ -54,8 +55,9 @@ export class MediaController {
         }
         callback(null, true);
       },
+      // The most any file may be; images are held to their own lower limit when the upload is saved.
       limits: {
-        fileSize: MAX_MEDIA_FILE_SIZE,
+        fileSize: MAX_PDF_FILE_SIZE,
       },
     }),
   )
@@ -71,9 +73,11 @@ export class MediaController {
   }
 
   @Get(':id/file')
-  async getFile(@Param('id') id: string, @Res({ passthrough: true }) res: Response) {
+  async getFile(@Param('id') id: string, @Query('download') download: string | undefined, @Res({ passthrough: true }) res: Response) {
     const { asset, stream } = await this.mediaService.openFileStream(id);
-    const disposition = isImageMimeType(asset.mimeType) ? 'inline' : 'attachment';
+    // Pictures and PDFs open in the browser (so a PDF can be shown on a page); "?download=1" saves the file instead.
+    const showInBrowser = isImageMimeType(asset.mimeType) || isPdfMimeType(asset.mimeType);
+    const disposition = showInBrowser && !download ? 'inline' : 'attachment';
     const filename = sanitizeDownloadName(asset.originalName);
 
     res.setHeader('Content-Type', asset.mimeType);
