@@ -8,7 +8,10 @@ const DOCUMENT_MIME_TYPES = ['application/pdf'] as const;
 const STORAGE_KEY_PATTERN = /^[0-9a-f-]{36}(?:\.[a-z0-9]+)?$/i;
 
 export const ALLOWED_MEDIA_MIME_TYPES = new Set<string>([...IMAGE_MIME_TYPES, ...DOCUMENT_MIME_TYPES]);
+/** The size limit for images (and what the other image uploads use). */
 export const MAX_MEDIA_FILE_SIZE = 8 * 1024 * 1024;
+/** Documents such as product instructions are often bigger than a picture. */
+export const MAX_PDF_FILE_SIZE = 25 * 1024 * 1024;
 export const MEDIA_ASSET_SELECT = {
   id: true,
   originalName: true,
@@ -22,6 +25,10 @@ export const MEDIA_ASSET_SELECT = {
 
 export function isImageMimeType(mimeType: string) {
   return IMAGE_MIME_TYPES.includes(mimeType as (typeof IMAGE_MIME_TYPES)[number]);
+}
+
+export function isPdfMimeType(mimeType: string) {
+  return mimeType === 'application/pdf';
 }
 
 export function getMediaUploadDirectory() {

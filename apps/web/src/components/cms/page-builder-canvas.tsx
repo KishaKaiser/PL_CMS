@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MediaAsset } from '../admin/media-library';
-import { AccordionBlockView, ButtonBlockView, buttonAlign, buttonWidth, getAccordionItems } from './block-views';
+import { AccordionBlockView, ButtonBlockView, PdfBlockView, buttonAlign, buttonWidth, getAccordionItems } from './block-views';
 import { PublicSliderEmbed, type CmsSlider } from './public-slider-embed';
 
 export type BuilderBlockType =
@@ -28,7 +28,8 @@ export type BuilderBlockType =
   | 'product-categories'
   | 'product-tags'
   | 'blog-posts'
-  | 'accordion';
+  | 'accordion'
+  | 'pdf';
 
 export type ResponsiveMode = 'desktop' | 'tablet' | 'mobile';
 
@@ -152,6 +153,7 @@ export const defaultWidgets: BuilderWidget[] = [
   { type: 'text', label: 'Text', category: 'content', enabled: true },
   { type: 'accordion', label: 'Accordion', category: 'content', enabled: true },
   { type: 'image', label: 'Image', category: 'media', enabled: true },
+  { type: 'pdf', label: 'PDF Viewer', category: 'media', enabled: true },
   { type: 'image-slider', label: 'Saved Slider / Video', category: 'media', enabled: true },
   { type: 'video', label: 'Video Embed', category: 'media', enabled: true },
   { type: 'button', label: 'Button', category: 'content', enabled: true },
@@ -184,6 +186,7 @@ export function createBlock(type: BuilderBlockType, widget?: BuilderWidget): Bui
   if (type === 'heading') return { id, type, props: { text: 'New Heading', level: 2, fontSize: 36, align: 'left' } };
   if (type === 'text') return { id, type, props: { text: 'New text block.', fontSize: 16, align: 'left' } };
   if (type === 'image') return { id, type, props: { mediaId: '', src: '', alt: '', width: 100, height: 320, objectFit: 'cover', align: 'center', borderRadius: 8 } };
+  if (type === 'pdf') return { id, type, props: { mediaId: '', src: '', title: '', height: 720, showDownload: true } };
   if (type === 'image-slider') return { id, type, props: { mode: 'saved-slider', sliderId: '', sliderSlug: '', sliderTitle: '', videoUrl: '', height: 420, displayWidth: 'content' } };
   if (type === 'video') return { id, type, props: { url: '', aspectRatio: '16 / 9' } };
   if (type === 'button') return { id, type, props: { label: 'Learn More', href: '#', align: 'left', width: 'auto' } };
@@ -598,6 +601,9 @@ export function PreviewBlock({
   if (block.type === 'accordion') {
     return <AccordionBlockView block={block} accent={theme.primaryColor} />;
   }
+  if (block.type === 'pdf') {
+    return <PdfBlockView block={block} placeholder />;
+  }
   if (block.type === 'spacer') {
     const height = Math.min(400, Math.max(4, Number(block.props.height ?? 48)));
     return block.props.showGuide ? <div className="mb-4 rounded border border-dashed border-gray-300 bg-gray-50 text-center text-xs text-gray-400" style={{ height, lineHeight: `${height}px` }}>Space</div> : <div style={{ height }} />;
@@ -985,6 +991,52 @@ export function MediaSlidePicker({
   );
 }
 
+/** Choose which PDF from the media library a PDF viewer block shows, and how it is presented. */
+function PdfInspector({ block, pdfAssets, onChange }: { block: BuilderBlock; pdfAssets: MediaAsset[]; onChange: (props: Record<string, unknown>) => void }) {
+  const mediaId = String(block.props.mediaId ?? '');
+  const src = String(block.props.src ?? '');
+  const selected = pdfAssets.find((asset) => asset.id === mediaId) ?? pdfAssets.find((asset) => asset.url === src) ?? null;
+  return (
+    <div className="space-y-3">
+      <label className="block text-sm font-medium text-gray-700">
+        PDF
+        <select
+          value={selected?.id ?? ''}
+          onChange={(event) => {
+            const asset = pdfAssets.find((item) => item.id === event.target.value);
+            onChange(asset ? { mediaId: asset.id, src: asset.url, ...(String(block.props.title ?? '').trim() ? {} : { title: asset.title }) } : { mediaId: '', src: '' });
+          }}
+          className="mt-1 w-full rounded border px-3 py-2 text-sm"
+        >
+          <option value="">Choose from media library</option>
+          {pdfAssets.map((asset) => (
+            <option key={asset.id} value={asset.id}>
+              {asset.title || asset.originalName}
+            </option>
+          ))}
+        </select>
+      </label>
+      {selected ? (
+        <p className="truncate rounded border bg-gray-50 px-3 py-2 text-xs text-gray-600">{selected.originalName}</p>
+      ) : (
+        <p className="rounded border border-dashed px-3 py-2 text-xs text-gray-500">Upload PDFs in the Media Library, then reload this page to choose one here.</p>
+      )}
+      <label className="block text-sm font-medium text-gray-700">
+        Heading above the PDF (optional)
+        <input value={String(block.props.title ?? '')} onChange={(event) => onChange({ title: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+      </label>
+      <label className="block text-sm font-medium text-gray-700">
+        Viewer height (px)
+        <input type="number" min={300} max={1400} step={20} value={Number(block.props.height ?? 720)} onChange={(event) => onChange({ height: Number(event.target.value) })} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+      </label>
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" checked={block.props.showDownload !== false} onChange={(event) => onChange({ showDownload: event.target.checked })} />
+        Show a Download button
+      </label>
+    </div>
+  );
+}
+
 /** Edit an accordion: its heading, how it opens, and its items (add, remove and reorder them). */
 function AccordionInspector({ block, onChange }: { block: BuilderBlock; onChange: (props: Record<string, unknown>) => void }) {
   const items = getAccordionItems(block);
@@ -1058,6 +1110,7 @@ export function BlockEditor({
   onRemove,
   theme,
   mediaAssets,
+  pdfAssets,
   savedForms,
   savedSliders,
   savedMenus,
@@ -1069,6 +1122,7 @@ export function BlockEditor({
   onRemove: () => void;
   theme: ThemePreviewStyles;
   mediaAssets: MediaAsset[];
+  pdfAssets: MediaAsset[];
   savedForms: SavedFormLite[];
   savedSliders: SavedSliderLite[];
   savedMenus: SavedMenuLite[];
@@ -1184,6 +1238,7 @@ export function BlockEditor({
         </>
       )}
       {block.type === 'accordion' && <AccordionInspector block={block} onChange={onChange} />}
+      {block.type === 'pdf' && <PdfInspector block={block} pdfAssets={pdfAssets} onChange={onChange} />}
       {block.type === 'icon' && (
         <>
           <label className="block text-sm font-medium text-gray-700">Font Awesome Class<input value={String(block.props.iconClass ?? 'fa-solid fa-star')} onChange={(event) => onChange({ iconClass: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>
@@ -1492,6 +1547,7 @@ export function PageDesignCanvas({
 }) {
   const [widgets, setWidgets] = useState<BuilderWidget[]>(defaultWidgets);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
+  const [pdfAssets, setPdfAssets] = useState<MediaAsset[]>([]);
   const [storePreview, setStorePreview] = useState<StorePreviewData>(emptyStorePreview);
   const [components, setComponents] = useState<GlobalComponentLite[]>([]);
   const [savedForms, setSavedForms] = useState<SavedFormLite[]>([]);
@@ -1519,7 +1575,11 @@ export function PageDesignCanvas({
         const nextWidgets = (await widgetsRes.json()) as BuilderWidget[];
         setWidgets(nextWidgets.length > 0 ? mergeWidgets(nextWidgets) : defaultWidgets);
       }
-      if (mediaRes.ok) setMediaAssets(((await mediaRes.json()) as MediaAsset[]).filter((asset) => asset.isImage));
+      if (mediaRes.ok) {
+        const assets = (await mediaRes.json()) as MediaAsset[];
+        setMediaAssets(assets.filter((asset) => asset.isImage));
+        setPdfAssets(assets.filter((asset) => asset.mimeType === 'application/pdf'));
+      }
       const [products, categories, tags, posts] = await Promise.all([
         productsRes.ok ? productsRes.json() : [],
         categoriesRes.ok ? categoriesRes.json() : [],
@@ -1697,6 +1757,7 @@ export function PageDesignCanvas({
             onRemove={() => removeBlock(selectedBlock.id)}
             theme={theme}
             mediaAssets={mediaAssets}
+            pdfAssets={pdfAssets}
             savedForms={savedForms}
             savedSliders={savedSliders}
             savedMenus={savedMenus}

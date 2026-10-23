@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { PdfViewer } from './pdf-viewer';
 
 /**
  * Page-builder blocks that are drawn the same way on the live page and in the editor's preview, so what you see while
@@ -100,6 +101,24 @@ export function AccordionBlockView({ block, accent }: { block: BlockLike; accent
           </details>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── PDF viewer ───────────────────────────────────────────────────────────────────────
+
+/** A PDF from the media library, shown in the page with a page-by-page viewer. Nothing is drawn on the live page until one is chosen. */
+export function PdfBlockView({ block, placeholder = false }: { block: BlockLike; placeholder?: boolean }) {
+  const src = String(block.props.src ?? '');
+  const title = String(block.props.title ?? '').trim();
+  const height = Math.min(1400, Math.max(300, Number(block.props.height ?? 720) || 720));
+  if (!src) {
+    return placeholder ? <div className="mb-4 rounded bg-gray-100 p-12 text-center text-sm text-gray-500">PDF viewer: choose a PDF</div> : null;
+  }
+  return (
+    <div className="mb-6">
+      {title && <h2 className="mb-3 text-2xl font-bold">{title}</h2>}
+      <PdfViewer src={src} title={title} height={height} showDownload={block.props.showDownload !== false} />
     </div>
   );
 }
