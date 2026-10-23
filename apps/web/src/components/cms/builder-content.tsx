@@ -13,6 +13,7 @@ import { AccordionBlockView, ButtonBlockView, PdfBlockView } from './block-views
 
 interface Product {
   id: string;
+  slug?: string | null;
   name: string;
   description?: string;
   price: string | number;
@@ -402,6 +403,7 @@ function getProductWidgetItems(products: Product[], block: BuilderBlock): Produc
 
   return filtered.slice(0, limit).map((product) => ({
     id: product.id,
+    slug: product.slug,
     name: product.name,
     price: product.price,
     regularPrice: product.regularPrice,

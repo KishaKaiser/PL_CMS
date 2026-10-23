@@ -68,6 +68,7 @@ enum ProductType {
 enum RedirectContentType {
   PAGE
   POST
+  PRODUCT
 }
 
 // ──────────────────────────────────────────────
@@ -656,6 +657,7 @@ model MediaAsset {
   featuredByPages Page[] @relation("PageFeaturedMedia")
   featuredByPosts Post[] @relation("PostFeaturedMedia")
   featuredByProducts Product[] @relation("ProductFeaturedMedia")
+  instructionsForProducts Product[] @relation("ProductInstructionsMedia")
   themeAssets ThemeAsset[] @relation("ThemeAssetMedia")
 
   @@map("media_assets")
@@ -961,6 +963,11 @@ model AuditLog {
 model Product {
   id          String   @id @default(cuid())
   name        String
+  // The product's web address (/shop/<slug>), built from its name. Filled in for products that predate it when the API starts.
+  slug        String?  @unique
+  // What search engines show for the product; the name and short description are used when these are empty.
+  metaTitle   String?
+  metaDescription String?
   type        ProductType @default(DIGITAL)
   description String?
   shortDescription String?
@@ -984,6 +991,8 @@ model Product {
   stockStatus  String   @default("IN_STOCK")
   imageUrl     String?
   featuredMediaId String?
+  // A PDF from the media library (such as the product instructions), linked from the product page.
+  instructionsMediaId String?
   digitalDelivery String @default("NONE")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -991,12 +1000,14 @@ model Product {
   orderItems OrderItem[]
   variants   ProductVariant[]
   featuredMedia MediaAsset? @relation("ProductFeaturedMedia", fields: [featuredMediaId], references: [id], onDelete: SetNull)
+  instructionsMedia MediaAsset? @relation("ProductInstructionsMedia", fields: [instructionsMediaId], references: [id], onDelete: SetNull)
   categories Category[]
   tags       Tag[]
   reviews    ProductReview[]
   astrologyReports AstrologyReport[]
 
   @@index([featuredMediaId])
+  @@index([instructionsMediaId])
   @@map("products")
 }
 

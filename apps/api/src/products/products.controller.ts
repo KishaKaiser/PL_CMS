@@ -35,9 +35,10 @@ export class ProductsController {
     return this.productsService.findAll();
   }
 
+  /** Public: a product by its web address (slug), id, or an address it used to have. */
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.productsService.findOne(id);
+  findOne(@Param('id') key: string) {
+    return this.productsService.findByKey(key);
   }
 
   @Get(':id/reviews')

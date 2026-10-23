@@ -11,6 +11,7 @@ import { ProductGrid } from './ProductGrid';
 interface Product {
   id: string;
   name: string;
+  slug?: string | null;
   shortDescription?: string | null;
   description?: string;
   imageUrl?: string | null;

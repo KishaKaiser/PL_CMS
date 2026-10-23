@@ -98,7 +98,7 @@ const DEFAULT_GOOGLE_MERCHANT_SETTINGS: GoogleMerchantSettingsDto = {
   defaultBrand: 'The Psychic Link',
   defaultGoogleCategory: 'Religious & Ceremonial > Spiritual & Esoteric Items',
   defaultCondition: 'new',
-  productUrlPattern: '/shop/{{id}}',
+  productUrlPattern: '/shop/{{slug}}',
 };
 
 @Injectable()
@@ -296,7 +296,9 @@ export class StoreService {
     const items = products.map((product) => {
       const price = effectivePrice(product);
       const imageUrl = product.featuredMedia ? buildMediaAssetUrl(product.featuredMedia.id) : product.imageUrl || '';
-      const productUrl = absoluteUrl(siteUrl, settings.productUrlPattern.replaceAll('{{id}}', product.id));
+      // A saved pattern from before product web addresses existed (/shop/{{id}}) now uses the name-based address.
+      const pattern = settings.productUrlPattern === '/shop/{{id}}' ? '/shop/{{slug}}' : settings.productUrlPattern;
+      const productUrl = absoluteUrl(siteUrl, pattern.replaceAll('{{slug}}', product.slug ?? product.id).replaceAll('{{id}}', product.id));
       const category = product.categories[0]?.name || settings.defaultGoogleCategory;
       return [
         '<item>',

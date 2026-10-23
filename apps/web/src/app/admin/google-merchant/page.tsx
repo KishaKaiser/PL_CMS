@@ -19,7 +19,7 @@ const defaultSettings: GoogleMerchantSettings = {
   defaultBrand: 'The Psychic Link',
   defaultGoogleCategory: 'Religious & Ceremonial > Spiritual & Esoteric Items',
   defaultCondition: 'new',
-  productUrlPattern: '/shop/{{id}}',
+  productUrlPattern: '/shop/{{slug}}',
 };
 
 export default function AdminGoogleMerchantPage() {
@@ -131,6 +131,9 @@ export default function AdminGoogleMerchantPage() {
                   onChange={(event) => setSettings((current) => ({ ...current, productUrlPattern: event.target.value }))}
                   className="mt-1 w-full rounded border px-3 py-2 font-mono text-sm"
                 />
+                <span className="mt-1 block text-xs font-normal text-gray-500">
+                  {'{{slug}}'} is the product's web address (built from its name); {'{{id}}'} is its id. The old {'/shop/{{id}}'} pattern is sent as the name-based address.
+                </span>
               </label>
               <label className="block text-sm font-medium text-gray-700">
                 Default Condition

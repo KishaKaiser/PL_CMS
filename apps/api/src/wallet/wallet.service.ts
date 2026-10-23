@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { uniqueProductSlug } from '../products/product-slug';
 import { PrismaService } from '../prisma/prisma.service';
 
 const MAX_TRANSACTIONS_LIMIT = 100;
@@ -59,6 +60,7 @@ export class WalletService implements OnModuleInit {
     return this.prisma.product.create({
       data: {
         name: WALLET_CREDIT_PRODUCT_NAME,
+        slug: await uniqueProductSlug(this.prisma, WALLET_CREDIT_PRODUCT_NAME),
         type: 'MINUTE_PACK',
         description: 'Pre-paid balance for phone readings. Each unit adds $1.00 to your wallet.',
         price: 1,
