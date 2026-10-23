@@ -32,6 +32,7 @@ const NAV_GROUPS = [
     items: [
       { href: '/admin/products', label: 'Products' },
       { href: '/admin/orders', label: 'Orders' },
+      { href: '/admin/candles', label: 'Custom Candles' },
       { href: '/admin/astrology', label: 'Astrology' },
       { href: '/admin/store', label: 'Store Settings' },
       { href: '/admin/settings/shipping', label: 'Shipping' },

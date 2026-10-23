@@ -29,7 +29,8 @@ export type BuilderBlockType =
   | 'product-tags'
   | 'blog-posts'
   | 'accordion'
-  | 'pdf';
+  | 'pdf'
+  | 'candle-builder';
 
 export type ResponsiveMode = 'desktop' | 'tablet' | 'mobile';
 
@@ -154,6 +155,7 @@ export const defaultWidgets: BuilderWidget[] = [
   { type: 'accordion', label: 'Accordion', category: 'content', enabled: true },
   { type: 'image', label: 'Image', category: 'media', enabled: true },
   { type: 'pdf', label: 'PDF Viewer', category: 'media', enabled: true },
+  { type: 'candle-builder', label: 'Custom Candle Builder', category: 'media', enabled: true },
   { type: 'image-slider', label: 'Saved Slider / Video', category: 'media', enabled: true },
   { type: 'video', label: 'Video Embed', category: 'media', enabled: true },
   { type: 'button', label: 'Button', category: 'content', enabled: true },
@@ -186,6 +188,7 @@ export function createBlock(type: BuilderBlockType, widget?: BuilderWidget): Bui
   if (type === 'heading') return { id, type, props: { text: 'New Heading', level: 2, fontSize: 36, align: 'left' } };
   if (type === 'text') return { id, type, props: { text: 'New text block.', fontSize: 16, align: 'left' } };
   if (type === 'image') return { id, type, props: { mediaId: '', src: '', alt: '', width: 100, height: 320, objectFit: 'cover', align: 'center', borderRadius: 8 } };
+  if (type === 'candle-builder') return { id, type, props: { title: 'Design Your Own Candle' } };
   if (type === 'pdf') return { id, type, props: { mediaId: '', src: '', title: '', height: 720, showDownload: true } };
   if (type === 'image-slider') return { id, type, props: { mode: 'saved-slider', sliderId: '', sliderSlug: '', sliderTitle: '', videoUrl: '', height: 420, displayWidth: 'content' } };
   if (type === 'video') return { id, type, props: { url: '', aspectRatio: '16 / 9' } };
@@ -603,6 +606,14 @@ export function PreviewBlock({
   }
   if (block.type === 'pdf') {
     return <PdfBlockView block={block} placeholder />;
+  }
+  if (block.type === 'candle-builder') {
+    return (
+      <div className="mb-4 rounded-lg border-2 border-dashed border-purple-200 bg-purple-50 p-10 text-center">
+        {String(block.props.title ?? '').trim() && <p className="mb-2 text-2xl font-bold">{String(block.props.title)}</p>}
+        <p className="text-sm text-purple-800">The custom candle designer appears here for visitors: candle, color, height and herb choices with a live picture.</p>
+      </div>
+    );
   }
   if (block.type === 'spacer') {
     const height = Math.min(400, Math.max(4, Number(block.props.height ?? 48)));
@@ -1239,6 +1250,15 @@ export function BlockEditor({
       )}
       {block.type === 'accordion' && <AccordionInspector block={block} onChange={onChange} />}
       {block.type === 'pdf' && <PdfInspector block={block} pdfAssets={pdfAssets} onChange={onChange} />}
+      {block.type === 'candle-builder' && (
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-gray-700">
+            Heading above the designer (optional)
+            <input value={String(block.props.title ?? '')} onChange={(event) => onChange({ title: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" />
+          </label>
+          <p className="text-xs text-gray-500">Candle types, colors, heights and herbs are set up under Store → Custom Candles.</p>
+        </div>
+      )}
       {block.type === 'icon' && (
         <>
           <label className="block text-sm font-medium text-gray-700">Font Awesome Class<input value={String(block.props.iconClass ?? 'fa-solid fa-star')} onChange={(event) => onChange({ iconClass: event.target.value })} className="mt-1 w-full rounded border px-3 py-2 text-sm" /></label>

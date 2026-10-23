@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ShippingAddressDto } from '../shipping/shipping.dto';
+import { CandleSelectionDto } from '../candles/candles.dto';
 
 export class CheckoutItemDto {
   @IsString()
@@ -23,6 +24,12 @@ export class CheckoutItemDto {
   @IsInt()
   @Min(1)
   quantity!: number;
+
+  /** A custom candle: what the customer chose. The server checks it and works out the price. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CandleSelectionDto)
+  custom?: CandleSelectionDto;
 }
 
 export class LifeEventFormDto {

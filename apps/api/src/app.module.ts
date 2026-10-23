@@ -28,6 +28,7 @@ import { AccountModule } from './account/account.module';
 import { DefaultContentModule } from './bootstrap/default-content.module';
 import { FormsModule } from './forms/forms.module';
 import { SlidersModule } from './sliders/sliders.module';
+import { CandlesModule } from './candles/candles.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { StoreModule } from './store/store.module';
 import { AstrologyModule } from './astrology/astrology.module';
@@ -69,6 +70,7 @@ import { IdentityModule } from './identity/identity.module';
     DefaultContentModule,
     FormsModule,
     SlidersModule,
+    CandlesModule,
     NewsletterModule,
     StoreModule,
     AstrologyModule,

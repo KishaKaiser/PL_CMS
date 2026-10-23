@@ -658,6 +658,8 @@ model MediaAsset {
   featuredByPosts Post[] @relation("PostFeaturedMedia")
   featuredByProducts Product[] @relation("ProductFeaturedMedia")
   instructionsForProducts Product[] @relation("ProductInstructionsMedia")
+  candleTypePhotos CandleType[] @relation("CandleTypePhoto")
+  candleTypeWaxMasks CandleType[] @relation("CandleTypeWaxMask")
   themeAssets ThemeAsset[] @relation("ThemeAssetMedia")
 
   @@map("media_assets")
@@ -1232,6 +1234,76 @@ model ProductVariant {
   @@map("product_variants")
 }
 
+// ──────────────────────────────────────────────
+// Custom candle builder
+// ──────────────────────────────────────────────
+
+// A kind of candle the customer can build (cat candle, glass-enclosed, pillar ...). The picture is one white photo that the
+// site tints with the chosen colors.
+model CandleType {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  basePrice    Decimal
+  photoMediaId String?
+  // Optional: a copy of the photo where the wax is white and everything else (such as the glass) is black.
+  waxMaskMediaId String?
+  allowTwoColors Boolean @default(false)
+  twoColorExtra  Decimal @default(0)
+  allowHerbs     Boolean @default(false)
+  weightOz       Decimal?
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  photo   MediaAsset? @relation("CandleTypePhoto", fields: [photoMediaId], references: [id], onDelete: SetNull)
+  waxMask MediaAsset? @relation("CandleTypeWaxMask", fields: [waxMaskMediaId], references: [id], onDelete: SetNull)
+  sizes   CandleSize[]
+
+  @@index([photoMediaId])
+  @@index([waxMaskMediaId])
+  @@map("candle_types")
+}
+
+// A height a candle type comes in (for example a pillar candle in 4, 6 and 9 inches).
+model CandleSize {
+  id            String   @id @default(cuid())
+  typeId        String
+  label         String
+  extraPrice    Decimal  @default(0)
+  // How tall the candle is drawn compared with the tallest one, in percent.
+  heightPercent Int      @default(100)
+  sortOrder     Int      @default(0)
+
+  type CandleType @relation(fields: [typeId], references: [id], onDelete: Cascade)
+
+  @@index([typeId])
+  @@map("candle_sizes")
+}
+
+model CandleColor {
+  id        String  @id @default(cuid())
+  name      String
+  hex       String
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  @@map("candle_colors")
+}
+
+model CandleHerb {
+  id        String  @id @default(cuid())
+  name      String
+  price     Decimal @default(0)
+  // The color of the specks drawn on top of the candle in the preview.
+  hex       String  @default("#4d7c3a")
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  @@map("candle_herbs")
+}
+
 model Inventory {
   id        String   @id @default(cuid())
   variantId String   @unique
@@ -1303,6 +1375,8 @@ model OrderItem {
   variantId String?
   quantity  Int      @default(1)
   unitPrice Decimal
+  // What the customer chose for a custom candle (type, colors, height, herbs and a one-line summary), kept as it was ordered.
+  customization Json?
   createdAt DateTime @default(now())
 
   order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)

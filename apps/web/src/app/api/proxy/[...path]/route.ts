@@ -39,6 +39,7 @@ const ALLOWED_PATH_PREFIXES = [
   'store',
   'astrology',
   'public',
+  'candles',
 ];
 
 type Context = { params: Promise<{ path: string[] }> };

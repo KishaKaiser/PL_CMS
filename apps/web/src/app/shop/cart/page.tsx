@@ -33,13 +33,14 @@ export default function CartPage() {
     productId: string,
     variantId: string | undefined,
     qty: number,
+    customKey?: string,
   ) => {
-    const updated = updateCartQuantity(productId, variantId, qty);
+    const updated = updateCartQuantity(productId, variantId, qty, customKey);
     setCart(updated);
   };
 
-  const handleRemove = (productId: string, variantId?: string) => {
-    const updated = removeFromCart(productId, variantId);
+  const handleRemove = (productId: string, variantId?: string, customKey?: string) => {
+    const updated = removeFromCart(productId, variantId, customKey);
     setCart(updated);
   };
 
@@ -68,11 +69,19 @@ export default function CartPage() {
           const linePrice = (item.variantPrice ?? item.productPrice) * item.quantity;
           return (
             <div
-              key={`${item.productId}:${item.variantId ?? ''}`}
+              key={`${item.productId}:${item.variantId ?? ''}:${item.custom?.key ?? ''}`}
               className="flex items-center gap-4 border-b px-6 py-4 last:border-b-0"
             >
               <div className="flex-1">
                 <p className="font-medium">{item.productName}</p>
+                {item.custom && (
+                  <p className="text-sm text-gray-500">
+                    {item.custom.swatches.map((hex, index) => (
+                      <span key={index} className="mr-1 inline-block h-4 w-4 rounded-full border align-middle" style={{ backgroundColor: hex }} />
+                    ))}
+                    {item.custom.details}
+                  </p>
+                )}
                 {item.variantColor && (
                   <p className="text-sm text-gray-500">
                     Color:{' '}
@@ -91,7 +100,7 @@ export default function CartPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() =>
-                    handleQuantityChange(item.productId, item.variantId, Math.max(1, item.quantity - 1))
+                    handleQuantityChange(item.productId, item.variantId, Math.max(1, item.quantity - 1), item.custom?.key)
                   }
                   className="flex h-7 w-7 items-center justify-center rounded border text-lg font-bold hover:bg-gray-100"
                 >
@@ -100,7 +109,7 @@ export default function CartPage() {
                 <span className="w-8 text-center text-sm">{item.quantity}</span>
                 <button
                   onClick={() =>
-                    handleQuantityChange(item.productId, item.variantId, item.quantity + 1)
+                    handleQuantityChange(item.productId, item.variantId, item.quantity + 1, item.custom?.key)
                   }
                   className="flex h-7 w-7 items-center justify-center rounded border text-lg font-bold hover:bg-gray-100"
                 >
@@ -111,7 +120,7 @@ export default function CartPage() {
               <p className="w-20 text-right font-semibold">${linePrice.toFixed(2)}</p>
 
               <button
-                onClick={() => handleRemove(item.productId, item.variantId)}
+                onClick={() => handleRemove(item.productId, item.variantId, item.custom?.key)}
                 className="ml-2 text-red-400 hover:text-red-600"
                 title="Remove"
               >

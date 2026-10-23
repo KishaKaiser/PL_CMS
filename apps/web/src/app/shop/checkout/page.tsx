@@ -120,6 +120,8 @@ interface CartItem {
   variantId?: string;
   variantColor?: string;
   quantity: number;
+  /** A custom candle: what the customer chose. */
+  custom?: StoredCartItem['custom'];
 }
 
 interface ShippingAddress {
@@ -155,6 +157,8 @@ interface PurchasedItem {
   quantity: number;
   unitPrice: number;
   variantColor?: string;
+  /** What was chosen for a custom candle. */
+  detail?: string;
 }
 
 interface CompletedOrder {
@@ -238,6 +242,7 @@ function storedToCartItem(s: StoredCartItem): CartItem {
     variantId: s.variantId,
     variantColor: s.variantColor,
     quantity: s.quantity,
+    custom: s.custom,
   };
 }
 
@@ -368,6 +373,7 @@ function createCompletedOrderSnapshot(params: {
       quantity: item.quantity,
       unitPrice: Number(item.product.price),
       variantColor: item.variantColor,
+      detail: item.custom?.details,
     })),
     subtotal: params.subtotal,
     shipping: params.shipping,
@@ -485,13 +491,16 @@ function CheckoutContent() {
           quantity: number;
           unitPrice: string | number;
           product?: { name?: string };
+          customization?: { summary?: string; typeName?: string } | null;
         }>;
       } | null) => {
         if (!order) return;
         const items = (order.items ?? []).map((item) => ({
-          name: item.product?.name ?? 'Product',
+          // A custom candle is named by its type, with what was chosen underneath.
+          name: item.customization?.typeName ? `Custom ${item.customization.typeName}` : (item.product?.name ?? 'Product'),
           quantity: item.quantity,
           unitPrice: Number(item.unitPrice),
+          detail: item.customization?.summary?.split(' · ').slice(1).join(' · ') || undefined,
         }));
         const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
         const shipping = Number(order.shippingAmount ?? 0);
@@ -585,6 +594,7 @@ function CheckoutContent() {
           items: cart.map((item) => ({
             productId: item.product.id,
             quantity: item.quantity,
+            customTypeId: item.custom?.typeId,
           })),
         }),
       });
@@ -641,6 +651,17 @@ function CheckoutContent() {
         productId: item.product.id,
         variantId: item.variantId,
         quantity: item.quantity,
+        ...(item.custom
+          ? {
+              custom: {
+                typeId: item.custom.typeId,
+                colorId: item.custom.colorId,
+                color2Id: item.custom.color2Id,
+                sizeId: item.custom.sizeId,
+                herbIds: item.custom.herbIds,
+              },
+            }
+          : {}),
       })),
       ...(requiresShipping
         ? {
@@ -1033,12 +1054,13 @@ function CheckoutContent() {
           <div className="mb-6 rounded-2xl border bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold">Order Summary</h2>
             {cart.map((item) => (
-              <div key={`${item.product.id}-${item.variantId ?? ''}`} className="flex justify-between py-2 text-sm">
+              <div key={`${item.product.id}-${item.variantId ?? ''}-${item.custom?.key ?? ''}`} className="flex justify-between py-2 text-sm">
                 <span>
                   {item.product.name}
                   {item.variantColor && (
                     <span className="ml-1 text-gray-500">({item.variantColor})</span>
-                  )}{' '}
+                  )}
+                  {item.custom && <span className="ml-1 text-gray-500">({item.custom.details})</span>}{' '}
                   <span className="text-gray-400">× {item.quantity}</span>
                 </span>
                 <span className="font-medium">
@@ -1425,6 +1447,7 @@ function OrderSuccessPanel({ order }: { order: CompletedOrder }) {
               <div>
                 <p className="font-medium text-gray-950">{item.name}</p>
                 {item.variantColor && <p className="text-sm text-gray-500">{item.variantColor}</p>}
+                {item.detail && <p className="text-sm text-gray-500">{item.detail}</p>}
                 <p className="text-sm text-gray-500">Qty {item.quantity}</p>
               </div>
               <p className="font-semibold text-gray-900">
