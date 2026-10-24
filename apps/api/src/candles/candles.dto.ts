@@ -108,6 +108,14 @@ export class SaveCandleTypeDto {
   @IsBoolean()
   allowHerbs?: boolean;
 
+  /** How far down from the top of the candle the wax starts, in percent. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  waxTopPercent?: number;
+
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

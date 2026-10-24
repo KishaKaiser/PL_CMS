@@ -15,6 +15,8 @@ export interface CandleTypeOption {
   allowTwoColors: boolean;
   twoColorExtra: number;
   allowHerbs: boolean;
+  /** How far down from the top of the candle the wax starts, in percent. */
+  waxTopPercent: number;
   weightOz: number | null;
   sizes: CandleSizeOption[];
 }
@@ -29,7 +31,6 @@ export interface CandleHerbOption {
   id: string;
   name: string;
   price: number;
-  hex: string;
 }
 
 export interface CandleConfig {

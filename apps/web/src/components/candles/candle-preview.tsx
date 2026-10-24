@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { CANDLE_STAGE_SIZE, loadCandleImage, renderCandle } from './candle-render';
 
-/** The candle picture: the type's white photo, tinted with the chosen colors, at the chosen height, with herbs on top. */
+/** The candle picture: the type's white photo, tinted with the chosen colors, at the chosen height. */
 export function CandlePreview({
   photoUrl,
   waxMaskUrl,
   color1,
   color2,
   heightPercent,
-  herbs,
+  waxTopPercent,
   label,
   emptyText = 'No picture yet',
 }: {
@@ -19,7 +19,7 @@ export function CandlePreview({
   color1?: string | null;
   color2?: string | null;
   heightPercent?: number;
-  herbs?: Array<{ id: string; hex: string }>;
+  waxTopPercent?: number;
   label: string;
   emptyText?: string;
 }) {
@@ -44,15 +44,11 @@ export function CandlePreview({
     };
   }, [photoUrl, waxMaskUrl]);
 
-  // A new herbs array arrives on every render, so the picture is redrawn when the herbs really change (herbKey), not then.
-  const herbsRef = useRef(herbs);
-  herbsRef.current = herbs;
-  const herbKey = (herbs ?? []).map((herb) => `${herb.id}:${herb.hex}`).join('|');
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !photo) return;
-    renderCandle(canvas, { photo, waxMask, color1, color2, heightPercent, herbs: herbsRef.current });
-  }, [photo, waxMask, color1, color2, heightPercent, herbKey]);
+    renderCandle(canvas, { photo, waxMask, color1, color2, heightPercent, waxTopPercent });
+  }, [photo, waxMask, color1, color2, heightPercent, waxTopPercent]);
 
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-2xl border bg-gradient-to-b from-purple-50 to-white">

@@ -88,7 +88,7 @@ export function CandleBuilder({ config }: { config: CandleConfig }) {
           color1={color1?.hex}
           color2={color2?.hex}
           heightPercent={size?.heightPercent}
-          herbs={herbs}
+          waxTopPercent={type.waxTopPercent}
           label={`${type.name}${color1 ? ` in ${color2 ? `${color1.name} and ${color2.name}` : color1.name}` : ''}`}
           emptyText="This candle does not have a picture yet."
         />
@@ -171,7 +171,6 @@ export function CandleBuilder({ config }: { config: CandleConfig }) {
                       setAdded(false);
                     }}
                   />
-                  <span aria-hidden="true" className="h-3 w-3 rounded-full border" style={{ background: herb.hex }} />
                   <span className="flex-1">{herb.name}</span>
                   {herb.price > 0 && <span className="text-xs text-gray-500">+{formatMoney(herb.price)}</span>}
                 </label>
