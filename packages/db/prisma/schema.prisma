@@ -1251,6 +1251,9 @@ model CandleType {
   allowTwoColors Boolean @default(false)
   twoColorExtra  Decimal @default(0)
   allowHerbs     Boolean @default(false)
+  // How far down from the top of the candle the wax starts, in percent: glass candles are not filled to the rim, so the
+  // color is only drawn from there down.
+  waxTopPercent  Int     @default(0)
   weightOz       Decimal?
   isActive     Boolean  @default(true)
   sortOrder    Int      @default(0)

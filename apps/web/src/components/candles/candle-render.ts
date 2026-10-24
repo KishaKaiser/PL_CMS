@@ -1,6 +1,6 @@
 /**
- * Draws a candle picture: the white photo of a candle type, tinted with the chosen color(s), at the chosen height, with specks
- * of herbs on top. Runs in the browser on a canvas, so a new color needs no new photo.
+ * Draws a candle picture: the white photo of a candle type, tinted with the chosen color(s), and at the chosen height.
+ * Runs in the browser on a canvas, so a new color needs no new photo.
  */
 
 export interface CandleRenderOptions {
@@ -14,7 +14,8 @@ export interface CandleRenderOptions {
   color2?: string | null;
   /** How tall the candle is drawn compared with the tallest one, in percent. */
   heightPercent?: number;
-  herbs?: Array<{ id: string; hex: string }>;
+  /** How far down from the top of the candle the wax starts, in percent. Color is only drawn from there down. */
+  waxTopPercent?: number;
 }
 
 export const CANDLE_STAGE_SIZE = 640;
@@ -36,26 +37,8 @@ function hexToRgb(hex: string): [number, number, number] | null {
   return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }
 
-/** A small repeatable random number generator, so the herbs sit in the same places every time the candle is drawn. */
-function seededRandom(seed: number) {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function hashText(text: string) {
-  let hash = 2166136261;
-  for (let i = 0; i < text.length; i += 1) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
-  return hash >>> 0;
-}
-
 export function renderCandle(canvas: HTMLCanvasElement, options: CandleRenderOptions) {
-  const { photo, waxMask, color1, color2, herbs = [] } = options;
+  const { photo, waxMask, color1, color2 } = options;
   const stageWidth = canvas.width;
   const stageHeight = canvas.height;
   const context = canvas.getContext('2d');
@@ -87,9 +70,7 @@ export function renderCandle(canvas: HTMLCanvasElement, options: CandleRenderOpt
 
   const rgb1 = color1 ? hexToRgb(color1) : null;
   const rgb2 = color2 ? hexToRgb(color2) : null;
-  const needsPixels = !!rgb1 || herbs.length > 0;
-
-  if (needsPixels) {
+  if (rgb1) {
     const image = workContext.getImageData(0, 0, width, height);
     const data = image.data;
 
@@ -114,23 +95,22 @@ export function renderCandle(canvas: HTMLCanvasElement, options: CandleRenderOpt
     // Where the wax starts and ends, so a two-color candle can be split in the middle of it.
     let waxTop = height;
     let waxBottom = -1;
-    let waxLeft = width;
-    let waxRight = -1;
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
         if (waxAmount((y * width + x) * 4) > 0.3) {
           if (y < waxTop) waxTop = y;
           if (y > waxBottom) waxBottom = y;
-          if (x < waxLeft) waxLeft = x;
-          if (x > waxRight) waxRight = x;
         }
       }
     }
 
-    if (rgb1 && waxBottom >= 0) {
-      const splitY = waxTop + (waxBottom - waxTop + 1) / 2;
-      const feather = Math.max(2, (waxBottom - waxTop) * 0.02);
-      for (let y = 0; y < height; y += 1) {
+    if (waxBottom >= 0) {
+      // A glass candle is not filled to the rim, so the color can start a little below the top of what the picture shows.
+      const waxTopPercent = Math.min(50, Math.max(0, options.waxTopPercent ?? 0));
+      const colorTop = waxTop + Math.round(((waxBottom - waxTop + 1) * waxTopPercent) / 100);
+      const splitY = colorTop + (waxBottom - colorTop + 1) / 2;
+      const feather = Math.max(2, (waxBottom - colorTop) * 0.02);
+      for (let y = colorTop; y < height; y += 1) {
         // Above the split the first color, below it the second, with a soft edge between.
         const mix = rgb2 ? Math.min(1, Math.max(0, (y - splitY) / (feather * 2) + 0.5)) : 0;
         const r = rgb1[0] + ((rgb2 ? rgb2[0] : rgb1[0]) - rgb1[0]) * mix;
@@ -148,29 +128,6 @@ export function renderCandle(canvas: HTMLCanvasElement, options: CandleRenderOpt
       }
     }
     workContext.putImageData(image, 0, 0);
-
-    // Herbs: small specks sitting on top of the candle.
-    if (herbs.length > 0 && waxBottom >= 0) {
-      const random = seededRandom(hashText(herbs.map((herb) => herb.id).join('|')));
-      const bandHeight = Math.max(6, (waxBottom - waxTop) * 0.07);
-      const spanLeft = waxLeft + (waxRight - waxLeft) * 0.08;
-      const spanWidth = (waxRight - waxLeft) * 0.84;
-      const count = Math.min(240, 80 * herbs.length);
-      const scale = Math.max(0.7, width / 420);
-      for (let i = 0; i < count; i += 1) {
-        const herb = herbs[i % herbs.length];
-        const x = spanLeft + random() * spanWidth;
-        const y = waxTop - 2 + random() * bandHeight;
-        const radius = (1.3 + random() * 2.4) * scale;
-        // Only onto the candle itself, not into the empty space beside a narrow top (such as a cat's ears).
-        const below = Math.min(height - 1, Math.floor(y + 3));
-        if (data[(below * width + Math.floor(x)) * 4 + 3] < 128) continue;
-        workContext.fillStyle = herb.hex;
-        workContext.beginPath();
-        workContext.ellipse(x, y, radius, radius * (0.6 + random() * 0.5), random() * Math.PI, 0, Math.PI * 2);
-        workContext.fill();
-      }
-    }
   }
 
   context.drawImage(work, left, top);

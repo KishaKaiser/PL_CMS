@@ -22,6 +22,7 @@ interface AdminType {
   allowTwoColors: boolean;
   twoColorExtra: number;
   allowHerbs: boolean;
+  waxTopPercent: number;
   weightOz: number | null;
   isActive: boolean;
   sortOrder: number;
@@ -40,7 +41,6 @@ interface AdminHerb {
   id: string;
   name: string;
   price: number;
-  hex: string;
   isActive: boolean;
   sortOrder: number;
 }
@@ -70,6 +70,7 @@ const emptyTypeForm = {
   allowTwoColors: false,
   twoColorExtra: '0',
   allowHerbs: false,
+  waxTopPercent: '0',
   weightOz: '',
   isActive: true,
   sortOrder: '0',
@@ -187,6 +188,7 @@ export default function AdminCandlesPage() {
       allowTwoColors: type.allowTwoColors,
       twoColorExtra: String(type.twoColorExtra),
       allowHerbs: type.allowHerbs,
+      waxTopPercent: String(type.waxTopPercent ?? 0),
       weightOz: type.weightOz == null ? '' : String(type.weightOz),
       isActive: type.isActive,
       sortOrder: String(type.sortOrder),
@@ -208,6 +210,7 @@ export default function AdminCandlesPage() {
       allowTwoColors: form.allowTwoColors,
       twoColorExtra: form.allowTwoColors ? Number(form.twoColorExtra || 0) : 0,
       allowHerbs: form.allowHerbs,
+      waxTopPercent: Math.min(50, Math.max(0, Math.round(Number(form.waxTopPercent || 0)))),
       weightOz: form.weightOz === '' ? null : Number(form.weightOz),
       isActive: form.isActive,
       sortOrder: Number(form.sortOrder || 0),
@@ -303,7 +306,6 @@ export default function AdminCandlesPage() {
             setForm={setForm}
             images={images}
             colors={colors}
-            herbs={herbs}
             onSubmit={saveType}
             onCancel={() => setForm(null)}
           />
@@ -347,7 +349,7 @@ export default function AdminCandlesPage() {
       <section className="rounded-lg border bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold">Herbs</h2>
         <p className="text-sm text-gray-600">
-          The herbs customers can add on top of candles that allow them. The price is added to the candle; the color is used for the specks in the picture.
+          The herbs customers can add to candles that allow them. The price is added to the candle. Herbs are not drawn on the candle in the picture; the order records which were chosen.
         </p>
         <div className="mt-4 space-y-2">
           {herbs.map((herb) => (
@@ -355,7 +357,7 @@ export default function AdminCandlesPage() {
           ))}
           <HerbRow
             key={`new-${herbs.length}`}
-            herb={{ id: '', name: '', price: 0, hex: '#4d7c3a', isActive: true, sortOrder: herbs.length }}
+            herb={{ id: '', name: '', price: 0, isActive: true, sortOrder: herbs.length }}
             onSave={(values) => run(() => request('POST', 'admin/candles/herbs', values), 'Herb added.')}
           />
         </div>
@@ -369,7 +371,6 @@ function TypeEditor({
   setForm,
   images,
   colors,
-  herbs,
   onSubmit,
   onCancel,
 }: {
@@ -377,7 +378,6 @@ function TypeEditor({
   setForm: (form: TypeForm) => void;
   images: MediaImage[];
   colors: AdminColor[];
-  herbs: AdminHerb[];
   onSubmit: (event: FormEvent) => void;
   onCancel: () => void;
 }) {
@@ -389,10 +389,8 @@ function TypeEditor({
   const [testColor1, setTestColor1] = useState('');
   const [testColor2, setTestColor2] = useState('');
   const [testSize, setTestSize] = useState('');
-  const [testHerbs, setTestHerbs] = useState(false);
   const activeColors = useMemo(() => colors.filter((color) => color.isActive), [colors]);
   const sizeToShow = form.sizes.find((size, index) => (size.id ?? `new-${index}`) === testSize);
-  const herbToShow = herbs.find((herb) => herb.isActive);
 
   function updateSize(index: number, patch: Partial<SizeForm>) {
     update({ sizes: form.sizes.map((size, i) => (i === index ? { ...size, ...patch } : size)) });
@@ -445,6 +443,13 @@ function TypeEditor({
             </select>
             <span className="mt-1 block text-xs font-normal text-gray-500">
               The same picture, the same size, with the wax painted white and everything else (such as the glass) black. Only the white part is colored.
+            </span>
+          </label>
+          <label className="block text-sm font-medium text-gray-700 sm:col-span-2">
+            Top of the wax (% down from the top of the candle)
+            <input type="number" min="0" max="50" value={form.waxTopPercent} onChange={(event) => update({ waxTopPercent: event.target.value })} className={inputClass} />
+            <span className="mt-1 block text-xs font-normal text-gray-500">
+              For glass candles that are not filled to the rim: the color starts this far down, and two colors are split between there and the bottom. Try 3 or 4 and watch the picture on the right. Leave 0 for candles without a gap.
             </span>
           </label>
         </div>
@@ -521,7 +526,7 @@ function TypeEditor({
           color1={activeColors.find((color) => color.id === testColor1)?.hex}
           color2={form.allowTwoColors ? activeColors.find((color) => color.id === testColor2)?.hex : null}
           heightPercent={sizeToShow ? Number(sizeToShow.heightPercent) || 100 : undefined}
-          herbs={form.allowHerbs && testHerbs ? [{ id: herbToShow?.id ?? 'test', hex: herbToShow?.hex ?? '#4d7c3a' }] : []}
+          waxTopPercent={Number(form.waxTopPercent) || 0}
           label="Preview of the candle"
           emptyText="Choose a photo to see it here"
         />
@@ -560,12 +565,6 @@ function TypeEditor({
                 </option>
               ))}
             </select>
-          </label>
-        )}
-        {form.allowHerbs && (
-          <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
-            <input type="checkbox" checked={testHerbs} onChange={(event) => setTestHerbs(event.target.checked)} />
-            Show herbs on top
           </label>
         )}
       </div>
@@ -616,18 +615,16 @@ function HerbRow({
   onDelete,
 }: {
   herb: AdminHerb;
-  onSave: (values: { name: string; price: number; hex: string; isActive: boolean; sortOrder: number }) => Promise<void> | void;
+  onSave: (values: { name: string; price: number; isActive: boolean; sortOrder: number }) => Promise<void> | void;
   onDelete?: () => Promise<void> | void;
 }) {
   const [name, setName] = useState(herb.name);
   const [price, setPrice] = useState(String(herb.price));
-  const [hex, setHex] = useState(herb.hex);
   const [isActive, setIsActive] = useState(herb.isActive);
   const [sortOrder, setSortOrder] = useState(String(herb.sortOrder));
   const isNew = !herb.id;
   return (
     <div className="flex flex-wrap items-center gap-3 rounded border p-2">
-      <input type="color" value={hex} onChange={(event) => setHex(event.target.value)} aria-label="Color of the specks" className="h-9 w-12 cursor-pointer rounded border" />
       <input value={name} onChange={(event) => setName(event.target.value)} placeholder={isNew ? 'New herb name' : 'Name'} aria-label="Herb name" className="min-w-0 flex-1 rounded border px-3 py-2 text-sm" />
       <label className="flex items-center gap-1 text-xs text-gray-600">
         Price $
@@ -640,7 +637,7 @@ function HerbRow({
         Order
         <input type="number" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} className="w-16 rounded border px-2 py-1 text-sm" />
       </label>
-      <button type="button" disabled={!name.trim()} onClick={() => void onSave({ name: name.trim(), price: Number(price || 0), hex, isActive, sortOrder: Number(sortOrder || 0) })} className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-40">
+      <button type="button" disabled={!name.trim()} onClick={() => void onSave({ name: name.trim(), price: Number(price || 0), isActive, sortOrder: Number(sortOrder || 0) })} className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-40">
         {isNew ? 'Add' : 'Save'}
       </button>
       {onDelete && (
