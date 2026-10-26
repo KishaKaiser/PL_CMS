@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 
 export interface SliderLayer {
   id: string;
@@ -137,33 +137,34 @@ function SliderLayerView({ layer }: { layer: SliderLayer }) {
     width: `${layer.width}%`,
     color: layer.color,
     fontSize: `${layer.fontSize}px`,
-    fontFamily: layer.fontFamily,
+    fontFamily: layer.fontFamily || undefined,
   };
 
   if (layer.type === 'button') {
     const isOutline = layer.buttonStyle === 'outline';
+    const background = isOutline ? 'transparent' : layer.background;
+    const color = isOutline ? (layer.borderColor ?? layer.color) : layer.color;
     return (
       <a
         href={layer.href || '#'}
-        className="absolute z-10 inline-flex w-fit font-semibold shadow transition"
-        style={{
-          ...style,
-          background: isOutline ? 'transparent' : layer.background,
-          borderColor: layer.borderColor ?? layer.background,
-          borderStyle: 'solid',
-          borderWidth: `${layer.borderWidth ?? (isOutline ? 2 : 0)}px`,
-          borderRadius: `${layer.borderRadius ?? 8}px`,
-          color: isOutline ? (layer.borderColor ?? layer.color) : layer.color,
-          padding: `${layer.paddingY ?? 12}px ${layer.paddingX ?? 20}px`,
-        }}
-        onMouseEnter={(event) => {
-          if (layer.hoverBackground) event.currentTarget.style.background = layer.hoverBackground;
-          if (layer.hoverColor) event.currentTarget.style.color = layer.hoverColor;
-        }}
-        onMouseLeave={(event) => {
-          event.currentTarget.style.background = isOutline ? 'transparent' : layer.background;
-          event.currentTarget.style.color = isOutline ? (layer.borderColor ?? layer.color) : layer.color;
-        }}
+        className="site-slider-button absolute z-10 inline-flex w-fit font-semibold shadow transition"
+        style={
+          {
+            ...style,
+            // A button with no font of its own uses the site's button font (the body font if that is not set either).
+            fontFamily: layer.fontFamily || 'var(--site-button-font, inherit)',
+            background,
+            borderColor: layer.borderColor ?? layer.background,
+            borderStyle: 'solid',
+            borderWidth: `${layer.borderWidth ?? (isOutline ? 2 : 0)}px`,
+            borderRadius: `${layer.borderRadius ?? 8}px`,
+            color,
+            padding: `${layer.paddingY ?? 12}px ${layer.paddingX ?? 20}px`,
+            // On hover: the button's own colors, else the site's hover colors from the Site Defaults page, else no change.
+            '--slider-hover-bg': layer.hoverBackground || `var(--site-button-hover-bg, ${background})`,
+            '--slider-hover-text': layer.hoverColor || `var(--site-button-hover-text, ${color})`,
+          } as CSSProperties
+        }
       >
         {layer.text}
       </a>

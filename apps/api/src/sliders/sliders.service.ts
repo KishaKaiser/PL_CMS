@@ -12,8 +12,17 @@ type SliderLayer = {
   y?: number;
   width?: number;
   fontSize?: number;
+  fontFamily?: string;
   color?: string;
   background?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  borderRadius?: number;
+  paddingX?: number;
+  paddingY?: number;
+  hoverBackground?: string;
+  hoverColor?: string;
+  buttonStyle?: 'solid' | 'outline';
 };
 
 type SliderSlide = {
@@ -104,6 +113,7 @@ function normalizeNullableText(value?: string | null) {
 function normalizeSettings(settings?: Record<string, unknown>) {
   return {
     height: clampNumber(settings?.height, 180, 900, 480),
+    width: settings?.width === 'wide' || settings?.width === 'full' ? settings.width : 'content',
     autoPlay: settings?.autoPlay !== false,
     slideSeconds: clampNumber(settings?.slideSeconds, 2, 30, 5),
     transition: typeof settings?.transition === 'string' ? settings.transition : 'slide',
@@ -133,9 +143,26 @@ function normalizeLayers(layers: Record<string, unknown>[]): SliderLayer[] {
     y: clampNumber(layer.y, 0, 100, 35),
     width: clampNumber(layer.width, 10, 100, 36),
     fontSize: clampNumber(layer.fontSize, 10, 96, 32),
+    // An empty font or hover color means "use the site default", so it is kept as empty rather than filled in.
+    fontFamily: normalizeFontFamily(layer.fontFamily),
     color: typeof layer.color === 'string' ? layer.color : '#ffffff',
     background: typeof layer.background === 'string' ? layer.background : '#6f21b6',
+    borderColor: typeof layer.borderColor === 'string' ? layer.borderColor : typeof layer.background === 'string' ? layer.background : '#6f21b6',
+    borderWidth: clampNumber(layer.borderWidth, 0, 12, 0),
+    borderRadius: clampNumber(layer.borderRadius, 0, 80, 8),
+    paddingX: clampNumber(layer.paddingX, 4, 80, 20),
+    paddingY: clampNumber(layer.paddingY, 4, 50, 12),
+    hoverBackground: typeof layer.hoverBackground === 'string' ? layer.hoverBackground : '',
+    hoverColor: typeof layer.hoverColor === 'string' ? layer.hoverColor : '',
+    buttonStyle: layer.buttonStyle === 'outline' ? 'outline' : 'solid',
   }));
+}
+
+/** A font-family list as the editor writes it. Only plain font names, quotes and commas are allowed. */
+function normalizeFontFamily(value: unknown) {
+  if (typeof value !== 'string') return '';
+  const font = value.trim();
+  return /^[A-Za-z0-9 ,"'_-]{1,160}$/.test(font) ? font : '';
 }
 
 function defaultSlide(): Record<string, unknown> {

@@ -24,7 +24,15 @@ export async function PublicSiteShell({ children, siteConfig, showHeader = true,
   const footerLinks = config.menus.footer;
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900" style={{ fontFamily: config.theme.fontFamily }}>
+    <div
+      className="site-shell flex min-h-screen flex-col bg-gray-50 text-gray-900"
+      style={{
+        fontFamily: config.theme.fontFamily,
+        // Only when an admin has changed them on the Site Defaults page; otherwise the classes above apply.
+        ...(config.siteDefaults.overrides.backgroundColor ? { backgroundColor: config.siteDefaults.overrides.backgroundColor } : {}),
+        ...(config.siteDefaults.overrides.textColor ? { color: config.siteDefaults.overrides.textColor } : {}),
+      }}
+    >
       <a href="#public-main-content" className="sr-only rounded px-3 py-2 focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:bg-white focus:shadow">
         Skip to content
       </a>

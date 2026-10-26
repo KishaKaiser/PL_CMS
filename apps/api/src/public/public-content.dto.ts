@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Matches,
@@ -83,6 +84,12 @@ export class PublicPostsQueryDto {
   @Min(1)
   @Max(12)
   month?: number;
+}
+
+export class SaveSiteDefaultsDto {
+  /** The site defaults an admin has changed. Anything unsafe or unknown is dropped when saving. */
+  @IsObject()
+  overrides!: Record<string, unknown>;
 }
 
 export class CreatePostCommentDto {
