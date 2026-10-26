@@ -154,7 +154,9 @@ export function resolveSiteDefaults(inherited: SiteDefaults, overrides: SiteDefa
 // written with these Tailwind colors. When a button color is chosen on the Site Defaults page they follow it.
 const BUTTON_TAGS = '.site-shell :is(a,button,input[type="submit"]):not(:disabled)';
 const BUTTON_BACKGROUND_CLASSES = ':is(.bg-purple-600,.bg-purple-700,.bg-indigo-600)';
-const BUTTON_HOVER_CLASSES = ':is(.hover\\:bg-purple-700,.hover\\:bg-purple-800,.hover\\:bg-indigo-700)';
+// A hover color applies to these buttons whether or not they had a hover color class of their own.
+const BUTTON_HOVER_CLASSES =
+  ':is(.bg-purple-600,.bg-purple-700,.bg-indigo-600,.hover\\:bg-purple-700,.hover\\:bg-purple-800,.hover\\:bg-indigo-700)';
 
 /**
  * The `:root` variables and the rules the public site is styled with: the heading font, and the button look for the
