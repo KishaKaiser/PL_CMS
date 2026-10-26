@@ -6,8 +6,10 @@ import {
   DEFAULT_SITE_MENUS,
   DEFAULT_SITE_SIDEBARS,
   DEFAULT_SITE_THEME,
+  SITE_DEFAULTS_BUILT_IN,
   buildDefaultHomepageBlocks,
   type HomepageSettings,
+  type SiteDefaultsState,
   type SiteExtensionPoints,
   type SiteHomepageBlock,
   type SiteIdentitySettings,
@@ -40,6 +42,7 @@ export interface PublicSiteConfig {
     }>;
   };
   theme: SiteThemeSettings;
+  siteDefaults: SiteDefaultsState;
   themeLayouts: {
     header: BuilderLayout | null;
     footer: BuilderLayout | null;
@@ -48,6 +51,16 @@ export interface PublicSiteConfig {
   extensionPoints: SiteExtensionPoints;
   sidebars: SiteSidebarsSettings;
 }
+
+const DEFAULT_SITE_DEFAULTS: SiteDefaultsState = (() => {
+  const inherited = {
+    ...SITE_DEFAULTS_BUILT_IN,
+    bodyFont: DEFAULT_SITE_THEME.fontFamily,
+    primaryColor: DEFAULT_SITE_THEME.primaryColor,
+    accentColor: DEFAULT_SITE_THEME.accentColor,
+  };
+  return { overrides: {}, inherited, resolved: inherited };
+})();
 
 const DEFAULT_PUBLIC_SITE_CONFIG: PublicSiteConfig = {
   identity: DEFAULT_SITE_IDENTITY,
@@ -62,6 +75,7 @@ const DEFAULT_PUBLIC_SITE_CONFIG: PublicSiteConfig = {
   },
   menus: { ...DEFAULT_SITE_MENUS, custom: [] },
   theme: { ...DEFAULT_SITE_THEME, heroPrimaryHref: '/blog' },
+  siteDefaults: DEFAULT_SITE_DEFAULTS,
   themeLayouts: {
     header: null,
     footer: null,
@@ -218,7 +232,9 @@ export async function getPublishedPages(excludeSlug?: string): Promise<PublicPag
 }
 
 export async function getPublicSiteConfig(): Promise<PublicSiteConfig> {
-  return fetchCmsJson('/public/site-config', DEFAULT_PUBLIC_SITE_CONFIG);
+  const config = await fetchCmsJson('/public/site-config', DEFAULT_PUBLIC_SITE_CONFIG);
+  // An API that has not been updated yet does not send the site defaults.
+  return config.siteDefaults ? config : { ...config, siteDefaults: DEFAULT_SITE_DEFAULTS };
 }
 
 export interface PublicHoroscope {

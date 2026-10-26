@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SITE_FONT_CHOICES, type SiteDefaults, type SiteDefaultsState } from '@pl-cms/shared';
 import type { MediaAsset } from '../../../components/admin/media-library';
 import type { CmsSlider, SliderLayer, SliderSlide } from '../../../components/cms/public-slider-embed';
 
@@ -17,16 +18,7 @@ const emptySlide: SliderSlide = {
     { id: 'layer-2', type: 'button', text: 'Learn More', href: '#', x: 12, y: 58, width: 20, fontSize: 16, color: '#ffffff', background: '#6f21b6' },
   ],
 };
-const fontLibrary = [
-  { label: 'Inter', value: 'Inter, Arial, sans-serif' },
-  { label: 'Arial', value: 'Arial, Helvetica, sans-serif' },
-  { label: 'Georgia', value: 'Georgia, serif' },
-  { label: 'Poppins', value: 'Poppins, Arial, sans-serif' },
-  { label: 'Montserrat', value: 'Montserrat, Arial, sans-serif' },
-  { label: 'Playfair Display', value: '"Playfair Display", Georgia, serif' },
-  { label: 'Lora', value: 'Lora, Georgia, serif' },
-  { label: 'Cormorant Garamond', value: '"Cormorant Garamond", Georgia, serif' },
-];
+const fontLibrary = SITE_FONT_CHOICES;
 
 const emptySlider: Omit<CmsSlider, 'id'> = {
   slug: '',
@@ -47,8 +39,10 @@ export default function AdminSlidersPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  // The Site Defaults page values, so new buttons start with the site's button look. Null until loaded.
+  const [siteDefaults, setSiteDefaults] = useState<SiteDefaults | null>(null);
 
-  const selectedSlider = useMemo(() => sliders.find((entry) => entry.id === selectedSliderId) ?? null, [selectedSliderId, sliders]);
+  const selectedSlider =useMemo(() => sliders.find((entry) => entry.id === selectedSliderId) ?? null, [selectedSliderId, sliders]);
   const imageAssets = useMemo(() => mediaAssets.filter((asset) => asset.isImage), [mediaAssets]);
 
   const fetchResources = useCallback(async () => {
@@ -72,6 +66,19 @@ export default function AdminSlidersPage() {
   useEffect(() => {
     void fetchResources();
   }, [fetchResources]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/proxy/admin/site-defaults')
+      .then((res) => (res.ok ? (res.json() as Promise<SiteDefaultsState>) : null))
+      .then((state) => {
+        if (!cancelled && state?.resolved) setSiteDefaults(state.resolved);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedSlider) return;
@@ -161,6 +168,9 @@ export default function AdminSlidersPage() {
   }
 
   function addLayer(type: 'text' | 'button') {
+    // A new button starts with the button look from Site Defaults (when it has loaded). It has no font of its own, so it
+    // follows the site's button font until one is chosen for it here.
+    const defaults = type === 'button' ? siteDefaults : null;
     const layer: SliderLayer = {
       id: createId('layer'),
       type,
@@ -170,17 +180,17 @@ export default function AdminSlidersPage() {
       y: 35,
       width: type === 'button' ? 20 : 40,
       fontSize: type === 'button' ? 16 : 36,
-      color: '#ffffff',
-      background: type === 'button' ? '#6f21b6' : 'transparent',
-      borderColor: '#6f21b6',
-      borderRadius: type === 'button' ? 8 : 0,
+      color: defaults?.buttonText ?? '#ffffff',
+      background: type === 'button' ? (defaults?.buttonBackground ?? '#6f21b6') : 'transparent',
+      borderColor: defaults?.buttonBackground ?? '#6f21b6',
+      borderRadius: type === 'button' ? (defaults?.buttonRadius ?? 8) : 0,
       borderWidth: type === 'button' ? 0 : 0,
       paddingX: type === 'button' ? 20 : 0,
       paddingY: type === 'button' ? 12 : 0,
       buttonStyle: 'solid',
-      hoverBackground: type === 'button' ? '#5b1a93' : '',
-      hoverColor: '#ffffff',
-      fontFamily: 'Inter, Arial, sans-serif',
+      hoverBackground: type === 'button' ? (defaults?.buttonHoverBackground ?? '#5b1a93') : '',
+      hoverColor: defaults?.buttonHoverText ?? '#ffffff',
+      fontFamily: '',
     };
     updateSlide(activeSlideIndex, { layers: [...(slider.slides[activeSlideIndex]?.layers ?? []), layer] });
   }
@@ -262,6 +272,7 @@ export default function AdminSlidersPage() {
                   slide={activeSlide}
                   height={Number(slider.settings.height ?? 480)}
                   width={slider.settings.width ?? 'content'}
+                  siteDefaults={siteDefaults}
                   onLayerChange={(layerIndex, nextLayer) => updateLayer(activeSlideIndex, layerIndex, nextLayer)}
                 />
               </div>
@@ -355,11 +366,13 @@ function EditorSlidePreview({
   slide,
   height,
   width,
+  siteDefaults,
   onLayerChange,
 }: {
   slide?: SliderSlide;
   height: number;
   width: 'content' | 'wide' | 'full';
+  siteDefaults: SiteDefaults | null;
   onLayerChange: (layerIndex: number, nextLayer: Partial<SliderLayer>) => void;
 }) {
   const previewRef = useRef<HTMLDivElement | null>(null);
@@ -396,7 +409,7 @@ function EditorSlidePreview({
           key={layer.id}
           type="button"
           className="absolute z-10 cursor-move text-left ring-2 ring-transparent transition hover:ring-white/70"
-          style={layerPreviewStyle(layer)}
+          style={layerPreviewStyle(layer, siteDefaults)}
           onMouseDown={(event) => {
             event.preventDefault();
             setDragLayerIndex(layerIndex);
@@ -433,14 +446,16 @@ function EditorSlideMedia({ slide }: { slide: SliderSlide }) {
   return <img src={slide.src} alt={slide.alt ?? ''} className="absolute inset-0 h-full w-full object-cover" />;
 }
 
-function layerPreviewStyle(layer: SliderLayer) {
+function layerPreviewStyle(layer: SliderLayer, siteDefaults: SiteDefaults | null) {
+  // A layer with no font of its own shows in the site's font: the button font for buttons, else the body font.
+  const siteFont = layer.type === 'button' ? siteDefaults?.buttonFont || siteDefaults?.bodyFont : siteDefaults?.bodyFont;
   return {
     left: `${layer.x}%`,
     top: `${layer.y}%`,
     width: `${layer.width}%`,
     color: layer.color,
     fontSize: `${layer.fontSize}px`,
-    fontFamily: layer.fontFamily || undefined,
+    fontFamily: layer.fontFamily || siteFont || undefined,
   };
 }
 

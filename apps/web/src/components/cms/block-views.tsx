@@ -33,11 +33,13 @@ export function ButtonBlockView({ block, color }: { block: BlockLike; color?: st
   const align = buttonAlign(block.props.align);
   const width = buttonWidth(block.props.width);
   const label = String(block.props.label ?? 'Learn More');
-  const style: CSSProperties = { whiteSpace: 'pre-line', ...(color ? { backgroundColor: color } : {}) };
+  // The colors, corners and font come from the Site Defaults page (see .site-button in globals.css); `color` is only what
+  // the button looks like when nothing has been set there.
+  const style = { whiteSpace: 'pre-line', ...(color ? { '--site-button-fallback': color } : {}) } as CSSProperties;
   const link = (
     <a
       href={String(block.props.href ?? '#')}
-      className={`inline-block rounded px-4 py-2 text-center text-white ${color ? '' : 'bg-purple-600'} ${width === 'full' ? 'w-full' : ''} ${align === 'left' && width === 'auto' ? 'mb-4' : ''}`}
+      className={`site-button inline-block px-4 py-2 text-center ${width === 'full' ? 'w-full' : ''} ${align === 'left' && width === 'auto' ? 'mb-4' : ''}`}
       style={style}
     >
       {label}

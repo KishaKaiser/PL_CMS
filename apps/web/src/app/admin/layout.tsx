@@ -25,6 +25,7 @@ const NAV_GROUPS = [
       { href: '/admin/taxonomies', label: 'Categories & Tags' },
       { href: '/admin/media', label: 'Media Library' },
       { href: '/admin/theme-builder', label: 'Theme Builder' },
+      { href: '/admin/site-defaults', label: 'Site Defaults' },
     ],
   },
   {

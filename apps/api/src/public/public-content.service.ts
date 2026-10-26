@@ -7,11 +7,15 @@ import {
   DEFAULT_SITE_SIDEBARS,
   DEFAULT_SITE_THEME,
   PUBLIC_SITE_SETTING_KEYS,
+  SITE_DEFAULTS_BUILT_IN,
   SITE_SETTING_KEYS,
+  resolveSiteDefaults,
+  sanitizeSiteDefaultOverrides,
   type HomepageSettings,
   type PostsPageSettings,
   type SiteExtensionPoints,
   type SiteHomepageBlock,
+  type SiteDefaultsState,
   type SiteIdentitySettings,
   type SiteMenuItem,
   type SiteSidebarWidget,
@@ -57,6 +61,7 @@ type PublicSiteConfig = {
     }>;
   };
   theme: SiteThemeSettings;
+  siteDefaults: SiteDefaultsState;
   themeLayouts: {
     header: Prisma.JsonValue | null;
     footer: Prisma.JsonValue | null;
@@ -152,10 +157,18 @@ export class PublicContentService {
       settingMap.get(SITE_SETTING_KEYS.SITE_POSTS_PAGE),
       publishedPageMap,
     );
-    const theme = this.applyCmsThemeStyles(
+    const baseTheme = this.applyCmsThemeStyles(
       this.normalizeThemeSettings(settingMap.get(SITE_SETTING_KEYS.SITE_THEME), postsPage.path),
       activeCmsTheme?.globalStyles,
     );
+    // Site defaults an admin has changed win over the theme's colors and font; the rest keep following the theme.
+    const siteDefaults = this.buildSiteDefaultsState(baseTheme, settingMap.get(SITE_SETTING_KEYS.SITE_DEFAULTS));
+    const theme: SiteThemeSettings = {
+      ...baseTheme,
+      primaryColor: siteDefaults.resolved.primaryColor,
+      accentColor: siteDefaults.resolved.accentColor,
+      fontFamily: siteDefaults.resolved.bodyFont,
+    };
     const extensionPoints = this.normalizeExtensionPoints(
       settingMap.get(SITE_SETTING_KEYS.SITE_EXTENSION_POINTS),
     );
@@ -178,6 +191,7 @@ export class PublicContentService {
       postsPage,
       menus,
       theme,
+      siteDefaults,
       themeLayouts: {
         header: this.getThemeTemplateLayout(activeCmsTheme?.templates, 'header'),
         footer: this.getThemeTemplateLayout(activeCmsTheme?.templates, 'footer'),
@@ -864,6 +878,17 @@ export class PublicContentService {
         },
       },
     };
+  }
+
+  private buildSiteDefaultsState(theme: SiteThemeSettings, value: string | undefined): SiteDefaultsState {
+    const overrides = sanitizeSiteDefaultOverrides(this.parseJsonSetting<unknown>(value));
+    const inherited = {
+      ...SITE_DEFAULTS_BUILT_IN,
+      bodyFont: theme.fontFamily,
+      primaryColor: theme.primaryColor,
+      accentColor: theme.accentColor,
+    };
+    return { overrides, inherited, resolved: resolveSiteDefaults(inherited, overrides) };
   }
 
   private applyCmsThemeStyles(theme: SiteThemeSettings, value: Prisma.JsonValue | undefined) {

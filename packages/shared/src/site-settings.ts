@@ -118,6 +118,7 @@ export const SITE_SETTING_KEYS = {
   SITE_HOMEPAGE_BLOCKS: 'site_homepage_blocks',
   SITE_EXTENSION_POINTS: 'site_extension_points',
   SITE_SIDEBARS: 'site_sidebars',
+  SITE_DEFAULTS: 'site_defaults',
 } as const;
 
 export const PUBLIC_SITE_SETTING_KEYS = [
@@ -130,6 +131,7 @@ export const PUBLIC_SITE_SETTING_KEYS = [
   SITE_SETTING_KEYS.SITE_HOMEPAGE_BLOCKS,
   SITE_SETTING_KEYS.SITE_EXTENSION_POINTS,
   SITE_SETTING_KEYS.SITE_SIDEBARS,
+  SITE_SETTING_KEYS.SITE_DEFAULTS,
 ] as const;
 
 const DEFAULT_SITE_TITLE = 'Psychic Link CMS';

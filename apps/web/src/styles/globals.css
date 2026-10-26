@@ -101,4 +101,26 @@
     background: transparent;
     padding: 0;
   }
+
+  /*
+   * Page-builder buttons. With nothing set on the Site Defaults page they look as they always have (purple, white text,
+   * no change on hover); the --site-button-* values come from that page. --site-button-fallback is set by the button.
+   */
+  .site-button {
+    background-color: var(--site-button-bg, var(--site-button-fallback, #9333ea));
+    border-radius: var(--site-button-radius, 0.25rem);
+    color: var(--site-button-text, #ffffff);
+    font-family: var(--site-button-font, inherit);
+  }
+
+  .site-button:hover {
+    background-color: var(--site-button-hover-bg, var(--site-button-bg, var(--site-button-fallback, #9333ea)));
+    color: var(--site-button-hover-text, var(--site-button-text, #ffffff));
+  }
+
+  /* Slider buttons: the hover colors are worked out by the slider (its own, else the site's, else no change). */
+  .site-slider-button:hover {
+    background: var(--slider-hover-bg) !important;
+    color: var(--slider-hover-text) !important;
+  }
 }

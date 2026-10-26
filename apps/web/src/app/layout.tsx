@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { buildSiteDefaultsCss } from '@pl-cms/shared';
 import '../styles/globals.css';
 import { getSiteUrl } from '../lib/seo';
 import { getPublicSiteConfig, getSafeImageSrc } from '../lib/public-cms';
@@ -21,10 +22,15 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // The site defaults an admin has changed (button look, heading font). The values are checked when they are saved and
+  // again when the css is built, so only six-digit colors, listed fonts and a number can ever end up here.
+  const siteDefaultsCss = buildSiteDefaultsCss((await getPublicSiteConfig()).siteDefaults.overrides);
+
   return (
     <html lang="en">
       <head>
+        {siteDefaultsCss && <style dangerouslySetInnerHTML={{ __html: siteDefaultsCss }} />}
         <link
           rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
