@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import {
-  SITE_BUTTON_RADIUS_MAX,
   SITE_FONT_CHOICES,
+  SITE_NUMBER_LIMITS,
   type SiteDefaultField,
+  type SiteNumberField,
   type SiteDefaultOverrides,
   type SiteDefaults,
   type SiteDefaultsState,
@@ -132,8 +133,28 @@ export default function SiteDefaultsPage() {
     );
   }
 
+  function numberField(field: SiteNumberField, label: string, hint: string) {
+    const [min, max] = SITE_NUMBER_LIMITS[field];
+    return (
+      <Field key={field} label={label} hint={hint || `Between ${min} and ${max}.`} changed={draft[field] !== undefined} onReset={() => reset(field)}>
+        <input
+          type="number"
+          min={min}
+          max={max}
+          value={current[field]}
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            if (event.target.value !== '' && Number.isFinite(value)) change(field, Math.min(max, Math.max(min, Math.round(value))));
+          }}
+          className={inputClass}
+        />
+      </Field>
+    );
+  }
+
   const previewBodyFont = current.bodyFont;
   const previewVariables = {
+    '--site-button-size': `${current.buttonFontSize}px`,
     '--site-button-bg': current.buttonBackground,
     '--site-button-text': current.buttonText,
     '--site-button-hover-bg': current.buttonHoverBackground,
@@ -184,9 +205,23 @@ export default function SiteDefaultsPage() {
           </section>
 
           <section className="rounded-xl border bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold">Text sizes (pixels)</h2>
+            <p className="text-sm text-gray-500">
+              Headings and text that have no size of their own. A heading or text block you gave a size in the page editor keeps
+              that size, and small labels keep theirs.
+            </p>
+            <div className="mt-4 grid gap-5 sm:grid-cols-2">
+              {numberField('bodyFontSize', 'Normal text', '')}
+              {numberField('h1FontSize', 'Heading 1', 'Page titles.')}
+              {numberField('h2FontSize', 'Heading 2', 'Section headings.')}
+              {numberField('h3FontSize', 'Heading 3', 'Smaller headings.')}
+            </div>
+          </section>
+
+          <section className="rounded-xl border bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold">Colors</h2>
             <div className="mt-4 grid gap-5 sm:grid-cols-2">
-              {colorField('primaryColor', 'Primary color', 'Headings, links, prices and most buttons in the shop.')}
+              {colorField('primaryColor', 'Primary color', 'Headings, links and prices. Buttons use their own color below once you set one.')}
               {colorField('accentColor', 'Accent color', 'Secondary highlights.')}
               {colorField('textColor', 'Text color', 'Normal text on public pages.')}
               {colorField('backgroundColor', 'Page background', 'Behind the content of public pages.')}
@@ -196,27 +231,18 @@ export default function SiteDefaultsPage() {
           <section className="rounded-xl border bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold">Buttons</h2>
             <p className="text-sm text-gray-500">
-              Used by buttons in the page editor, and as the starting look for new slider buttons. A slider button you have already
-              styled keeps its own look, except for the hover colors and font you left empty.
+              Used by every button on the public site: page-builder buttons, the shop, cart, login and account buttons, the
+              newsletter and form widgets, and slider buttons set to &quot;Use the site button style&quot; (the default for new
+              ones). Corner rounding applies to page-builder and slider buttons; the others keep their own shape. A slider button
+              you styled yourself keeps its own look until you switch that option on.
             </p>
             <div className="mt-4 grid gap-5 sm:grid-cols-2">
               {colorField('buttonBackground', 'Button color', 'The button when nothing is touching it.')}
               {colorField('buttonText', 'Button text color', '')}
               {colorField('buttonHoverBackground', 'Button color on hover', 'When the mouse is over the button.')}
               {colorField('buttonHoverText', 'Button text color on hover', '')}
-              <Field label="Corner rounding (pixels)" hint="0 is square; larger is rounder." changed={draft.buttonRadius !== undefined} onReset={() => reset('buttonRadius')}>
-                <input
-                  type="number"
-                  min={0}
-                  max={SITE_BUTTON_RADIUS_MAX}
-                  value={current.buttonRadius}
-                  onChange={(event) => {
-                    const value = Number(event.target.value);
-                    if (Number.isFinite(value)) change('buttonRadius', Math.min(SITE_BUTTON_RADIUS_MAX, Math.max(0, Math.round(value))));
-                  }}
-                  className={inputClass}
-                />
-              </Field>
+              {numberField('buttonFontSize', 'Button text size (pixels)', 'The size of the words on buttons.')}
+              {numberField('buttonRadius', 'Corner rounding (pixels)', '0 is square; larger is rounder.')}
             </div>
           </section>
         </div>
@@ -225,10 +251,10 @@ export default function SiteDefaultsPage() {
           <div className="rounded-xl border bg-white p-4 shadow-sm">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Preview</h2>
             <div className="rounded-lg border p-5" style={{ ...previewVariables, backgroundColor: current.backgroundColor, color: current.textColor, fontFamily: previewBodyFont }}>
-              <h3 className="text-2xl font-bold" style={{ color: current.primaryColor, fontFamily: current.headingFont || undefined }}>
+              <h3 className="font-bold leading-tight" style={{ color: current.primaryColor, fontFamily: current.headingFont || undefined, fontSize: current.h2FontSize }}>
                 A heading
               </h3>
-              <p className="mt-2 text-sm leading-6">
+              <p className="mt-2 leading-relaxed" style={{ fontSize: current.bodyFontSize }}>
                 This is how normal text looks. A{' '}
                 <span className="font-medium" style={{ color: current.primaryColor }}>
                   link or price
@@ -239,7 +265,7 @@ export default function SiteDefaultsPage() {
                 </span>{' '}
                 use the accent color.
               </p>
-              <a href="#preview" onClick={(event) => event.preventDefault()} className="site-button mt-4 inline-block px-4 py-2 text-center text-sm">
+              <a href="#preview" onClick={(event) => event.preventDefault()} className="site-button mt-4 inline-block px-4 py-2 text-center">
                 A button (hover over me)
               </a>
             </div>

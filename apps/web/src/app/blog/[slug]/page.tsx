@@ -19,6 +19,7 @@ import {
   type PublicSiteConfig,
 } from '../../../lib/public-cms';
 import { buildSeoMetadata, getSeoDescription, getSeoTitle } from '../../../lib/seo';
+import { siteButtonStyle } from '../../../lib/site-button';
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -143,7 +144,7 @@ async function BlogPostSidebar({ siteConfig }: { siteConfig: PublicSiteConfig })
             <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">{widget.title}</h2>
             <form action={siteConfig.postsPage.path} className="mt-3 flex gap-2">
               <input name="search" className="w-full rounded border border-gray-200 px-3 py-2 text-sm" placeholder="Search posts" />
-              <button className="rounded px-3 py-2 text-sm font-medium text-white" style={{ backgroundColor: siteConfig.theme.primaryColor }}>Go</button>
+              <button className="rounded px-3 py-2 text-sm font-medium site-button-colors" style={siteButtonStyle(siteConfig.theme.primaryColor)}>Go</button>
             </form>
           </section>
         );

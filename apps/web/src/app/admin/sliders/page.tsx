@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SITE_FONT_CHOICES, type SiteDefaults, type SiteDefaultsState } from '@pl-cms/shared';
+import { SITE_FONT_CHOICES, type SiteDefaultOverrides, type SiteDefaults, type SiteDefaultsState } from '@pl-cms/shared';
 import type { MediaAsset } from '../../../components/admin/media-library';
-import type { CmsSlider, SliderLayer, SliderSlide } from '../../../components/cms/public-slider-embed';
+import { layerFollowsSite, type CmsSlider, type SliderLayer, type SliderSlide } from '../../../components/cms/public-slider-embed';
 
 type SliderStatus = 'DRAFT' | 'PUBLISHED';
 
@@ -41,6 +41,8 @@ export default function AdminSlidersPage() {
   const [error, setError] = useState('');
   // The Site Defaults page values, so new buttons start with the site's button look. Null until loaded.
   const [siteDefaults, setSiteDefaults] = useState<SiteDefaults | null>(null);
+  // Only what has been changed there: a button that follows the site shows its own colors until a button color is set.
+  const [siteOverrides, setSiteOverrides] = useState<SiteDefaultOverrides>({});
 
   const selectedSlider =useMemo(() => sliders.find((entry) => entry.id === selectedSliderId) ?? null, [selectedSliderId, sliders]);
   const imageAssets = useMemo(() => mediaAssets.filter((asset) => asset.isImage), [mediaAssets]);
@@ -72,7 +74,9 @@ export default function AdminSlidersPage() {
     fetch('/api/proxy/admin/site-defaults')
       .then((res) => (res.ok ? (res.json() as Promise<SiteDefaultsState>) : null))
       .then((state) => {
-        if (!cancelled && state?.resolved) setSiteDefaults(state.resolved);
+        if (cancelled || !state?.resolved) return;
+        setSiteDefaults(state.resolved);
+        setSiteOverrides(state.overrides ?? {});
       })
       .catch(() => undefined);
     return () => {
@@ -191,6 +195,7 @@ export default function AdminSlidersPage() {
       hoverBackground: type === 'button' ? (defaults?.buttonHoverBackground ?? '#5b1a93') : '',
       hoverColor: defaults?.buttonHoverText ?? '#ffffff',
       fontFamily: '',
+      ...(type === 'button' ? { siteStyle: true } : {}),
     };
     updateSlide(activeSlideIndex, { layers: [...(slider.slides[activeSlideIndex]?.layers ?? []), layer] });
   }
@@ -273,6 +278,7 @@ export default function AdminSlidersPage() {
                   height={Number(slider.settings.height ?? 480)}
                   width={slider.settings.width ?? 'content'}
                   siteDefaults={siteDefaults}
+                  siteOverrides={siteOverrides}
                   onLayerChange={(layerIndex, nextLayer) => updateLayer(activeSlideIndex, layerIndex, nextLayer)}
                 />
               </div>
@@ -333,20 +339,42 @@ export default function AdminSlidersPage() {
                           <label className="block text-xs font-medium text-gray-700">X %<input type="number" value={layer.x} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { x: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
                           <label className="block text-xs font-medium text-gray-700">Y %<input type="number" value={layer.y} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { y: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
                           <label className="block text-xs font-medium text-gray-700">Width %<input type="number" value={layer.width} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { width: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
-                          <label className="block text-xs font-medium text-gray-700">Font<input type="number" value={layer.fontSize} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { fontSize: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
-                          <label className="block text-xs font-medium text-gray-700">Color<input type="color" value={layer.color} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { color: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
-                          <label className="block text-xs font-medium text-gray-700">Background<input type="color" value={layer.background === 'transparent' ? '#6f21b6' : layer.background} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { background: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
+                          {!(layerFollowsSite(layer) && siteOverrides.buttonFontSize !== undefined) && (
+                            <label className="block text-xs font-medium text-gray-700">Font size<input type="number" value={layer.fontSize} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { fontSize: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
+                          )}
+                          {!layerFollowsSite(layer) && (
+                            <>
+                              <label className="block text-xs font-medium text-gray-700">Color<input type="color" value={layer.color} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { color: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
+                              <label className="block text-xs font-medium text-gray-700">Background<input type="color" value={layer.background === 'transparent' ? '#6f21b6' : layer.background} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { background: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
+                            </>
+                          )}
                         </div>
                         {layer.type === 'button' && (
                           <div className="grid grid-cols-2 gap-2 border-t border-gray-200 pt-2">
+                            <label className="col-span-2 flex items-start gap-2 rounded border border-gray-200 bg-white px-2 py-2 text-xs text-gray-700">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={layerFollowsSite(layer)}
+                                onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { siteStyle: event.target.checked })}
+                              />
+                              <span>
+                                <span className="font-medium">Use the site button style</span>
+                                <span className="block text-gray-500">Color, text, hover colors and rounding come from Admin → Site Defaults, so changing them there updates this button.</span>
+                              </span>
+                            </label>
                             <label className="block text-xs font-medium text-gray-700">Style<select value={layer.buttonStyle ?? 'solid'} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { buttonStyle: event.target.value as 'solid' | 'outline' })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm"><option value="solid">Solid</option><option value="outline">Outline</option></select></label>
-                            <label className="block text-xs font-medium text-gray-700">Border<input type="color" value={layer.borderColor ?? layer.background ?? '#6f21b6'} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { borderColor: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
+                            {!layerFollowsSite(layer) && <label className="block text-xs font-medium text-gray-700">Border<input type="color" value={layer.borderColor ?? layer.background ?? '#6f21b6'} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { borderColor: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>}
                             <label className="block text-xs font-medium text-gray-700">Border px<input type="number" min="0" max="12" value={Number(layer.borderWidth ?? 0)} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { borderWidth: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
-                            <label className="block text-xs font-medium text-gray-700">Round px<input type="number" min="0" max="80" value={Number(layer.borderRadius ?? 8)} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { borderRadius: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
+                            {!layerFollowsSite(layer) && <label className="block text-xs font-medium text-gray-700">Round px<input type="number" min="0" max="80" value={Number(layer.borderRadius ?? 8)} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { borderRadius: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>}
                             <label className="block text-xs font-medium text-gray-700">Width pad<input type="number" min="4" max="80" value={Number(layer.paddingX ?? 20)} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { paddingX: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
                             <label className="block text-xs font-medium text-gray-700">Height pad<input type="number" min="4" max="50" value={Number(layer.paddingY ?? 12)} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { paddingY: Number(event.target.value) })} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" /></label>
-                            <label className="block text-xs font-medium text-gray-700">Hover bg<input type="color" value={layer.hoverBackground || '#5b1a93'} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { hoverBackground: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
-                            <label className="block text-xs font-medium text-gray-700">Hover text<input type="color" value={layer.hoverColor || '#ffffff'} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { hoverColor: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
+                            {!layerFollowsSite(layer) && (
+                              <>
+                                <label className="block text-xs font-medium text-gray-700">Hover bg<input type="color" value={layer.hoverBackground || '#5b1a93'} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { hoverBackground: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
+                                <label className="block text-xs font-medium text-gray-700">Hover text<input type="color" value={layer.hoverColor || '#ffffff'} onChange={(event) => updateLayer(activeSlideIndex, layerIndex, { hoverColor: event.target.value })} className="mt-1 h-9 w-full rounded border" /></label>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -367,12 +395,14 @@ function EditorSlidePreview({
   height,
   width,
   siteDefaults,
+  siteOverrides,
   onLayerChange,
 }: {
   slide?: SliderSlide;
   height: number;
   width: 'content' | 'wide' | 'full';
   siteDefaults: SiteDefaults | null;
+  siteOverrides: SiteDefaultOverrides;
   onLayerChange: (layerIndex: number, nextLayer: Partial<SliderLayer>) => void;
 }) {
   const previewRef = useRef<HTMLDivElement | null>(null);
@@ -409,7 +439,7 @@ function EditorSlidePreview({
           key={layer.id}
           type="button"
           className="absolute z-10 cursor-move text-left ring-2 ring-transparent transition hover:ring-white/70"
-          style={layerPreviewStyle(layer, siteDefaults)}
+          style={layerPreviewStyle(layer, siteDefaults, siteOverrides)}
           onMouseDown={(event) => {
             event.preventDefault();
             setDragLayerIndex(layerIndex);
@@ -417,7 +447,7 @@ function EditorSlidePreview({
           }}
         >
           {layer.type === 'button' ? (
-            <span style={buttonLayerInnerStyle(layer)}>{layer.text}</span>
+            <span style={buttonLayerInnerStyle(layer, siteOverrides)}>{layer.text}</span>
           ) : (
             <span className="font-semibold leading-tight drop-shadow">{layer.text}</span>
           )}
@@ -446,7 +476,7 @@ function EditorSlideMedia({ slide }: { slide: SliderSlide }) {
   return <img src={slide.src} alt={slide.alt ?? ''} className="absolute inset-0 h-full w-full object-cover" />;
 }
 
-function layerPreviewStyle(layer: SliderLayer, siteDefaults: SiteDefaults | null) {
+function layerPreviewStyle(layer: SliderLayer, siteDefaults: SiteDefaults | null, siteOverrides: SiteDefaultOverrides) {
   // A layer with no font of its own shows in the site's font: the button font for buttons, else the body font.
   const siteFont = layer.type === 'button' ? siteDefaults?.buttonFont || siteDefaults?.bodyFont : siteDefaults?.bodyFont;
   return {
@@ -454,22 +484,28 @@ function layerPreviewStyle(layer: SliderLayer, siteDefaults: SiteDefaults | null
     top: `${layer.y}%`,
     width: `${layer.width}%`,
     color: layer.color,
-    fontSize: `${layer.fontSize}px`,
+    fontSize: `${(layerFollowsSite(layer) && siteOverrides.buttonFontSize) || layer.fontSize}px`,
     fontFamily: layer.fontFamily || siteFont || undefined,
   };
 }
 
-function buttonLayerInnerStyle(layer: SliderLayer) {
+function buttonLayerInnerStyle(layer: SliderLayer, siteOverrides: SiteDefaultOverrides) {
   const isOutline = layer.buttonStyle === 'outline';
+  // A button that follows the site shows the site's button colors once any are set (as the live page does).
+  const follow = layerFollowsSite(layer);
+  const background = (follow && siteOverrides.buttonBackground) || layer.background;
+  const borderColor = (follow && siteOverrides.buttonBackground) || layer.borderColor || layer.background;
+  const text = (follow && siteOverrides.buttonText) || layer.color;
+  const radius = follow && siteOverrides.buttonRadius !== undefined ? siteOverrides.buttonRadius : (layer.borderRadius ?? 8);
   return {
     display: 'inline-flex',
     width: 'fit-content',
-    background: isOutline ? 'transparent' : layer.background,
-    borderColor: layer.borderColor ?? layer.background,
+    background: isOutline ? 'transparent' : background,
+    borderColor,
     borderStyle: 'solid',
     borderWidth: `${layer.borderWidth ?? (isOutline ? 2 : 0)}px`,
-    borderRadius: `${layer.borderRadius ?? 8}px`,
-    color: isOutline ? (layer.borderColor ?? layer.color) : layer.color,
+    borderRadius: `${radius}px`,
+    color: isOutline ? (layer.borderColor || follow ? borderColor : text) : text,
     padding: `${layer.paddingY ?? 12}px ${layer.paddingX ?? 20}px`,
     fontWeight: 700,
     boxShadow: '0 12px 28px rgba(0,0,0,0.22)',

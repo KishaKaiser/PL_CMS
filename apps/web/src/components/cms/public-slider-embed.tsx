@@ -22,6 +22,18 @@ export interface SliderLayer {
   hoverBackground?: string;
   hoverColor?: string;
   buttonStyle?: 'solid' | 'outline';
+  /** A button that takes its colors, hover colors and rounding from the Site Defaults page. Unset on older buttons. */
+  siteStyle?: boolean;
+}
+
+/**
+ * Whether a slider button takes its look from the Site Defaults page. Buttons saved before the option existed count
+ * when they are still the editor's original purple, which means nobody restyled them.
+ */
+export function layerFollowsSite(layer: Pick<SliderLayer, 'type' | 'siteStyle' | 'buttonStyle' | 'background'>) {
+  if (layer.type !== 'button') return false;
+  if (typeof layer.siteStyle === 'boolean') return layer.siteStyle;
+  return layer.buttonStyle !== 'outline' && layer.background.trim().toLowerCase() === '#6f21b6';
 }
 
 export interface SliderSlide {
@@ -142,8 +154,22 @@ function SliderLayerView({ layer }: { layer: SliderLayer }) {
 
   if (layer.type === 'button') {
     const isOutline = layer.buttonStyle === 'outline';
-    const background = isOutline ? 'transparent' : layer.background;
-    const color = isOutline ? (layer.borderColor ?? layer.color) : layer.color;
+    // A button that follows the site reads the Site Defaults variables, and falls back to its own values until one is set.
+    const follow = layerFollowsSite(layer);
+    const ownBorder = layer.borderColor ?? layer.background;
+    const siteBackground = follow ? `var(--site-button-bg, ${layer.background})` : layer.background;
+    const siteBorder = follow ? `var(--site-button-bg, ${ownBorder})` : ownBorder;
+    const siteText = follow ? `var(--site-button-text, ${layer.color})` : layer.color;
+    const siteRadius = follow ? `var(--site-button-radius, ${layer.borderRadius ?? 8}px)` : `${layer.borderRadius ?? 8}px`;
+    const background = isOutline ? 'transparent' : siteBackground;
+    const color = isOutline ? (layer.borderColor ? siteBorder : siteText) : siteText;
+    // Hover: the button's own colors (or, when it follows the site, the site's hover colors, else a darker site color).
+    const hoverBackground = follow
+      ? `var(--site-button-hover-bg, var(--site-button-hover-auto, ${layer.hoverBackground || background}))`
+      : layer.hoverBackground || `var(--site-button-hover-bg, ${background})`;
+    const hoverText = follow
+      ? `var(--site-button-hover-text, ${layer.hoverColor || color})`
+      : layer.hoverColor || `var(--site-button-hover-text, ${color})`;
     return (
       <a
         href={layer.href || '#'}
@@ -153,16 +179,16 @@ function SliderLayerView({ layer }: { layer: SliderLayer }) {
             ...style,
             // A button with no font of its own uses the site's button font (the body font if that is not set either).
             fontFamily: layer.fontFamily || 'var(--site-button-font, inherit)',
+            fontSize: follow ? `var(--site-button-size, ${layer.fontSize}px)` : `${layer.fontSize}px`,
             background,
-            borderColor: layer.borderColor ?? layer.background,
+            borderColor: siteBorder,
             borderStyle: 'solid',
             borderWidth: `${layer.borderWidth ?? (isOutline ? 2 : 0)}px`,
-            borderRadius: `${layer.borderRadius ?? 8}px`,
+            borderRadius: siteRadius,
             color,
             padding: `${layer.paddingY ?? 12}px ${layer.paddingX ?? 20}px`,
-            // On hover: the button's own colors, else the site's hover colors from the Site Defaults page, else no change.
-            '--slider-hover-bg': layer.hoverBackground || `var(--site-button-hover-bg, ${background})`,
-            '--slider-hover-text': layer.hoverColor || `var(--site-button-hover-text, ${color})`,
+            '--slider-hover-bg': hoverBackground,
+            '--slider-hover-text': hoverText,
           } as CSSProperties
         }
       >
@@ -225,6 +251,7 @@ export function normalizeSlides(slides?: SliderSlide[]): SliderSlide[] {
           hoverBackground: layer.hoverBackground ?? '',
           hoverColor: layer.hoverColor ?? '',
           buttonStyle: layer.buttonStyle === 'outline' ? 'outline' : 'solid',
+          ...(typeof layer.siteStyle === 'boolean' ? { siteStyle: layer.siteStyle } : {}),
         }))
       : [],
   }));

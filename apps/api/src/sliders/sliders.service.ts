@@ -23,6 +23,8 @@ type SliderLayer = {
   hoverBackground?: string;
   hoverColor?: string;
   buttonStyle?: 'solid' | 'outline';
+  /** A button that takes its colors, hover colors and rounding from the Site Defaults page. Unset on older buttons. */
+  siteStyle?: boolean;
 };
 
 type SliderSlide = {
@@ -155,6 +157,8 @@ function normalizeLayers(layers: Record<string, unknown>[]): SliderLayer[] {
     hoverBackground: typeof layer.hoverBackground === 'string' ? layer.hoverBackground : '',
     hoverColor: typeof layer.hoverColor === 'string' ? layer.hoverColor : '',
     buttonStyle: layer.buttonStyle === 'outline' ? 'outline' : 'solid',
+    // Left out (not false) when the editor never set it, so older buttons stay distinct from ones turned off.
+    ...(typeof layer.siteStyle === 'boolean' ? { siteStyle: layer.siteStyle } : {}),
   }));
 }
 

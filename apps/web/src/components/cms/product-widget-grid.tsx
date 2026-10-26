@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { addToCart } from '../../lib/cart';
+import { siteButtonStyle } from '../../lib/site-button';
 
 export interface ProductWidgetItem {
   id: string;
@@ -96,8 +97,8 @@ export function ProductWidgetGrid({ products, primaryColor = '#6f21b6' }: Props)
                   });
                   showAddedMessage(product.id);
                 }}
-                className="mt-auto rounded px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
-                style={{ backgroundColor: primaryColor }}
+                className="mt-auto rounded px-4 py-2 text-sm font-medium site-button-colors transition hover:opacity-90"
+                style={siteButtonStyle(primaryColor)}
               >
                 Add to Cart
               </button>

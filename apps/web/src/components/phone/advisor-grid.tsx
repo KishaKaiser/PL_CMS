@@ -7,6 +7,7 @@ import { JoinQueueDialog } from './join-queue-dialog';
 import { fundsNotice, joinQueueRequest, loginUrl, startCallRequest, usePhoneProfile, type PhoneProfile } from './phone-client';
 import { PhonePromptDialog } from './phone-prompt-dialog';
 import { formatDollars, readMessage, toCents } from './phone-format';
+import { siteButtonStyle } from '../../lib/site-button';
 
 interface AdvisorCard {
   id: string;
@@ -182,8 +183,8 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
                     <button
                       onClick={() => handleJoinQueue(advisor)}
                       disabled={callingId !== null}
-                      className="w-full rounded-lg py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                      style={{ backgroundColor: primaryColor }}
+                      className="w-full rounded-lg py-3 text-sm font-semibold site-button-colors disabled:cursor-not-allowed disabled:opacity-50"
+                      style={siteButtonStyle(primaryColor)}
                     >
                       Join the line
                     </button>
@@ -191,8 +192,8 @@ export function AdvisorGrid({ primaryColor }: { primaryColor: string }) {
                     <button
                       onClick={() => handleCallNow(advisor)}
                       disabled={advisor.busy || callingId !== null}
-                      className="w-full rounded-lg py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                      style={{ backgroundColor: primaryColor }}
+                      className="w-full rounded-lg py-3 text-sm font-semibold site-button-colors disabled:cursor-not-allowed disabled:opacity-50"
+                      style={siteButtonStyle(primaryColor)}
                     >
                       {calling ? 'Calling…' : advisor.busy ? 'Unavailable' : 'Call Now'}
                     </button>

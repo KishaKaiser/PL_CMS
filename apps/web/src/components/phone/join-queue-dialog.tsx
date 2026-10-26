@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { siteButtonStyle } from '../../lib/site-button';
 
 const BUSY_CHOICES = [
   { minutes: 15, label: '15 minutes' },
@@ -88,8 +89,8 @@ export function JoinQueueDialog({
           <button
             type="submit"
             disabled={joining}
-            className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-            style={{ backgroundColor: primaryColor }}
+            className="flex-1 rounded-lg py-2.5 text-sm font-semibold site-button-colors disabled:opacity-50"
+            style={siteButtonStyle(primaryColor)}
           >
             {joining ? 'Sending…' : offline ? 'Request callback' : 'Join the line'}
           </button>

@@ -7,6 +7,7 @@ import { freeMinutesFor, fundsNotice, joinQueueRequest, loginUrl, startCallReque
 import { PhonePromptDialog } from './phone-prompt-dialog';
 import { formatDollars } from './phone-format';
 import { ScheduleDialog } from './schedule-dialog';
+import { siteButtonStyle } from '../../lib/site-button';
 
 const STATUS_REFRESH_MS = 15_000;
 
@@ -154,8 +155,8 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
       {canQueue || canRequestCallback ? (
         <button
           onClick={handleJoinQueue}
-          className="w-full rounded-lg py-3 text-base font-semibold text-white"
-          style={{ backgroundColor: primaryColor }}
+          className="w-full rounded-lg py-3 text-base font-semibold site-button-colors"
+          style={siteButtonStyle(primaryColor)}
         >
           {canRequestCallback ? 'Offline: request a callback' : 'Join the line'}
           {status.queueLength > 0 ? ` (${status.queueLength} waiting)` : ''}
@@ -164,8 +165,8 @@ export function AdvisorActions({ advisor, primaryColor }: { advisor: Advisor; pr
         <button
           onClick={handleCallNow}
           disabled={unavailable || calling}
-          className="w-full rounded-lg py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ backgroundColor: primaryColor }}
+          className="w-full rounded-lg py-3 text-base font-semibold site-button-colors disabled:cursor-not-allowed disabled:opacity-50"
+          style={siteButtonStyle(primaryColor)}
         >
           {label}
         </button>
