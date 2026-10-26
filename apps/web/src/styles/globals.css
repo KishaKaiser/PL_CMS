@@ -115,7 +115,10 @@
   }
 
   .site-button:hover {
-    background-color: var(--site-button-hover-bg, var(--site-button-bg, var(--site-button-fallback, #9333ea)));
+    background-color: var(
+      --site-button-hover-bg,
+      var(--site-button-hover-auto, var(--site-button-bg, var(--site-button-fallback, #9333ea)))
+    );
     color: var(--site-button-hover-text, var(--site-button-text, #ffffff));
   }
 
