@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { loginUrl } from './phone-client';
 import { readMessage } from './phone-format';
+import { siteButtonStyle } from '../../lib/site-button';
 
 type Access = 'loading' | 'signed-out' | 'not-a-client' | 'not-eligible' | 'eligible';
 
@@ -127,8 +128,8 @@ export function ReviewForm({ slug, advisorName, primaryColor }: { slug: string; 
       <button
         type="submit"
         disabled={saving}
-        className="mt-3 rounded-lg px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
-        style={{ backgroundColor: primaryColor }}
+        className="mt-3 rounded-lg px-5 py-2 text-sm font-semibold site-button-colors disabled:opacity-50"
+        style={siteButtonStyle(primaryColor)}
       >
         {saving ? 'Posting…' : 'Post review'}
       </button>

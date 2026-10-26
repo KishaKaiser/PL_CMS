@@ -17,6 +17,7 @@ import {
   getSafeImageSrc,
 } from '../lib/public-cms';
 import { buildSeoMetadata, getSeoDescription, getSeoTitle } from '../lib/seo';
+import { siteButtonStyle } from '../lib/site-button';
 
 const MAX_FEATURED_PAGES = 3;
 const MAX_FEATURED_POSTS = 3;
@@ -140,8 +141,8 @@ export default async function HomePage({ searchParams }: Props) {
         <nav className="flex flex-wrap gap-3">
           <Link
             href={siteConfig.theme.heroPrimaryHref || siteConfig.postsPage.path}
-            className="rounded px-4 py-2 text-white hover:opacity-90"
-            style={{ backgroundColor: siteConfig.theme.primaryColor }}
+            className="rounded px-4 py-2 site-button-colors hover:opacity-90"
+            style={siteButtonStyle(siteConfig.theme.primaryColor)}
           >
             {siteConfig.theme.heroPrimaryLabel || siteConfig.postsPage.title}
           </Link>

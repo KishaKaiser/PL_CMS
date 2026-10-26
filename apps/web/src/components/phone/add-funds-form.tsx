@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { addToCart, removeFromCart } from '../../lib/cart';
+import { siteButtonStyle } from '../../lib/site-button';
 
 const PRESET_DOLLARS = [10, 25, 50, 100];
 const MIN_DOLLARS = 5;
@@ -116,8 +117,8 @@ export function AddFundsForm({ primaryColor }: { primaryColor: string }) {
       <button
         onClick={handleContinue}
         disabled={!amountValid || busy}
-        className="mt-5 w-full rounded-lg py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-        style={{ backgroundColor: primaryColor }}
+        className="mt-5 w-full rounded-lg py-3 text-sm font-semibold site-button-colors disabled:cursor-not-allowed disabled:opacity-50"
+        style={siteButtonStyle(primaryColor)}
       >
         {busy ? 'Starting checkout…' : amountValid ? `Add $${dollars} to wallet` : 'Enter an amount'}
       </button>

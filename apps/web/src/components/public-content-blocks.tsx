@@ -6,6 +6,7 @@ import {
   type PublicPost,
   type PublicSiteConfig,
 } from '../lib/public-cms';
+import { siteButtonStyle } from '../lib/site-button';
 
 const HOMEPAGE_EXCERPT_LENGTH = 120;
 
@@ -148,8 +149,8 @@ export function CalloutBlock({
         {primaryLabel && primaryHref && (
           <Link
             href={primaryHref}
-            className="rounded px-4 py-2 text-white hover:opacity-90"
-            style={{ backgroundColor: siteConfig.theme.primaryColor }}
+            className="rounded px-4 py-2 site-button-colors hover:opacity-90"
+            style={siteButtonStyle(siteConfig.theme.primaryColor)}
           >
             {primaryLabel}
           </Link>

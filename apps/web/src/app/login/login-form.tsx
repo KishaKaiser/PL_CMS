@@ -4,6 +4,7 @@ import { useState, FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getDashboardPathForRole } from '../../lib/account-routing';
+import { siteButtonStyle } from '../../lib/site-button';
 
 const SAFE_REDIRECT_ORIGIN = 'https://placeholder.local';
 
@@ -161,7 +162,8 @@ export function LoginForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="h-14 w-full rounded-xl bg-[#7445ad] text-base font-semibold text-white shadow-lg shadow-purple-900/15 transition hover:bg-[#63379c] disabled:cursor-not-allowed disabled:opacity-60"
+                className="site-button-colors h-14 w-full rounded-xl text-base font-semibold shadow-lg shadow-purple-900/15 transition disabled:cursor-not-allowed disabled:opacity-60"
+                style={siteButtonStyle('#7445ad', '#63379c')}
               >
                 {loading ? 'Signing in...' : 'Sign In'}
               </button>

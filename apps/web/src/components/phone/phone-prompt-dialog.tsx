@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { PhoneProfile } from './phone-client';
 import { readMessage } from './phone-format';
+import { siteButtonStyle } from '../../lib/site-button';
 
 /** Asks a client who has no phone number on file where we should call them, then saves it. */
 export function PhonePromptDialog({
@@ -61,8 +62,8 @@ export function PhonePromptDialog({
           <button
             type="submit"
             disabled={saving || phoneInput.trim() === ''}
-            className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-            style={{ backgroundColor: primaryColor }}
+            className="flex-1 rounded-lg py-2.5 text-sm font-semibold site-button-colors disabled:opacity-50"
+            style={siteButtonStyle(primaryColor)}
           >
             {saving ? 'Saving…' : 'Save and call'}
           </button>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { formatDollars, readMessage, toCents } from './phone-format';
+import { siteButtonStyle } from '../../lib/site-button';
 
 export interface SchedulableAdvisor {
   id: string;
@@ -164,8 +165,8 @@ export function ScheduleDialog({
           <button
             type="submit"
             disabled={submitting}
-            className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-            style={{ backgroundColor: primaryColor }}
+            className="flex-1 rounded-lg py-2.5 text-sm font-semibold site-button-colors disabled:opacity-50"
+            style={siteButtonStyle(primaryColor)}
           >
             {submitting ? 'Sending…' : 'Send request'}
           </button>

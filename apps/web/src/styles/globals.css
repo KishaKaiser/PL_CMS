@@ -111,10 +111,29 @@
     border-radius: var(--site-button-radius, 0.25rem);
     color: var(--site-button-text, #ffffff);
     font-family: var(--site-button-font, inherit);
+    font-size: var(--site-button-size, inherit);
   }
 
   .site-button:hover {
     background-color: var(--site-button-hover-bg, var(--site-button-bg, var(--site-button-fallback, #9333ea)));
+    color: var(--site-button-hover-text, var(--site-button-text, #ffffff));
+  }
+
+  /*
+   * Buttons that keep their own shape and size but take their colors from the Site Defaults page: the shop, phone and
+   * blog buttons that used to be drawn in the primary color. --site-button-fallback is set by the button.
+   */
+  .site-button-colors {
+    background-color: var(--site-button-bg, var(--site-button-fallback));
+    color: var(--site-button-text, #ffffff);
+    font-family: var(--site-button-font, inherit);
+  }
+
+  .site-button-colors:hover:not(:disabled) {
+    background-color: var(
+      --site-button-hover-bg,
+      var(--site-button-hover-auto, var(--site-button-hover-fallback, var(--site-button-bg, var(--site-button-fallback))))
+    );
     color: var(--site-button-hover-text, var(--site-button-text, #ffffff));
   }
 
