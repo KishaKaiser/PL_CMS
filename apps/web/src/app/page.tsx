@@ -41,7 +41,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const homePage = await getPublishedPage(siteConfig.homepage.selectedPage?.slug || 'home');
 
   return buildSeoMetadata({
-    title: homePage ? getSeoTitle(homePage.title, homePage.metaTitle) : siteConfig.identity.title,
+    // The tab shows the site name unless the home page has a meta title of its own (not its page title, which is "Home").
+    title: homePage?.metaTitle?.trim() || siteConfig.identity.title,
     description: homePage
       ? getSeoDescription(homePage.metaDescription, homePage.content, siteConfig.identity.tagline)
       : getSeoDescription(siteConfig.theme.heroBody, siteConfig.identity.tagline),
