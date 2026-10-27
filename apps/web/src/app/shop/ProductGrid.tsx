@@ -17,6 +17,9 @@ interface Product {
   price: string | number;
   currency: string;
   minutesPack: number;
+  /** Set for the custom candle product: the card links to the builder instead of offering Add to Cart. */
+  customizeHref?: string | null;
+  customizeFromPrice?: number | null;
   variants?: Array<{ color?: string | null; isActive?: boolean }>;
 }
 
@@ -39,17 +42,19 @@ export function ProductGrid({ products }: Props) {
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {products.map((product) => {
         const price = Number(product.price);
+        const customizeHref = product.customizeHref || null;
+        const href = customizeHref ?? `/shop/${product.slug || product.id}`;
 
         return (
           <article
             key={product.id}
             role="link"
             tabIndex={0}
-            onClick={() => router.push(`/shop/${product.slug || product.id}`)}
+            onClick={() => router.push(href)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                router.push(`/shop/${product.slug || product.id}`);
+                router.push(href);
               }
             }}
             className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -72,8 +77,9 @@ export function ProductGrid({ products }: Props) {
                 {product.name}
               </h2>
               <div className="mt-3 flex items-baseline gap-1">
+                {customizeHref && <span className="text-sm text-gray-500">From</span>}
                 <span className="text-2xl font-bold text-purple-700">
-                  ${price.toFixed(2)}
+                  ${(customizeHref ? Number(product.customizeFromPrice ?? 0) : price).toFixed(2)}
                 </span>
                 <span className="text-sm text-gray-400">{product.currency}</span>
               </div>
@@ -89,25 +95,35 @@ export function ProductGrid({ products }: Props) {
                   ))}
                 </div>
               )}
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  addToCart({
-                    productId: product.id,
-                    productName: product.name,
-                    productPrice: price,
-                    productType: product.type,
-                    digitalDelivery: product.digitalDelivery,
-                    currency: product.currency,
-                    quantity: 1,
-                  });
-                  showAddedMessage(product.id);
-                }}
-                className="mt-auto rounded bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
-              >
-                Add to Cart
-              </button>
+              {customizeHref ? (
+                <a
+                  href={customizeHref}
+                  onClick={(event) => event.stopPropagation()}
+                  className="mt-auto rounded bg-purple-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-purple-700"
+                >
+                  Customize Candle
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    addToCart({
+                      productId: product.id,
+                      productName: product.name,
+                      productPrice: price,
+                      productType: product.type,
+                      digitalDelivery: product.digitalDelivery,
+                      currency: product.currency,
+                      quantity: 1,
+                    });
+                    showAddedMessage(product.id);
+                  }}
+                  className="mt-auto rounded bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+                >
+                  Add to Cart
+                </button>
+              )}
               {addedProductId === product.id && (
                 <p className="mt-3 rounded bg-green-50 px-3 py-2 text-sm font-medium text-green-700" role="status">
                   Product was added to cart.

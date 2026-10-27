@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound, permanentRedirect, redirect } from 'next/navigation';
 import { ReviewSection } from '../../../components/reviews/review-section';
 import { ProductInstructions } from '../../../components/product-instructions';
 import { getPublicSiteConfig, getSafeImageSrc } from '../../../lib/public-cms';
@@ -30,6 +30,8 @@ interface Product {
   metaTitle?: string | null;
   metaDescription?: string | null;
   hiddenFromShop?: boolean;
+  /** Set for the custom candle product, which has no page of its own: customers are sent to the builder. */
+  customizeHref?: string | null;
   instructionsMedia?: { url: string; title?: string | null; originalName?: string | null; sizeBytes?: number } | null;
   shortDescription?: string | null;
   description?: string;
@@ -143,6 +145,8 @@ export default async function ProductDetailPage({ params }: Props) {
   const product = await getProduct(key.toLowerCase());
 
   if (!product || !product.isActive) notFound();
+  // The custom candle has no product page: an old link, or a search result, goes to the builder.
+  if (product.customizeHref) redirect(product.customizeHref);
 
   // An older link (by id, or an address the product used to have) goes on to the product's current address.
   if (product.slug && product.slug !== key) permanentRedirect(`/shop/${product.slug}`);

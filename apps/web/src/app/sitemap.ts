@@ -12,11 +12,11 @@ import { fetchApi } from '../lib/server-api';
 import { toAbsoluteUrl } from '../lib/seo';
 
 /** The shop's products that are on sale (the API leaves out inactive and hidden ones). */
-async function getShopProducts(): Promise<Array<{ id: string; slug?: string | null; updatedAt?: string }>> {
+async function getShopProducts(): Promise<Array<{ id: string; slug?: string | null; updatedAt?: string; customizeHref?: string | null }>> {
   try {
     const res = await fetchApi('/products', { cache: 'no-store' });
     if (!res.ok) return [];
-    return (await res.json()) as Array<{ id: string; slug?: string | null; updatedAt?: string }>;
+    return (await res.json()) as Array<{ id: string; slug?: string | null; updatedAt?: string; customizeHref?: string | null }>;
   } catch {
     return [];
   }
@@ -52,7 +52,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   addEntry('/shop', { changeFrequency: 'daily', priority: 0.9 });
 
   for (const product of products) {
-    addEntry(`/shop/${product.slug || product.id}`, {
+    // The custom candle has no product page of its own: its entry is the builder.
+    addEntry(product.customizeHref || `/shop/${product.slug || product.id}`, {
       lastModified: product.updatedAt,
       changeFrequency: 'weekly',
       priority: 0.8,

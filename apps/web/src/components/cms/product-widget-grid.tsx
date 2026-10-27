@@ -16,6 +16,9 @@ export interface ProductWidgetItem {
   imageSrc?: string | null;
   imageAlt?: string | null;
   isOnSale?: boolean;
+  /** Set for the custom candle product: the card links to the builder instead of offering Add to Cart. */
+  customizeHref?: string | null;
+  customizeFromPrice?: number | null;
 }
 
 interface Props {
@@ -36,7 +39,9 @@ export function ProductWidgetGrid({ products, primaryColor = '#6f21b6' }: Props)
   return (
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {products.map((product) => {
-        const price = Number(product.price);
+        const customizeHref = product.customizeHref || null;
+        const href = customizeHref ?? `/shop/${product.slug || product.id}`;
+        const price = Number(customizeHref ? (product.customizeFromPrice ?? 0) : product.price);
         const displayPrice = Number.isFinite(price) ? price : 0;
         const regularPrice = Number(product.regularPrice);
         const salePrice = Number(product.salePrice);
@@ -49,7 +54,7 @@ export function ProductWidgetGrid({ products, primaryColor = '#6f21b6' }: Props)
             key={product.id}
             className="group flex h-full flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
-            <Link href={`/shop/${product.slug || product.id}`} className="block aspect-[4/3] bg-gray-100">
+            <Link href={href} className="block aspect-[4/3] bg-gray-100">
               {product.imageSrc ? (
                 <img
                   src={product.imageSrc}
@@ -61,7 +66,7 @@ export function ProductWidgetGrid({ products, primaryColor = '#6f21b6' }: Props)
               )}
             </Link>
             <div className="flex flex-1 flex-col p-5">
-              <Link href={`/shop/${product.slug || product.id}`} className="text-lg font-semibold text-gray-950 hover:underline" style={{ textDecorationColor: primaryColor }}>
+              <Link href={href} className="text-lg font-semibold text-gray-950 hover:underline" style={{ textDecorationColor: primaryColor }}>
                 {product.name}
               </Link>
               <div className="mt-3">
@@ -78,6 +83,7 @@ export function ProductWidgetGrid({ products, primaryColor = '#6f21b6' }: Props)
                   </div>
                 ) : (
                   <div className="flex items-baseline gap-1">
+                    {customizeHref && <span className="text-sm text-gray-500">From</span>}
                     <span className="text-2xl font-bold" style={{ color: primaryColor }}>
                       ${displayPrice.toFixed(2)}
                     </span>
@@ -85,23 +91,33 @@ export function ProductWidgetGrid({ products, primaryColor = '#6f21b6' }: Props)
                   </div>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  addToCart({
-                    productId: product.id,
-                    productName: product.name,
-                    productPrice: displayPrice,
-                    currency,
-                    quantity: 1,
-                  });
-                  showAddedMessage(product.id);
-                }}
-                className="mt-auto rounded px-4 py-2 text-sm font-medium site-button-colors transition hover:opacity-90"
-                style={siteButtonStyle(primaryColor)}
-              >
-                Add to Cart
-              </button>
+              {customizeHref ? (
+                <Link
+                  href={customizeHref}
+                  className="mt-auto rounded px-4 py-2 text-center text-sm font-medium site-button-colors transition hover:opacity-90"
+                  style={siteButtonStyle(primaryColor)}
+                >
+                  Customize Candle
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    addToCart({
+                      productId: product.id,
+                      productName: product.name,
+                      productPrice: displayPrice,
+                      currency,
+                      quantity: 1,
+                    });
+                    showAddedMessage(product.id);
+                  }}
+                  className="mt-auto rounded px-4 py-2 text-sm font-medium site-button-colors transition hover:opacity-90"
+                  style={siteButtonStyle(primaryColor)}
+                >
+                  Add to Cart
+                </button>
+              )}
               {addedProductId === product.id && (
                 <p className="mt-3 rounded bg-green-50 px-3 py-2 text-sm font-medium text-green-700" role="status">
                   Product was added to cart.

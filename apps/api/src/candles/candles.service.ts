@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, type OnModuleInit } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildMediaAssetUrl, isImageMimeType } from '../admin/admin-media/media.util';
@@ -10,9 +10,15 @@ import {
   SaveCandleTypeDto,
 } from './candles.dto';
 
-/** The hidden product that every custom candle order line points at (an order line needs a product). */
-const CUSTOM_PRODUCT_SETTING_KEY = 'custom_candle_product_id';
+import { CUSTOM_PRODUCT_LISTED_SETTING_KEY, CUSTOM_PRODUCT_SETTING_KEY } from './custom-product';
+
+/** The product that every custom candle order line points at (an order line needs a product). It is also the shop's card. */
 const CUSTOM_PRODUCT_NAME = 'Custom Candle';
+const CUSTOM_PRODUCT_DESCRIPTION =
+  'Design your own candle: choose the candle, its color or colors, the height and herbs, and watch it change as you choose.';
+/** What the product's description said when it was hidden from the shop. */
+const OLD_HIDDEN_DESCRIPTION =
+  'Used by the custom candle page. Each order line records what the customer chose. Please do not delete.';
 
 export interface ResolvedCandle {
   /** The price of one candle, worked out here from what was chosen (never taken from the customer's browser). */
@@ -26,8 +32,36 @@ const money = (value: unknown) => new Decimal(String(value ?? 0));
 const num = (value: unknown) => Number(value ?? 0);
 
 @Injectable()
-export class CandlesService {
+export class CandlesService implements OnModuleInit {
+  private readonly logger = new Logger(CandlesService.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Puts the custom candle product in the shop, once, so it can be shown there with a "Customize Candle" button. */
+  async onModuleInit() {
+    try {
+      const productId = await this.ensureCustomProductId();
+      const listed = await this.prisma.setting.findUnique({ where: { key: CUSTOM_PRODUCT_LISTED_SETTING_KEY } });
+      if (listed) return;
+
+      const product = await this.prisma.product.findUnique({ where: { id: productId }, select: { description: true } });
+      await this.prisma.product.update({
+        where: { id: productId },
+        data: {
+          hiddenFromShop: false,
+          ...(product?.description === OLD_HIDDEN_DESCRIPTION ? { description: CUSTOM_PRODUCT_DESCRIPTION } : {}),
+        },
+      });
+      await this.prisma.setting.upsert({
+        where: { key: CUSTOM_PRODUCT_LISTED_SETTING_KEY },
+        create: { key: CUSTOM_PRODUCT_LISTED_SETTING_KEY, value: '1' },
+        update: { value: '1' },
+      });
+    } catch (error) {
+      // The shop card is a nicety: never stop the API from starting over it.
+      this.logger.warn(`Could not list the custom candle product in the shop: ${error instanceof Error ? error.message : error}`);
+    }
+  }
 
   // ── What the shop sells ────────────────────────────────────────────────────────────
 
@@ -65,7 +99,7 @@ export class CandlesService {
     };
   }
 
-  /** The hidden "Custom Candle" product, created the first time it is needed. */
+  /** The "Custom Candle" product, created the first time it is needed. */
   async ensureCustomProductId(): Promise<string> {
     const saved = await this.prisma.setting.findUnique({ where: { key: CUSTOM_PRODUCT_SETTING_KEY } });
     if (saved) {
@@ -78,13 +112,14 @@ export class CandlesService {
         name: CUSTOM_PRODUCT_NAME,
         slug: await uniqueProductSlug(this.prisma, CUSTOM_PRODUCT_NAME),
         type: 'PHYSICAL',
-        description: 'Used by the custom candle page. Each order line records what the customer chose. Please do not delete.',
+        description: CUSTOM_PRODUCT_DESCRIPTION,
         // The price of each order line is worked out from the customer's choices, not from here.
         price: 0,
         regularPrice: 0,
         currency: 'USD',
         isActive: true,
-        hiddenFromShop: true,
+        // Shown in the shop with a "Customize Candle" button; the Hidden checkbox on the product still hides it.
+        hiddenFromShop: false,
         stockStatus: 'IN_STOCK',
       },
       select: { id: true },

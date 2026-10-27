@@ -20,6 +20,9 @@ interface Product {
   currency: string;
   minutesPack: number;
   isActive: boolean;
+  /** Set for the custom candle product: the shop sends the customer to the builder instead of the cart. */
+  customizeHref?: string | null;
+  customizeFromPrice?: number | null;
   categories?: Array<{ id: string; slug: string; name: string }>;
   variants?: Array<{ color?: string | null; isActive?: boolean }>;
 }
@@ -319,14 +322,15 @@ function collectColors(products: Product[]) {
 function filterProducts(products: Product[], category: string, price: string, color: string) {
   return products.filter((product) => {
     const matchesCategory = !category || product.categories?.some((item) => item.slug === category);
-    const productPrice = Number(product.price);
+    // The custom candle has no price of its own: it is filtered by its starting price, and is offered in every color.
+    const productPrice = Number(product.customizeFromPrice ?? product.price);
     const matchesPrice =
       !price ||
       (price === 'under-25' && productPrice < 25) ||
       (price === '25-50' && productPrice >= 25 && productPrice <= 50) ||
       (price === '50-100' && productPrice > 50 && productPrice <= 100) ||
       (price === 'over-100' && productPrice > 100);
-    const matchesColor = !color || product.variants?.some((variant) => variant.color && parseVariantColor(variant.color).label === color);
+    const matchesColor = !color || !!product.customizeHref || product.variants?.some((variant) => variant.color && parseVariantColor(variant.color).label === color);
     return matchesCategory && matchesPrice && matchesColor;
   });
 }

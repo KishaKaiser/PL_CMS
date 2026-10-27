@@ -6,6 +6,7 @@ import { normalizeSlug, sanitizeCmsHtml } from '../admin/admin-content/cms-conte
 import { downloadRemoteImageToMedia } from '../admin/admin-media/media-import.util';
 import { isPdfMimeType, serializeMediaAsset } from '../admin/admin-media/media.util';
 import { RESERVED_PRODUCT_SLUGS, uniqueProductSlug } from './product-slug';
+import { attachCustomCandleListing } from '../candles/custom-product';
 
 const MAX_REDIRECT_DEPTH = 5;
 
@@ -45,7 +46,11 @@ export class ProductsService implements OnModuleInit {
       orderBy: { createdAt: 'desc' },
       include: activeProductInclude,
     });
-    return products.map((product) => applyEffectiveSalePrice(serializeProduct(product)));
+    // The custom candle product is marked so the shop shows "Customize Candle" for it instead of "Add to Cart".
+    return attachCustomCandleListing(
+      this.prisma,
+      products.map((product) => applyEffectiveSalePrice(serializeProduct(product))),
+    );
   }
 
   async findOne(id: string) {
@@ -54,7 +59,8 @@ export class ProductsService implements OnModuleInit {
       include: productInclude,
     });
     if (!product) throw new NotFoundException(`Product ${id} not found`);
-    return applyEffectiveSalePrice(serializeProduct(product));
+    const [marked] = await attachCustomCandleListing(this.prisma, [applyEffectiveSalePrice(serializeProduct(product))]);
+    return marked;
   }
 
   /**
@@ -62,6 +68,11 @@ export class ProductsService implements OnModuleInit {
    * product's own slug with what was asked for and redirects when they differ, so every old address leads to the current one.
    */
   async findByKey(key: string) {
+    const [marked] = await attachCustomCandleListing(this.prisma, [await this.findByKeyUnmarked(key)]);
+    return marked;
+  }
+
+  private async findByKeyUnmarked(key: string) {
     const direct = await this.prisma.product.findFirst({
       where: { OR: [{ slug: key }, { id: key }] },
       include: productInclude,
