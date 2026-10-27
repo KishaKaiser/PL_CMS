@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
+import { OrderProgressPanel } from '../../../../components/admin/order-progress-panel';
 
 interface ShippingAddress {
   fullName: string;
@@ -138,9 +139,10 @@ export default function AdminOrderDetailPage() {
   const [newStatus, setNewStatus] = useState('');
   const [newTracking, setNewTracking] = useState('');
 
-  const fetchOrder = useCallback(async () => {
+  // `quiet` refreshes the order without blanking the page, for changes made from the progress panel.
+  const fetchOrder = useCallback(async (quiet = false) => {
     if (!orderId) return;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setError('');
     try {
       const res = await fetch(`/api/proxy/fulfillment/orders/${orderId}`);
@@ -340,6 +342,9 @@ export default function AdminOrderDetailPage() {
               )}
             </div>
           </section>
+
+          {/* Progress the customer sees, and the provider and tracking number */}
+          <OrderProgressPanel orderId={orderId} orderStatus={order.status} onChanged={() => void fetchOrder(true)} />
 
           {/* Order items */}
           <section className="rounded-lg border bg-white p-5 shadow-sm">

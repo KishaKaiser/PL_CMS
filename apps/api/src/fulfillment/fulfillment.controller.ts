@@ -18,7 +18,8 @@ import { Roles, RolesGuard } from '../auth/roles.guard';
 import { Role } from '@pl-cms/shared';
 import { FulfillmentService } from './fulfillment.service';
 import { ShipStationCustomStoreService } from './shipstation-custom-store.service';
-import { BuyLabelDto, UpdateOrderStatusDto, UpdateShipmentStatusDto } from './fulfillment.dto';
+import { BuyLabelDto, UpdateOrderProgressDto, UpdateOrderStatusDto, UpdateShipmentStatusDto } from './fulfillment.dto';
+import { OrderTrackingService } from './order-tracking.service';
 
 @Controller('fulfillment')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -27,6 +28,7 @@ export class FulfillmentController {
   constructor(
     private readonly fulfillmentService: FulfillmentService,
     private readonly customStore: ShipStationCustomStoreService,
+    private readonly orderTracking: OrderTrackingService,
   ) {}
 
   @Get('shipstation-custom-store')
@@ -69,6 +71,15 @@ export class FulfillmentController {
     @Body() dto: UpdateOrderStatusDto,
   ) {
     return this.fulfillmentService.updateOrderStatus(orderId, dto.status);
+  }
+
+  /** Move an order along: being made, being packaged, ready to ship, shipped (with provider and tracking number), delivered. */
+  @Put('orders/:orderId/progress')
+  updateOrderProgress(
+    @Param('orderId') orderId: string,
+    @Body() dto: UpdateOrderProgressDto,
+  ) {
+    return this.orderTracking.setProgress(orderId, dto);
   }
 
   /** Buy a ShipStation shipping label for an order (admin). */

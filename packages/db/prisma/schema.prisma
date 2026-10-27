@@ -32,6 +32,15 @@ enum OrderStatus {
   REFUNDED
 }
 
+/// The steps an order goes through after it is placed, set by hand (shipping and delivery also follow the shipment).
+enum OrderStage {
+  IN_PRODUCTION
+  PACKAGING
+  READY_TO_SHIP
+  SHIPPED
+  DELIVERED
+}
+
 enum ShipmentStatus {
   PENDING
   LABEL_PURCHASED
@@ -1344,9 +1353,23 @@ model Order {
   shippingAddress   OrderAddress?
   shipments         Shipment[]
   astrologyReports  AstrologyReport[]
+  stageEvents       OrderStageEvent[]
 
   @@index([userId])
   @@map("orders")
+}
+
+/// One step reached by an order, with when. The latest one is where the order is now.
+model OrderStageEvent {
+  id        String     @id @default(cuid())
+  orderId   String
+  stage     OrderStage
+  createdAt DateTime   @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@map("order_stage_events")
 }
 
 // ──────────────────────────────────────────────

@@ -199,6 +199,15 @@ export default function ClientOrdersPage() {
                       </div>
                     )}
 
+                    {order.status !== 'PENDING' && (
+                      <a
+                        href={`/client/orders/${order.id}`}
+                        className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+                      >
+                        Track order
+                      </a>
+                    )}
+
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : order.id)}
                       className="rounded border px-3 py-1 text-xs hover:bg-gray-50"
