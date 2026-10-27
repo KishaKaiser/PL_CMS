@@ -342,9 +342,12 @@ function BuilderBlockView({ block, storeData, accountLink, menus }: { block: Bui
                   <a href={`/blog/${post.slug}`} className="hover:underline">{post.title}</a>
                 </h3>
                 {post.excerpt && <p className="mt-2 line-clamp-3 text-sm text-gray-600">{post.excerpt}</p>}
-                <a href={`/blog/${post.slug}`} className="mt-auto inline-flex w-fit rounded px-4 py-2 text-sm font-medium site-button-colors" style={siteButtonStyle(storeData.primaryColor ?? '#6f21b6')}>
-                  Read More
-                </a>
+                {/* The padding keeps the button off the excerpt even when the card is as tall as its content. */}
+                <div className="mt-auto pt-5">
+                  <a href={`/blog/${post.slug}`} className="inline-flex w-fit rounded px-4 py-2 text-sm font-medium site-button-colors" style={siteButtonStyle(storeData.primaryColor ?? '#6f21b6')}>
+                    Read More
+                  </a>
+                </div>
               </div>
             </article>
           ))}
