@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildMediaAssetUrl } from '../admin/admin-media/media.util';
+import { getCustomProductId } from '../candles/custom-product';
 import {
   CartRecoverySettingsDto,
   EcommerceSettingsDto,
@@ -287,8 +288,10 @@ export class StoreService {
       return '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:g="http://base.google.com/ns/1.0"><channel><title>Google Merchant feed disabled</title></channel></rss>';
     }
 
+    // The custom candle product is a shop card for the builder, has no price of its own, and so is not a feed item.
+    const customCandleProductId = await getCustomProductId(this.prisma);
     const products = await this.prisma.product.findMany({
-      where: { isActive: true, hiddenFromShop: false },
+      where: { isActive: true, hiddenFromShop: false, ...(customCandleProductId ? { id: { not: customCandleProductId } } : {}) },
       orderBy: { updatedAt: 'desc' },
       include: { featuredMedia: true, categories: true, tags: true },
     });

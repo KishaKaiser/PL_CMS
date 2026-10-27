@@ -17,6 +17,9 @@ interface Product {
   id: string;
   slug?: string | null;
   name: string;
+  /** Set for the custom candle product: its card links to the builder instead of offering Add to Cart. */
+  customizeHref?: string | null;
+  customizeFromPrice?: number | null;
   description?: string;
   price: string | number;
   regularPrice?: string | number | null;
@@ -420,6 +423,8 @@ function getProductWidgetItems(products: Product[], block: BuilderBlock): Produc
     imageSrc: getProductImageSrc(product),
     imageAlt: product.featuredMedia?.altText || product.featuredMedia?.title || product.name,
     isOnSale: isProductOnSale(product),
+    customizeHref: product.customizeHref,
+    customizeFromPrice: product.customizeFromPrice,
   }));
 }
 
