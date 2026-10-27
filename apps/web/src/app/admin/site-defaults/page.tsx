@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import {
   SITE_FONT_CHOICES,
+  autoHoverColor,
   SITE_NUMBER_LIMITS,
   type SiteDefaultField,
   type SiteNumberField,
@@ -56,6 +57,10 @@ export default function SiteDefaultsPage() {
 
   const inherited = state.inherited;
   const current: SiteDefaults = { ...inherited, ...draft };
+  // With a new button color and no hover color chosen, the site uses an automatic shade, so that is what is shown.
+  if (draft.buttonHoverBackground === undefined && draft.buttonBackground) {
+    current.buttonHoverBackground = autoHoverColor(draft.buttonBackground);
+  }
   const savedJson = JSON.stringify(state.overrides);
   const dirty = JSON.stringify(draft) !== savedJson;
 
@@ -239,7 +244,7 @@ export default function SiteDefaultsPage() {
             <div className="mt-4 grid gap-5 sm:grid-cols-2">
               {colorField('buttonBackground', 'Button color', 'The button when nothing is touching it.')}
               {colorField('buttonText', 'Button text color', '')}
-              {colorField('buttonHoverBackground', 'Button color on hover', 'When the mouse is over the button.')}
+              {colorField('buttonHoverBackground', 'Button color on hover', 'When the mouse is over the button. Left on Default, it is a lighter shade of a very dark button color and a darker shade of any other.')}
               {colorField('buttonHoverText', 'Button text color on hover', '')}
               {numberField('buttonFontSize', 'Button text size (pixels)', 'The size of the words on buttons.')}
               {numberField('buttonRadius', 'Corner rounding (pixels)', '0 is square; larger is rounder.')}

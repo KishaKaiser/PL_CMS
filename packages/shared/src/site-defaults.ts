@@ -150,6 +150,27 @@ export function resolveSiteDefaults(inherited: SiteDefaults, overrides: SiteDefa
   return { ...inherited, ...overrides };
 }
 
+/**
+ * The hover color of a button when none has been chosen: a little lighter for a very dark button (black would otherwise
+ * hardly change), and a little darker for everything else.
+ */
+export function autoHoverColor(hex: string): string {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return hex;
+  const value = parseInt(match[1], 16);
+  const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  const linear = (channel: number) => {
+    const scaled = channel / 255;
+    return scaled <= 0.03928 ? scaled / 12.92 : ((scaled + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = 0.2126 * linear(channels[0]) + 0.7152 * linear(channels[1]) + 0.0722 * linear(channels[2]);
+  const veryDark = luminance < 0.05;
+  const target = veryDark ? 255 : 0;
+  const amount = veryDark ? 0.3 : 0.18;
+  const mixed = channels.map((channel) => Math.round(channel + (target - channel) * amount));
+  return `#${mixed.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
+}
+
 // The buttons across the public pages (shop, cart, login, newsletter, forms...) are plain links and buttons that were
 // written with these Tailwind colors. When a button color is chosen on the Site Defaults page they follow it.
 const BUTTON_TAGS = '.site-shell :is(a,button,input[type="submit"]):not(:disabled)';
@@ -173,8 +194,9 @@ export function buildSiteDefaultsCss(overrides: SiteDefaultOverrides): string {
   if (safe.buttonRadius !== undefined) variables.push(`--site-button-radius:${safe.buttonRadius}px`);
   // An empty button font means "same as the body font", so there is nothing to set.
   if (safe.buttonFont) variables.push(`--site-button-font:${safe.buttonFont}`);
-  // With a new button color but no hover color chosen, buttons darken a little on hover instead of keeping the old one.
-  const autoHover = safe.buttonBackground ? `color-mix(in srgb,${safe.buttonBackground} 82%,black)` : '';
+  // With a new button color but no hover color chosen, buttons get a visibly different shade on hover instead of keeping
+  // the old one.
+  const autoHover = safe.buttonBackground ? autoHoverColor(safe.buttonBackground) : '';
   if (autoHover) variables.push(`--site-button-hover-auto:${autoHover}`);
 
   if (safe.buttonFontSize !== undefined) variables.push(`--site-button-size:${safe.buttonFontSize}px`);
