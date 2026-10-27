@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ShipStationTrackingKeyCard } from '../../../../components/admin/shipstation-tracking-key-card';
 
 interface WarehouseAddress {
   warehouseId?: string;
@@ -589,6 +590,8 @@ export default function ShippingSettingsPage() {
           </button>
         </div>
       </section>
+
+      <ShipStationTrackingKeyCard />
 
       <section className="mt-6 rounded-lg border bg-white p-5 text-sm shadow-sm">
         <h2 className="mb-3 text-lg font-semibold text-gray-900">ShipStation Custom Store Connection</h2>
