@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nes
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../auth/roles.guard';
-import { NewsletterSettingsDto, SubscribeDto } from './newsletter.dto';
+import { NewsletterSettingsDto, SubscribeDto, UnsubscribeDto } from './newsletter.dto';
 import { NewsletterService } from './newsletter.service';
 
 @Controller('newsletter')
@@ -12,6 +12,12 @@ export class NewsletterController {
   @Post('subscribe')
   subscribe(@Body() dto: SubscribeDto) {
     return this.newsletterService.subscribe(dto);
+  }
+
+  /** The link at the bottom of newsletter emails (signed, so no login is needed). */
+  @Post('unsubscribe')
+  unsubscribeByLink(@Body() dto: UnsubscribeDto) {
+    return this.newsletterService.unsubscribeWithToken(dto.email, dto.token);
   }
 
   @Get('settings')

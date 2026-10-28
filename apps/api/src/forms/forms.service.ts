@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type { Prisma } from '@pl-cms/db';
@@ -10,6 +11,10 @@ import * as bcrypt from 'bcryptjs';
 import { normalizeEmailInput } from '../common/input-normalization.util';
 import { assertPublicUsername, displayNameFromUsername, generateUniqueUsername, isPublicRole } from '../common/public-identity';
 import { grantWelcomePromo } from '../free-minutes/free-minutes.service';
+import { renderEmail } from '../mail/email-layout';
+import { isEmailAddress } from '../mail/email-settings';
+import { EmailSettingsService } from '../mail/email-settings.service';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CmsFormStatus,
@@ -28,9 +33,19 @@ type FormField = {
   options?: string[];
 };
 
+/** At most this many form alerts an hour, so a flood of spam cannot use up the mail account's daily sending allowance. */
+const MAX_FORM_ALERTS_PER_HOUR = 20;
+
 @Injectable()
 export class FormsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(FormsService.name);
+  private alertTimes: number[] = [];
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+    private readonly emailSettings: EmailSettingsService,
+  ) {}
 
   findAll() {
     return this.prisma.cmsForm.findMany({
@@ -140,7 +155,48 @@ export class FormsService {
       },
     });
 
+    void this.notifyOwner(form.title, fields, data);
+
     return { message: form.successMessage };
+  }
+
+  /** An email to the shop owner with what was submitted. Never throws, and never includes a password field. */
+  private async notifyOwner(formTitle: string, fields: FormField[], data: Record<string, unknown>) {
+    try {
+      const settings = await this.emailSettings.get();
+      if (!settings.notifyOnForms) return;
+      const to = await this.emailSettings.alertAddress();
+      if (!to) return;
+
+      const now = Date.now();
+      this.alertTimes = this.alertTimes.filter((time) => now - time < 60 * 60 * 1000);
+      if (this.alertTimes.length >= MAX_FORM_ALERTS_PER_HOUR) {
+        this.logger.warn('Too many form alerts this hour: this one was not emailed (it is still saved under the form).');
+        return;
+      }
+      this.alertTimes.push(now);
+
+      const lines = fields
+        .filter((field) => field.type !== 'password' && !/password/i.test(field.id))
+        .map((field) => {
+          const value = data[field.id];
+          const text = Array.isArray(value) ? value.map(String).join(', ') : value == null ? '' : String(value);
+          return `${field.label}: ${text.slice(0, 2000)}`;
+        });
+      const submitted = fields.find((field) => field.type === 'email' || field.id === 'email');
+      const replyTo = submitted ? String(data[submitted.id] ?? '').trim() : '';
+      const base = await this.emailSettings.siteUrl();
+      const content = renderEmail({
+        body: `Someone submitted the form "${formTitle}":\n\n${lines.join('\n')}`,
+        button: base ? { label: 'See all submissions', url: `${base}/admin/forms` } : null,
+      });
+      await this.mail.send(
+        { to, subject: `New form submission: ${formTitle}`.slice(0, 150), ...content },
+        { kind: 'form-alert', ...(isEmailAddress(replyTo) ? { replyTo } : {}) },
+      );
+    } catch (error) {
+      this.logger.warn(`Form alert failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   private async createRegistrationSubmission(

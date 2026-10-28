@@ -13,6 +13,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { StoreService } from '../store/store.service';
 import { AstrologyReportsService } from '../astrology/astrology-reports.service';
 import { CandlesService, ResolvedCandle } from '../candles/candles.service';
+import { OrderEmailService } from '../mail/order-emails.service';
 import { Prisma } from '@pl-cms/db';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class CheckoutService {
     private readonly store: StoreService,
     private readonly astrologyReports: AstrologyReportsService,
     private readonly candles: CandlesService,
+    private readonly orderEmails: OrderEmailService,
   ) {}
 
   /** Build and persist an Order row; returns it with items. */
@@ -433,6 +435,9 @@ export class CheckoutService {
     await this.decrementInventory(order.id);
     const creditedCents = await this.creditWalletIfNeeded(order.id, payment.id);
     await this.astrologyReports.markReportsAwaitingFulfillment(order.id, userId);
+
+    // The confirmation to the customer and the alert to the shop owner go out in the background.
+    void this.orderEmails.sendOrderPlaced(order.id);
 
     return {
       success: true,

@@ -59,6 +59,7 @@ const NAV_GROUPS = [
     items: [
       { href: '/admin/modules', label: 'Modules' },
       { href: '/admin/phone-prompts', label: 'Phone prompts' },
+      { href: '/admin/email', label: 'Email' },
       { href: '/admin/settings', label: 'Settings' },
     ],
   },

@@ -1343,6 +1343,8 @@ model Order {
   shippingCarrier  String?
   shippingService  String?
   shippingAmount   Decimal?
+  /// Set when the order confirmation email was sent (or taken on), so it goes out once even if payment is confirmed twice.
+  confirmationEmailSentAt DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
@@ -1564,4 +1566,24 @@ model Shipment {
 
   @@index([orderId])
   @@map("shipments")
+}
+
+enum EmailStatus {
+  SENT
+  FAILED
+}
+
+/// A record of each email the site tried to send, so the admin can see what was sent and why one failed.
+model EmailLog {
+  id        String      @id @default(cuid())
+  to        String
+  subject   String
+  /// What the email was for, e.g. "order-confirmation" or "test".
+  kind      String      @default("general")
+  status    EmailStatus
+  error     String?
+  createdAt DateTime    @default(now())
+
+  @@index([createdAt])
+  @@map("email_logs")
 }

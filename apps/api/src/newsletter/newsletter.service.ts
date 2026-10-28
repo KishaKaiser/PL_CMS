@@ -1,5 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { renderEmail } from '../mail/email-layout';
+import { EmailSettingsService } from '../mail/email-settings.service';
+import { MailService } from '../mail/mail.service';
+import { isValidUnsubscribeToken, unsubscribeToken } from './newsletter-unsubscribe';
 import { NewsletterSettingsDto, SubscribeDto } from './newsletter.dto';
 
 const NEWSLETTER_SUBSCRIBERS_KEY = 'newsletter_subscribers';
@@ -37,7 +42,14 @@ const DEFAULT_NEWSLETTER_SETTINGS: NewsletterSettingsDto = {
 
 @Injectable()
 export class NewsletterService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(NewsletterService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly mail: MailService,
+    private readonly emailSettings: EmailSettingsService,
+  ) {}
 
   async subscribe(dto: SubscribeDto) {
     const email = String(dto.email ?? '').trim().toLowerCase();
@@ -61,6 +73,8 @@ export class NewsletterService {
     });
     const subscribers = parseSubscribers(setting?.value);
     const existing = subscribers.find((subscriber) => subscriber.email === email);
+    // The welcome email goes to new subscribers and to people who had unsubscribed, not to someone who is already on the list.
+    const wasSubscribed = existing?.status === 'SUBSCRIBED';
 
     if (existing) {
       existing.name = name || existing.name;
@@ -94,10 +108,50 @@ export class NewsletterService {
       });
     }
 
+    if (!wasSubscribed) void this.sendWelcome(email, name, settings);
+
     return {
       success: true,
       message: existing ? 'You are already subscribed.' : settings.successMessage,
     };
+  }
+
+  private secret() {
+    return this.config.get<string>('JWT_REFRESH_SECRET') || this.config.get<string>('DOCUMENT_ENCRYPTION_KEY') || '';
+  }
+
+  /** The welcome message written in Newsletter settings, with an unsubscribe link at the bottom. Never throws. */
+  private async sendWelcome(email: string, name: string, settings: NewsletterSettingsDto) {
+    try {
+      const secret = this.secret();
+      const siteUrl = await this.emailSettings.siteUrl();
+      // A newsletter email must always be able to be stopped: without a signed link there is no safe way to offer one.
+      if (!secret || !siteUrl) return;
+      const link = `${siteUrl}/newsletter/unsubscribe?email=${encodeURIComponent(email)}&token=${unsubscribeToken(email, secret)}`;
+      const content = renderEmail({
+        body: `${name ? `Hi ${name},\n\n` : ''}${settings.welcomeBody}`,
+        footer: `You are receiving this because you subscribed to our newsletter. To stop receiving it, unsubscribe here: ${link}`,
+      });
+      await this.mail.send({ to: email, subject: settings.welcomeSubject, ...content }, { kind: 'newsletter-welcome' });
+    } catch (error) {
+      this.logger.warn(`Welcome email failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** The unsubscribe link in an email: checked with its signature, so no login is needed. */
+  async unsubscribeWithToken(email: string, token: string) {
+    const address = String(email ?? '').trim().toLowerCase();
+    if (!isValidUnsubscribeToken(address, String(token ?? ''), this.secret())) {
+      throw new BadRequestException('This unsubscribe link is not valid.');
+    }
+    const subscribers = await this.readSubscribers();
+    const subscriber = subscribers.find((item) => item.email === address);
+    if (subscriber && subscriber.status !== 'UNSUBSCRIBED') {
+      subscriber.status = 'UNSUBSCRIBED';
+      subscriber.unsubscribedAt = new Date().toISOString();
+      await this.writeJson(NEWSLETTER_SUBSCRIBERS_KEY, subscribers);
+    }
+    return { success: true };
   }
 
   async getSettings() {

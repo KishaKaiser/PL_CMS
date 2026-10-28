@@ -406,6 +406,13 @@ export default function AdminStorePage() {
 
           <section className="rounded-xl border bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold">Store Emails</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Sent to customers once email is connected in <a href="/admin/email" className="text-indigo-600 hover:underline">Admin → Email</a>. Untick one to stop sending it.
+              In the subject and message you can use <code className="rounded bg-gray-100 px-1">{'{{customerName}}'}</code>, <code className="rounded bg-gray-100 px-1">{'{{orderId}}'}</code>,{' '}
+              <code className="rounded bg-gray-100 px-1">{'{{orderItems}}'}</code>, <code className="rounded bg-gray-100 px-1">{'{{total}}'}</code>,{' '}
+              <code className="rounded bg-gray-100 px-1">{'{{stage}}'}</code> (order progress), <code className="rounded bg-gray-100 px-1">{'{{carrier}}'}</code> and{' '}
+              <code className="rounded bg-gray-100 px-1">{'{{trackingNumber}}'}</code> (shipped). A &ldquo;Track your order&rdquo; button is added to each order email.
+            </p>
             <div className="mt-4 space-y-4">
               {emails.map((template, index) => (
                 <div key={template.key} className="rounded-lg border p-4">

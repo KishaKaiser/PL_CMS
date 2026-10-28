@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildMediaAssetUrl } from '../admin/admin-media/media.util';
 import { getCustomProductId } from '../candles/custom-product';
+import { STORE_EMAILS_KEY, mergeEmailTemplates } from '../mail/email-templates';
 import {
   CartRecoverySettingsDto,
   EcommerceSettingsDto,
@@ -17,7 +18,6 @@ const COUPONS_KEY = 'store_coupons';
 const FREE_SHIPPING_KEY = 'store_free_shipping';
 const CART_RECOVERY_KEY = 'store_cart_recovery_settings';
 const CART_RECOVERY_RECORDS_KEY = 'store_cart_recovery_records';
-const STORE_EMAILS_KEY = 'store_email_templates';
 const ECOMMERCE_SETTINGS_KEY = 'store_ecommerce_settings';
 const GOOGLE_MERCHANT_SETTINGS_KEY = 'store_google_merchant_settings';
 
@@ -52,27 +52,6 @@ const DEFAULT_CART_RECOVERY: CartRecoverySettingsDto = {
   delayMinutes: 60,
   expiresDays: 7,
 };
-
-const DEFAULT_EMAILS: StoreEmailTemplateDto[] = [
-  {
-    key: 'order_confirmation',
-    subject: 'Your order has been received',
-    body: 'Hi {{customerName}}, your order {{orderId}} has been received.',
-    enabled: true,
-  },
-  {
-    key: 'order_shipped',
-    subject: 'Your order has shipped',
-    body: 'Hi {{customerName}}, your order {{orderId}} has shipped. Tracking: {{trackingNumber}}',
-    enabled: true,
-  },
-  {
-    key: 'cart_recovery',
-    subject: 'You left something in your cart',
-    body: 'Your cart is waiting for you. Complete your order here: {{cartUrl}}',
-    enabled: false,
-  },
-];
 
 const DEFAULT_ECOMMERCE_SETTINGS: EcommerceSettingsDto = {
   storeName: 'Psychic Link Store',
@@ -218,7 +197,8 @@ export class StoreService {
   }
 
   async getEmailTemplates() {
-    return this.readJson<StoreEmailTemplateDto[]>(STORE_EMAILS_KEY, DEFAULT_EMAILS);
+    // Templates added after the admin last saved them (such as the order progress email) are filled in from the defaults.
+    return mergeEmailTemplates(await this.readJson<unknown>(STORE_EMAILS_KEY, null));
   }
 
   async saveEmailTemplates(templates: StoreEmailTemplateDto[]) {
