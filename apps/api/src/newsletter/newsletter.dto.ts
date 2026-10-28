@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class SubscribeDto {
   @IsEmail()
@@ -61,4 +61,14 @@ export class NewsletterSettingsDto {
 
   @IsString()
   welcomeBody!: string;
+}
+
+/** The unsubscribe link in a newsletter email: the address and the signature in the link. */
+export class UnsubscribeDto {
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  @MaxLength(200)
+  token!: string;
 }

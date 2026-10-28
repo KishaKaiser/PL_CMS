@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { MailModule } from '../mail/mail.module';
 import { FulfillmentController } from './fulfillment.controller';
 import { OrderTrackingController } from './order-tracking.controller';
 import { ShipStationCustomStoreController } from './shipstation-custom-store.controller';
@@ -9,6 +10,7 @@ import { ShipStationTrackingService } from './shipstation-tracking.service';
 import { EmailService } from './email.service';
 
 @Module({
+  imports: [MailModule],
   controllers: [FulfillmentController, ShipStationCustomStoreController, OrderTrackingController],
   providers: [
     FulfillmentService,

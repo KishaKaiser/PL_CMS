@@ -6,9 +6,10 @@ import { PaypalService } from './paypal.service';
 import { StoreModule } from '../store/store.module';
 import { AstrologyModule } from '../astrology/astrology.module';
 import { CandlesModule } from '../candles/candles.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
-  imports: [StoreModule, AstrologyModule, CandlesModule],
+  imports: [StoreModule, AstrologyModule, CandlesModule, MailModule],
   controllers: [CheckoutController, PaypalAdminController],
   providers: [CheckoutService, PaypalService],
   exports: [PaypalService],

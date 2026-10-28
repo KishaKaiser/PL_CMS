@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaypalService } from '../checkout/paypal.service';
+import { OrderEmailService } from '../mail/order-emails.service';
 
 interface PaypalWebhookEvent {
   id?: string;
@@ -25,6 +26,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paypal: PaypalService,
+    private readonly orderEmails: OrderEmailService,
   ) {}
 
   /**
@@ -163,6 +165,9 @@ export class PaymentsService {
       },
     });
 
+    // The confirmation to the customer and the alert to the shop owner go out once, in the background.
+    void this.orderEmails.sendOrderPlaced(order.id);
+
     // Decrement inventory for physical variant items
     const inventoryUpdates = (
       await this.prisma.order.findUnique({
@@ -255,6 +260,8 @@ export class PaymentsService {
       where: { id: orderId },
       data: { status: 'CONFIRMED' },
     });
+
+    void this.orderEmails.sendOrderPlaced(orderId);
 
     let creditedCents = 0;
     for (const item of order.items) {

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { OrderEmailService } from '../mail/order-emails.service';
 import { EmailService } from './email.service';
 import { ShipStationTrackingService } from './shipstation-tracking.service';
 import type { UpdateOrderProgressDto } from './fulfillment.dto';
@@ -23,6 +24,7 @@ export class OrderTrackingService {
     private readonly prisma: PrismaService,
     private readonly shipStationTracking: ShipStationTrackingService,
     private readonly email: EmailService,
+    private readonly orderEmails: OrderEmailService,
   ) {}
 
   private loadOrder(orderId: string) {
@@ -117,14 +119,17 @@ export class OrderTrackingService {
       }
     });
 
+    // The customer's emails go out in the background (a mail server can take a few seconds); they never throw.
     if (target === 'SHIPPED' && !alreadyShipped) {
-      await this.email.sendShipmentNotification({
+      void this.email.sendShipmentNotification({
         to: order.shippingAddress?.email ?? order.user.email,
         customerName: order.user.name,
         orderId: order.id,
         trackingNumber,
         carrier: carrierLabel(carrierValue),
       });
+    } else if (changesStage && (target === 'IN_PRODUCTION' || target === 'PACKAGING' || target === 'READY_TO_SHIP')) {
+      void this.orderEmails.sendProgress(orderId, target);
     }
 
     // No carrier lookup here: saving should be quick, and the page that shows the order asks for it.
