@@ -146,7 +146,8 @@ export class AdminUsersService {
   async resetPassword(id: string, dto: ResetPasswordDto) {
     await this.findOne(id);
     const passwordHash = await bcrypt.hash(dto.newPassword, 12);
-    await this.prisma.user.update({ where: { id }, data: { passwordHash } });
+    // passwordChangedAt signs out the user's older sign-ins: a password an admin changes should not leave old sessions open.
+    await this.prisma.user.update({ where: { id }, data: { passwordHash, passwordChangedAt: new Date() } });
     return { message: 'Password reset successfully' };
   }
 

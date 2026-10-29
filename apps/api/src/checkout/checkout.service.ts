@@ -14,6 +14,7 @@ import { StoreService } from '../store/store.service';
 import { AstrologyReportsService } from '../astrology/astrology-reports.service';
 import { CandlesService, ResolvedCandle } from '../candles/candles.service';
 import { OrderEmailService } from '../mail/order-emails.service';
+import { CartRecoveryService } from '../store/cart-recovery.service';
 import { Prisma } from '@pl-cms/db';
 
 @Injectable()
@@ -28,6 +29,7 @@ export class CheckoutService {
     private readonly astrologyReports: AstrologyReportsService,
     private readonly candles: CandlesService,
     private readonly orderEmails: OrderEmailService,
+    private readonly cartRecovery: CartRecoveryService,
   ) {}
 
   /** Build and persist an Order row; returns it with items. */
@@ -438,6 +440,8 @@ export class CheckoutService {
 
     // The confirmation to the customer and the alert to the shop owner go out in the background.
     void this.orderEmails.sendOrderPlaced(order.id);
+    // They ordered, so no cart reminder is needed.
+    void this.cartRecovery.markRecovered(userId).catch(() => undefined);
 
     return {
       success: true,

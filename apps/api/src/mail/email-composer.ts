@@ -11,6 +11,8 @@ export interface ComposeOptions {
   button?: { url: string; label?: string } | null;
   /** The small line at the bottom of a customer email when the Email page has no footer of its own. */
   defaultFooter?: string;
+  /** A bottom line that always wins, such as one holding an unsubscribe link. */
+  fixedFooter?: string;
   /** Design changes that are not saved yet, for the preview. */
   design?: EmailDesignOverrides;
 }
@@ -40,7 +42,7 @@ export class EmailComposer {
       body: fillTemplate(template.body, values),
       button: options.button ? { url: options.button.url, label: options.button.label ?? design.trackButtonLabel } : null,
       signature: options.customer ? design.signature : undefined,
-      footer: options.customer ? design.footerText || options.defaultFooter : undefined,
+      footer: options.fixedFooter ?? (options.customer ? design.footerText || options.defaultFooter : undefined),
       siteName: design.siteName,
       logoUrl: design.logoUrl,
       accentColor: design.accentColor,

@@ -77,7 +77,21 @@ const EMAIL_TEMPLATE_INFO: Record<string, { title: string; note: string; alert?:
   order_shipped: { title: 'Order shipped', note: 'Sent to the customer when you mark the order shipped, with its tracking number.' },
   order_alert: { title: 'New order alert (to you)', note: 'Sent to you when someone places an order. Turn it on or off in Admin → Email.', alert: true },
   form_alert: { title: 'Form submission alert (to you)', note: 'Sent to you when someone submits a form. Turn it on or off in Admin → Email.', alert: true },
-  cart_recovery: { title: 'Abandoned cart reminder', note: 'Not sent yet: this is coming soon.' },
+  cart_recovery: {
+    title: 'Abandoned cart reminder',
+    note: 'Sent once to a logged-in customer who leaves items in their cart, with a link to stop the reminders. Turn it on in Cart Recovery above.',
+    alert: true,
+  },
+  password_reset: { title: 'Password reset (Forgot password?)', note: 'Sent with the link to choose a new password. Always sent, and {{expiresIn}} says how long the link works.', alert: true },
+  password_changed: { title: 'Password changed', note: 'Sent after a password is changed, so a change nobody asked for gets noticed. Always sent.', alert: true },
+};
+
+/** What a cart's status means, for the list of carts left behind. */
+const CART_STATUS_TEXT: Record<string, string> = {
+  OPEN: 'Waiting to see if they come back',
+  EMAILED: 'Reminded',
+  RECOVERED: 'Ordered or emptied',
+  EXPIRED: 'Let go',
 };
 
 interface StoreEmailTemplate {
@@ -140,7 +154,7 @@ export default function AdminStorePage() {
   const [freeShipping, setFreeShipping] = useState<FreeShippingSettings>({ enabled: false, minimumSubtotal: 75, label: 'Free shipping' });
   const [cartRecovery, setCartRecovery] = useState<CartRecoverySettings>({ enabled: false, delayMinutes: 60, expiresDays: 7 });
   const [ecommerce, setEcommerce] = useState<EcommerceSettings>(defaultEcommerceSettings);
-  const [carts, setCarts] = useState<Array<{ id: string; email?: string; subtotal: number; status: string; createdAt: string; recoverAfter: string }>>([]);
+  const [carts, setCarts] = useState<Array<{ id: string; email?: string; subtotal: number; status: string; createdAt: string; recoverAfter: string; reminderSentAt?: string | null }>>([]);
   const [emails, setEmails] = useState<StoreEmailTemplate[]>([]);
   const [billingApiForm, setBillingApiForm] = useState<BillingApiForm>(defaultBillingApiForm);
   const [savingBillingApi, setSavingBillingApi] = useState(false);
@@ -166,7 +180,7 @@ export default function AdminStorePage() {
       setCoupons((await couponsRes.json()) as Coupon[]);
       setFreeShipping((await freeRes.json()) as FreeShippingSettings);
       setCartRecovery((await recoveryRes.json()) as CartRecoverySettings);
-      setCarts((await cartsRes.json()) as Array<{ id: string; email?: string; subtotal: number; status: string; createdAt: string; recoverAfter: string }>);
+      setCarts((await cartsRes.json()) as Array<{ id: string; email?: string; subtotal: number; status: string; createdAt: string; recoverAfter: string; reminderSentAt?: string | null }>);
       setEmails((await emailsRes.json()) as StoreEmailTemplate[]);
       if (billingApiRes.ok) {
         const setting = (await billingApiRes.json().catch(() => null)) as Setting | null;
@@ -392,25 +406,33 @@ export default function AdminStorePage() {
             <div className="rounded-xl border bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold">Cart Recovery</h2>
               <div className="mt-4 space-y-4">
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={cartRecovery.enabled} onChange={(event) => setCartRecovery((current) => ({ ...current, enabled: event.target.checked }))} /> Track recoverable carts</label>
-                <input type="number" min="1" value={cartRecovery.delayMinutes} onChange={(event) => setCartRecovery((current) => ({ ...current, delayMinutes: Number(event.target.value) }))} className="w-full rounded border px-3 py-2 text-sm" placeholder="Delay minutes" />
-                <input type="number" min="1" value={cartRecovery.expiresDays} onChange={(event) => setCartRecovery((current) => ({ ...current, expiresDays: Number(event.target.value) }))} className="w-full rounded border px-3 py-2 text-sm" placeholder="Expires days" />
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={cartRecovery.enabled} onChange={(event) => setCartRecovery((current) => ({ ...current, enabled: event.target.checked }))} /> Email a reminder to logged-in customers who leave items in their cart</label>
+                <p className="text-xs text-gray-500">One reminder per cart, sent to the email on the customer&apos;s account, with a link to stop them. Email must be connected in Admin → Email.</p>
+                <label className="block text-xs font-medium text-gray-600">Send the reminder this many minutes after they stop shopping
+                  <input type="number" min="1" value={cartRecovery.delayMinutes} onChange={(event) => setCartRecovery((current) => ({ ...current, delayMinutes: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Minutes" />
+                </label>
+                <label className="block text-xs font-medium text-gray-600">Forget a cart nobody came back to after this many days
+                  <input type="number" min="1" value={cartRecovery.expiresDays} onChange={(event) => setCartRecovery((current) => ({ ...current, expiresDays: Number(event.target.value) }))} className="mt-1 w-full rounded border px-3 py-2 text-sm" placeholder="Days" />
+                </label>
                 <button type="button" onClick={() => void save('/api/proxy/store/admin/cart-recovery', cartRecovery, 'Cart recovery saved.', 'PUT')} className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700">Save Cart Recovery</button>
               </div>
             </div>
           </section>
 
           <section className="rounded-xl border bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold">Recovered Carts</h2>
+            <h2 className="text-lg font-semibold">Carts left behind</h2>
+            <p className="mt-1 text-sm text-gray-500">Logged-in customers with items in their cart. Customers who asked to stop the reminders are not listed.</p>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {carts.slice(0, 10).map((cart) => (
                 <div key={cart.id} className="rounded border p-3 text-sm">
                   <div className="font-medium">{cart.email || 'No email yet'}</div>
-                  <div className="text-gray-500">${Number(cart.subtotal).toFixed(2)} · {cart.status}</div>
-                  <div className="text-xs text-gray-400">Recover after {new Date(cart.recoverAfter).toLocaleString()}</div>
+                  <div className="text-gray-500">${Number(cart.subtotal).toFixed(2)} · {CART_STATUS_TEXT[cart.status] ?? cart.status}</div>
+                  <div className="text-xs text-gray-400">
+                    {cart.reminderSentAt ? `Reminder sent ${new Date(cart.reminderSentAt).toLocaleString()}` : cart.status === 'OPEN' ? `Reminder after ${new Date(cart.recoverAfter).toLocaleString()}` : ''}
+                  </div>
                 </div>
               ))}
-              {carts.length === 0 && <p className="text-sm text-gray-500">No recoverable carts yet.</p>}
+              {carts.length === 0 && <p className="text-sm text-gray-500">No carts left behind yet.</p>}
             </div>
           </section>
 

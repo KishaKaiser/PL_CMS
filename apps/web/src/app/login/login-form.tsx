@@ -39,6 +39,7 @@ export function LoginForm() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const signedOutForInactivity = searchParams.get('expired') === '1';
+  const passwordJustChanged = searchParams.get('reset') === '1';
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -92,6 +93,12 @@ export function LoginForm() {
             {signedOutForInactivity && !error && (
               <div role="status" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 You were signed out because you were inactive for a while. Please sign in again to carry on.
+              </div>
+            )}
+
+            {passwordJustChanged && !error && (
+              <div role="status" className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                Your password was changed. Sign in with your new password.
               </div>
             )}
 
@@ -153,7 +160,7 @@ export function LoginForm() {
                   </button>
                 </div>
                 <div className="mt-2 text-right">
-                  <Link href="/login" className="text-sm font-medium text-purple-700 hover:text-purple-800 hover:underline">
+                  <Link href="/forgot-password" className="text-sm font-medium text-purple-700 hover:text-purple-800 hover:underline">
                     Forgot password?
                   </Link>
                 </div>

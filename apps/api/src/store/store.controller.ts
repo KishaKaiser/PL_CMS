@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Header, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Post, Put, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@pl-cms/shared';
 import { Roles, RolesGuard } from '../auth/roles.guard';
@@ -10,22 +10,35 @@ import {
   StoreCouponDto,
   StoreEmailTemplateDto,
   TrackCartDto,
+  UnsubscribeCartRemindersDto,
   ValidateCouponDto,
 } from './store.dto';
+import { CartRecoveryService } from './cart-recovery.service';
 import { StoreService } from './store.service';
 
 @Controller('store')
 export class StoreController {
-  constructor(private readonly store: StoreService) {}
+  constructor(
+    private readonly store: StoreService,
+    private readonly cartRecovery: CartRecoveryService,
+  ) {}
 
   @Post('coupons/validate')
   validateCoupon(@Body() dto: ValidateCouponDto) {
     return this.store.validateCoupon(dto.code, dto.subtotal);
   }
 
+  /** A logged-in customer's cart, kept so a reminder can be sent if they leave. Guests are not tracked. */
   @Post('cart-recovery/track')
-  trackCart(@Body() dto: TrackCartDto) {
-    return this.store.trackCart(dto);
+  @UseGuards(AuthGuard('jwt'))
+  trackCart(@Request() req: { user: { id: string } }, @Body() dto: TrackCartDto) {
+    return this.cartRecovery.track(req.user.id, dto);
+  }
+
+  /** The link at the bottom of a reminder email (signed, so no login is needed): stops the reminders for good. */
+  @Post('cart-recovery/unsubscribe')
+  unsubscribeFromCartReminders(@Body() dto: UnsubscribeCartRemindersDto) {
+    return this.cartRecovery.optOut(dto.email, dto.token);
   }
 
   @Get('free-shipping')
@@ -125,7 +138,7 @@ export class StoreController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
   listRecoveredCarts() {
-    return this.store.listRecoveredCarts();
+    return this.cartRecovery.listForAdmin();
   }
 
   @Get('admin/emails')
