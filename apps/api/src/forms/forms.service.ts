@@ -11,7 +11,7 @@ import * as bcrypt from 'bcryptjs';
 import { normalizeEmailInput } from '../common/input-normalization.util';
 import { assertPublicUsername, displayNameFromUsername, generateUniqueUsername, isPublicRole } from '../common/public-identity';
 import { grantWelcomePromo } from '../free-minutes/free-minutes.service';
-import { renderEmail } from '../mail/email-layout';
+import { EmailComposer } from '../mail/email-composer';
 import { isEmailAddress } from '../mail/email-settings';
 import { EmailSettingsService } from '../mail/email-settings.service';
 import { MailService } from '../mail/mail.service';
@@ -45,6 +45,7 @@ export class FormsService {
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
     private readonly emailSettings: EmailSettingsService,
+    private readonly composer: EmailComposer,
   ) {}
 
   findAll() {
@@ -186,12 +187,14 @@ export class FormsService {
       const submitted = fields.find((field) => field.type === 'email' || field.id === 'email');
       const replyTo = submitted ? String(data[submitted.id] ?? '').trim() : '';
       const base = await this.emailSettings.siteUrl();
-      const content = renderEmail({
-        body: `Someone submitted the form "${formTitle}":\n\n${lines.join('\n')}`,
-        button: base ? { label: 'See all submissions', url: `${base}/admin/forms` } : null,
-      });
+      const email = await this.composer.compose(
+        'form_alert',
+        { formTitle, fields: lines.join('\n') },
+        { customer: false, button: base ? { url: `${base}/admin/forms`, label: 'See all submissions' } : null },
+      );
+      if (!email) return;
       await this.mail.send(
-        { to, subject: `New form submission: ${formTitle}`.slice(0, 150), ...content },
+        { to, subject: email.subject.slice(0, 150), html: email.html, text: email.text },
         { kind: 'form-alert', ...(isEmailAddress(replyTo) ? { replyTo } : {}) },
       );
     } catch (error) {

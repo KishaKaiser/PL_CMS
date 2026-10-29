@@ -29,7 +29,25 @@ export interface SaveEmailSettingsInput {
   siteUrl?: string;
   notifyOnOrders?: boolean;
   notifyOnForms?: boolean;
+  accentColor?: string;
+  showLogo?: boolean;
+  showSiteName?: boolean;
+  trackButtonLabel?: string;
+  signature?: string;
+  footerText?: string;
 }
+
+/** What the look of an email is made from: the site's name and logo, and the design chosen on the Email page. */
+export interface EmailDesign {
+  siteName: string;
+  logoUrl: string;
+  accentColor: string;
+  trackButtonLabel: string;
+  signature: string;
+  footerText: string;
+}
+
+export type EmailDesignOverrides = Partial<Pick<EmailSettings, 'accentColor' | 'showLogo' | 'showSiteName' | 'trackButtonLabel' | 'signature' | 'footerText'>>;
 
 /** What `MailService` sends with: the server, the account, and who the mail is from. Null when email is not set up. */
 export interface EffectiveMailConfig {
@@ -140,6 +158,44 @@ export class EmailSettingsService {
     const saved = (await this.get()).siteUrl;
     if (saved) return saved;
     return normalizeSiteUrl(this.config.get<string>('SITE_URL') || this.config.get<string>('NEXT_PUBLIC_SITE_URL') || '');
+  }
+
+  /** The site's name and logo as set in Settings → Site identity. */
+  private async identity(): Promise<{ title: string; logo: string }> {
+    try {
+      const row = await this.prisma.setting.findUnique({ where: { key: 'site_identity' } });
+      const identity = row?.value ? (JSON.parse(row.value) as { title?: unknown; logoUrl?: unknown }) : {};
+      return {
+        title: typeof identity.title === 'string' ? identity.title.trim() : '',
+        logo: typeof identity.logoUrl === 'string' ? identity.logoUrl.trim() : '',
+      };
+    } catch {
+      return { title: '', logo: '' };
+    }
+  }
+
+  async siteTitle(): Promise<string> {
+    return (await this.identity()).title;
+  }
+
+  /**
+   * The look of the emails: the site's name and logo (from Settings → Site identity) and the design saved on the Email page.
+   * `overrides` previews design changes that are not saved yet.
+   */
+  async design(overrides: EmailDesignOverrides = {}): Promise<EmailDesign> {
+    const settings = normalizeEmailSettings({ ...(await this.get()), ...stripUndefined(overrides) });
+    const { title, logo } = await this.identity();
+    const siteUrl = await this.siteUrl();
+    // A logo kept as "/api/proxy/media/.../file" is made into a full address, because an email is opened away from the site.
+    const logoUrl = !settings.showLogo || !logo ? '' : /^https?:\/\//i.test(logo) ? logo : logo.startsWith('/') && siteUrl ? `${siteUrl}${logo}` : '';
+    return {
+      siteName: settings.showSiteName ? title : '',
+      logoUrl,
+      accentColor: settings.accentColor,
+      trackButtonLabel: settings.trackButtonLabel,
+      signature: settings.signature,
+      footerText: settings.footerText,
+    };
   }
 
   /** The address that gets new-order and new-form alerts: saved here, else the "from" address. */

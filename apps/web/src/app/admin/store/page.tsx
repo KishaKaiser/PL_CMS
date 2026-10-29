@@ -70,6 +70,16 @@ interface CartRecoverySettings {
   expiresDays: number;
 }
 
+/** What each email is for, shown above its wording. The alerts to the owner are switched on and off on the Email page. */
+const EMAIL_TEMPLATE_INFO: Record<string, { title: string; note: string; alert?: boolean }> = {
+  order_confirmation: { title: 'Order confirmation', note: 'Sent to the customer when their order is paid.' },
+  order_progress: { title: 'Order update', note: 'Sent to the customer when an order is being made, being packaged or ready to ship.' },
+  order_shipped: { title: 'Order shipped', note: 'Sent to the customer when you mark the order shipped, with its tracking number.' },
+  order_alert: { title: 'New order alert (to you)', note: 'Sent to you when someone places an order. Turn it on or off in Admin → Email.', alert: true },
+  form_alert: { title: 'Form submission alert (to you)', note: 'Sent to you when someone submits a form. Turn it on or off in Admin → Email.', alert: true },
+  cart_recovery: { title: 'Abandoned cart reminder', note: 'Not sent yet: this is coming soon.' },
+};
+
 interface StoreEmailTemplate {
   key: string;
   subject: string;
@@ -407,16 +417,30 @@ export default function AdminStorePage() {
           <section className="rounded-xl border bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold">Store Emails</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Sent to customers once email is connected in <a href="/admin/email" className="text-indigo-600 hover:underline">Admin → Email</a>. Untick one to stop sending it.
-              In the subject and message you can use <code className="rounded bg-gray-100 px-1">{'{{customerName}}'}</code>, <code className="rounded bg-gray-100 px-1">{'{{orderId}}'}</code>,{' '}
-              <code className="rounded bg-gray-100 px-1">{'{{orderItems}}'}</code>, <code className="rounded bg-gray-100 px-1">{'{{total}}'}</code>,{' '}
-              <code className="rounded bg-gray-100 px-1">{'{{stage}}'}</code> (order progress), <code className="rounded bg-gray-100 px-1">{'{{carrier}}'}</code> and{' '}
-              <code className="rounded bg-gray-100 px-1">{'{{trackingNumber}}'}</code> (shipped). A &ldquo;Track your order&rdquo; button is added to each order email.
+              The wording of the emails the site sends, once email is connected in <a href="/admin/email" className="text-indigo-600 hover:underline">Admin → Email</a>.
+              The look (color, logo, sign-off) and a preview are on that page too. Untick a customer email to stop sending it.
+            </p>
+            <p className="mt-2 text-sm text-gray-500">
+              In the subject and message you can use{' '}
+              {['customerName', 'orderId', 'orderItems', 'total', 'stage', 'carrier', 'trackingNumber', 'customerEmail', 'shipTo', 'formTitle', 'fields'].map((name) => (
+                <code key={name} className="mr-1 rounded bg-gray-100 px-1">{`{{${name}}}`}</code>
+              ))}
+              . Each one is filled in for that email: <code className="rounded bg-gray-100 px-1">{'{{stage}}'}</code> for order updates, <code className="rounded bg-gray-100 px-1">{'{{carrier}}'}</code> and{' '}
+              <code className="rounded bg-gray-100 px-1">{'{{trackingNumber}}'}</code> for shipping, <code className="rounded bg-gray-100 px-1">{'{{customerEmail}}'}</code> and{' '}
+              <code className="rounded bg-gray-100 px-1">{'{{shipTo}}'}</code> for the new order alert, and <code className="rounded bg-gray-100 px-1">{'{{formTitle}}'}</code> and{' '}
+              <code className="rounded bg-gray-100 px-1">{'{{fields}}'}</code> for the form alert. A button is added under the message automatically.
             </p>
             <div className="mt-4 space-y-4">
               {emails.map((template, index) => (
                 <div key={template.key} className="rounded-lg border p-4">
-                  <label className="mb-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={template.enabled} onChange={(event) => setEmails((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item))} /> {template.key.replaceAll('_', ' ')}</label>
+                  <div className="mb-3">
+                    {EMAIL_TEMPLATE_INFO[template.key]?.alert ? (
+                      <p className="text-sm font-medium">{EMAIL_TEMPLATE_INFO[template.key].title}</p>
+                    ) : (
+                      <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={template.enabled} onChange={(event) => setEmails((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item))} /> {EMAIL_TEMPLATE_INFO[template.key]?.title ?? template.key.replaceAll('_', ' ')}</label>
+                    )}
+                    {EMAIL_TEMPLATE_INFO[template.key] && <p className="mt-1 text-xs text-gray-500">{EMAIL_TEMPLATE_INFO[template.key].note}</p>}
+                  </div>
                   <input value={template.subject} onChange={(event) => setEmails((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, subject: event.target.value } : item))} className="mb-3 w-full rounded border px-3 py-2 text-sm" />
                   <textarea value={template.body} rows={4} onChange={(event) => setEmails((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, body: event.target.value } : item))} className="w-full rounded border px-3 py-2 text-sm" />
                 </div>

@@ -33,6 +33,21 @@ export const DEFAULT_EMAIL_TEMPLATES: EmailTemplate[] = [
       'Tracking number: {{trackingNumber}}',
     enabled: true,
   },
+  // The emails to the shop owner. Whether they are sent is set on the Email page ("Email me when..."), not by `enabled`.
+  {
+    key: 'order_alert',
+    subject: 'New order {{orderShort}} — {{total}}',
+    body:
+      'A new order was placed: {{orderId}}\n\nCustomer: {{customerName}} ({{customerEmail}})\n\n{{orderItems}}\n\n' +
+      'Total: {{total}}\n\nShip to:\n{{shipTo}}',
+    enabled: true,
+  },
+  {
+    key: 'form_alert',
+    subject: 'New form submission: {{formTitle}}',
+    body: 'Someone submitted the form "{{formTitle}}":\n\n{{fields}}',
+    enabled: true,
+  },
   {
     key: 'cart_recovery',
     subject: 'You left something in your cart',

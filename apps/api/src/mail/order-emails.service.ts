@@ -1,17 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ORDER_STAGE_STEPS, carrierLabel } from '../fulfillment/order-progress';
+import { EmailComposer } from './email-composer';
 import { EmailSettingsService } from './email-settings.service';
-import { fillTemplate, loadEmailTemplates } from './email-templates';
-import { renderEmail } from './email-layout';
 import { MailService } from './mail.service';
 
 type LoadedOrder = NonNullable<Awaited<ReturnType<OrderEmailService['loadOrder']>>>;
 
 /**
  * The emails about an order: the confirmation and the progress updates to the customer, the shipping notice, and the
- * "new order" alert to the shop owner. Every method is safe to call without waiting: it never throws, and when email is not
- * set up or a template is switched off it simply does nothing.
+ * "new order" alert to the shop owner. The wording comes from the editable templates and the look from the Email page.
+ * Every method is safe to call without waiting: it never throws, and when email is not set up or a template is switched
+ * off it simply does nothing.
  */
 @Injectable()
 export class OrderEmailService {
@@ -21,6 +21,7 @@ export class OrderEmailService {
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
     private readonly settings: EmailSettingsService,
+    private readonly composer: EmailComposer,
   ) {}
 
   private loadOrder(orderId: string) {
@@ -57,17 +58,28 @@ export class OrderEmailService {
         return `${line} — ${formatMoney(Number(item.unitPrice) * item.quantity, order.currency)}`;
       })
       .join('\n');
+    const address = order.shippingAddress;
     return {
-      customerName: order.shippingAddress?.fullName || order.user.name || 'there',
+      customerName: address?.fullName || order.user.name || 'there',
+      customerEmail: this.customerAddress(order),
       orderId: order.id,
+      orderShort: order.id.slice(0, 12),
       orderItems: items,
       total: formatMoney(Number(order.totalAmount), order.currency),
+      shipTo: address
+        ? [address.fullName, address.line1, address.line2, `${address.city}, ${address.state} ${address.postalCode}`, address.country].filter(Boolean).join('\n')
+        : 'No shipping address (nothing to ship)',
       ...extra,
     } as Record<string, string>;
   }
 
   private customerAddress(order: LoadedOrder) {
     return order.shippingAddress?.email || order.user.email;
+  }
+
+  private async defaultFooter() {
+    const name = await this.siteName();
+    return name ? `You are receiving this because you placed an order at ${name}.` : 'You are receiving this because you placed an order.';
   }
 
   /** The confirmation to the customer and the alert to the owner, once an order has been paid. */
@@ -86,47 +98,33 @@ export class OrderEmailService {
       });
       if (claimed.count === 0) return;
 
-      const [templates, siteName, trackingUrl, emailSettings] = await Promise.all([
-        loadEmailTemplates(this.prisma),
-        this.siteName(),
-        this.trackingUrl(order.id),
+      const [emailSettings, trackingUrl, defaultFooter, base] = await Promise.all([
         this.settings.get(),
+        this.trackingUrl(order.id),
+        this.defaultFooter(),
+        this.settings.siteUrl(),
       ]);
-      const template = templates.find((entry) => entry.key === 'order_confirmation');
       const values = this.values(order, { trackingUrl });
 
-      if (template?.enabled) {
-        const content = renderEmail({
-          body: fillTemplate(template.body, values),
-          button: trackingUrl ? { label: 'Track your order', url: trackingUrl } : null,
-          footer: siteName ? `You are receiving this because you placed an order at ${siteName}.` : 'You are receiving this because you placed an order.',
-          siteName,
-        });
-        await this.mail.send({ to: this.customerAddress(order), subject: fillTemplate(template.subject, values), ...content }, { kind: 'order-confirmation' });
+      const confirmation = await this.composer.compose('order_confirmation', values, {
+        customer: true,
+        button: trackingUrl ? { url: trackingUrl } : null,
+        defaultFooter,
+      });
+      if (confirmation?.enabled) {
+        await this.mail.send({ to: this.customerAddress(order), subject: confirmation.subject, html: confirmation.html, text: confirmation.text }, { kind: 'order-confirmation' });
       }
 
       if (emailSettings.notifyOnOrders) {
         const alertTo = await this.settings.alertAddress();
-        if (alertTo) {
-          const address = order.shippingAddress;
-          const base = await this.settings.siteUrl();
-          const body = [
-            `A new order was placed: ${order.id}`,
-            `Customer: ${values.customerName} (${this.customerAddress(order)})`,
-            values.orderItems,
-            `Total: ${values.total}`,
-            address
-              ? `Ship to:\n${[address.fullName, address.line1, address.line2, `${address.city}, ${address.state} ${address.postalCode}`, address.country].filter(Boolean).join('\n')}`
-              : '',
-          ]
-            .filter(Boolean)
-            .join('\n\n');
-          const content = renderEmail({
-            body,
-            button: base ? { label: 'Open the order', url: `${base}/admin/orders/${order.id}` } : null,
-            siteName,
-          });
-          await this.mail.send({ to: alertTo, subject: `New order ${order.id.slice(0, 12)} — ${values.total}`, ...content }, { kind: 'order-alert' });
+        const alert = alertTo
+          ? await this.composer.compose('order_alert', values, {
+              customer: false,
+              button: base ? { url: `${base}/admin/orders/${order.id}`, label: 'Open the order' } : null,
+            })
+          : null;
+        if (alertTo && alert) {
+          await this.mail.send({ to: alertTo, subject: alert.subject, html: alert.html, text: alert.text }, { kind: 'order-alert' });
         }
       }
     } catch (error) {
@@ -139,21 +137,17 @@ export class OrderEmailService {
     try {
       const order = await this.loadOrder(orderId);
       if (!order) return;
-      const templates = await loadEmailTemplates(this.prisma);
-      const template = templates.find((entry) => entry.key === 'order_progress');
-      if (!template?.enabled) return;
       const stageLabel = ORDER_STAGE_STEPS.find((step) => step.key === stage)?.label;
       if (!stageLabel) return;
 
-      const [siteName, trackingUrl] = await Promise.all([this.siteName(), this.trackingUrl(order.id)]);
-      const values = this.values(order, { stage: stageLabel.toLowerCase(), trackingUrl });
-      const content = renderEmail({
-        body: fillTemplate(template.body, values),
-        button: trackingUrl ? { label: 'Track your order', url: trackingUrl } : null,
-        footer: siteName ? `You are receiving this because you placed an order at ${siteName}.` : undefined,
-        siteName,
+      const [trackingUrl, defaultFooter] = await Promise.all([this.trackingUrl(order.id), this.defaultFooter()]);
+      const email = await this.composer.compose('order_progress', this.values(order, { stage: stageLabel.toLowerCase(), trackingUrl }), {
+        customer: true,
+        button: trackingUrl ? { url: trackingUrl } : null,
+        defaultFooter,
       });
-      await this.mail.send({ to: this.customerAddress(order), subject: fillTemplate(template.subject, values), ...content }, { kind: 'order-progress' });
+      if (!email?.enabled) return;
+      await this.mail.send({ to: this.customerAddress(order), subject: email.subject, html: email.html, text: email.text }, { kind: 'order-progress' });
     } catch (error) {
       this.logger.warn(`Progress email for ${orderId} failed: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -164,26 +158,15 @@ export class OrderEmailService {
     try {
       const order = await this.loadOrder(options.orderId);
       if (!order) return;
-      const templates = await loadEmailTemplates(this.prisma);
-      const template = templates.find((entry) => entry.key === 'order_shipped');
-      if (!template?.enabled) return;
 
-      const [siteName, trackingUrl] = await Promise.all([this.siteName(), this.trackingUrl(order.id)]);
-      const values = this.values(order, {
-        trackingNumber: options.trackingNumber ?? '',
-        carrier: carrierLabel(options.carrier) || 'the carrier',
-        trackingUrl,
-      });
-      const content = renderEmail({
-        body: fillTemplate(template.body, values),
-        button: trackingUrl ? { label: 'Track your order', url: trackingUrl } : null,
-        footer: siteName ? `You are receiving this because you placed an order at ${siteName}.` : undefined,
-        siteName,
-      });
-      await this.mail.send(
-        { to: options.to || this.customerAddress(order), subject: fillTemplate(template.subject, values), ...content },
-        { kind: 'order-shipped' },
+      const [trackingUrl, defaultFooter] = await Promise.all([this.trackingUrl(order.id), this.defaultFooter()]);
+      const email = await this.composer.compose(
+        'order_shipped',
+        this.values(order, { trackingNumber: options.trackingNumber ?? '', carrier: carrierLabel(options.carrier) || 'the carrier', trackingUrl }),
+        { customer: true, button: trackingUrl ? { url: trackingUrl } : null, defaultFooter },
       );
+      if (!email?.enabled) return;
+      await this.mail.send({ to: options.to || this.customerAddress(order), subject: email.subject, html: email.html, text: email.text }, { kind: 'order-shipped' });
     } catch (error) {
       this.logger.warn(`Shipping email for ${options.orderId} failed: ${error instanceof Error ? error.message : String(error)}`);
     }
