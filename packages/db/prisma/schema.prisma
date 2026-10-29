@@ -89,11 +89,15 @@ model User {
   email        String   @unique
   username     String?  @unique
   passwordHash String
+  /// When the password last changed (a reset or an admin change): sign-ins from before it are no longer accepted.
+  passwordChangedAt DateTime?
   name         String
   role         Role     @default(CLIENT)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  passwordResetTokens PasswordResetToken[]
+  abandonedCart       AbandonedCart?
   advisorProfile    AdvisorProfile?
   clientProfile     ClientProfile?
   sentMessages      Message[]          @relation("SentMessages")
@@ -1586,4 +1590,53 @@ model EmailLog {
 
   @@index([createdAt])
   @@map("email_logs")
+}
+
+/// A "forgot password" link. Only a hash of the link's secret is kept, so a copy of the database cannot be used to reset anyone's password.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("password_reset_tokens")
+}
+
+enum AbandonedCartStatus {
+  /// Items in the cart, waiting to see whether the customer comes back.
+  OPEN
+  /// The reminder email has been sent.
+  EMAILED
+  /// The customer ordered (or emptied the cart).
+  RECOVERED
+  /// Too old to remind.
+  EXPIRED
+  /// The customer asked not to get these reminders. Kept so they are never reminded again.
+  UNSUBSCRIBED
+}
+
+/// The cart a logged-in customer left behind, for the reminder email. One per customer.
+model AbandonedCart {
+  id             String              @id @default(cuid())
+  userId         String              @unique
+  email          String
+  items          Json                @default("[]")
+  subtotal       Decimal             @default(0)
+  status         AbandonedCartStatus @default(OPEN)
+  /// When this stretch of shopping began (reset when a finished or expired cart is started again): an order after it ends the reminder.
+  startedAt      DateTime            @default(now())
+  lastActivityAt DateTime            @default(now())
+  reminderSentAt DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, lastActivityAt])
+  @@map("abandoned_carts")
 }

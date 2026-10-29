@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsEmail, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsIn, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class StoreCouponDto {
@@ -70,6 +70,7 @@ export class CartRecoverySettingsDto {
 }
 
 export class TrackCartDto {
+  /** Ignored: reminders go to the email on the logged-in customer's own account. Still accepted so older pages keep working. */
   @IsOptional()
   @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
   @IsEmail()
@@ -80,7 +81,18 @@ export class TrackCartDto {
   subtotal!: number;
 
   @IsArray()
+  @ArrayMaxSize(100)
   items!: unknown[];
+}
+
+/** The link at the bottom of a cart reminder: the address and its signature. */
+export class UnsubscribeCartRemindersDto {
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  @MaxLength(200)
+  token!: string;
 }
 
 export class StoreEmailTemplateDto {

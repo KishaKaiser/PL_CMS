@@ -11,13 +11,11 @@ import {
   GoogleMerchantSettingsDto,
   StoreCouponDto,
   StoreEmailTemplateDto,
-  TrackCartDto,
 } from './store.dto';
 
 const COUPONS_KEY = 'store_coupons';
 const FREE_SHIPPING_KEY = 'store_free_shipping';
 const CART_RECOVERY_KEY = 'store_cart_recovery_settings';
-const CART_RECOVERY_RECORDS_KEY = 'store_cart_recovery_records';
 const ECOMMERCE_SETTINGS_KEY = 'store_ecommerce_settings';
 const GOOGLE_MERCHANT_SETTINGS_KEY = 'store_google_merchant_settings';
 
@@ -171,29 +169,6 @@ export class StoreService {
     };
     await this.writeJson(CART_RECOVERY_KEY, next);
     return next;
-  }
-
-  async listRecoveredCarts() {
-    return this.readJson<unknown[]>(CART_RECOVERY_RECORDS_KEY, []);
-  }
-
-  async trackCart(dto: TrackCartDto) {
-    const settings = await this.getCartRecoverySettings();
-    if (!settings.enabled || dto.items.length === 0) return { success: true, stored: false };
-    const records = await this.listRecoveredCarts();
-    const now = new Date();
-    const record = {
-      id: randomUUID(),
-      email: dto.email || '',
-      subtotal: roundCurrency(dto.subtotal),
-      items: dto.items,
-      status: 'OPEN',
-      recoverAfter: new Date(now.getTime() + settings.delayMinutes * 60_000).toISOString(),
-      expiresAt: new Date(now.getTime() + settings.expiresDays * 24 * 60 * 60_000).toISOString(),
-      createdAt: now.toISOString(),
-    };
-    await this.writeJson(CART_RECOVERY_RECORDS_KEY, [record, ...records].slice(0, 500));
-    return { success: true, stored: true };
   }
 
   async getEmailTemplates() {

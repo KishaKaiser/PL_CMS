@@ -69,13 +69,19 @@ export class AuthService {
   }
 
   async refresh(token: string) {
-    let payload: { sub: string; email: string; role: Role };
+    let payload: { sub: string; email: string; role: Role; iat?: number };
     try {
       payload = this.jwt.verify(token, {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
       });
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
+    }
+    // A sign-in from before the password was last changed (a reset, or an admin changing it) can no longer be renewed.
+    const account = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { passwordChangedAt: true } });
+    if (!account) throw new UnauthorizedException('Invalid refresh token');
+    if (account.passwordChangedAt && (payload.iat ?? 0) * 1000 < account.passwordChangedAt.getTime()) {
+      throw new UnauthorizedException('Your password was changed. Please sign in again.');
     }
     if (await this.isLockedOut(payload.sub, payload.role)) throw new UnauthorizedException('This account is no longer active.');
     return this.generateTokens(payload.sub, payload.email, payload.role);

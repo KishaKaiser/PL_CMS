@@ -48,11 +48,32 @@ export const DEFAULT_EMAIL_TEMPLATES: EmailTemplate[] = [
     body: 'Someone submitted the form "{{formTitle}}":\n\n{{fields}}',
     enabled: true,
   },
+  // The reminder for a cart left behind. It is switched on in Store settings → Cart Recovery, not by `enabled`.
   {
     key: 'cart_recovery',
     subject: 'You left something in your cart',
-    body: 'Your cart is waiting for you. Complete your order here: {{cartUrl}}',
+    body:
+      'Hi {{customerName}}, you left a few things in your cart:\n\n{{orderItems}}\n\nTotal: {{total}}\n\n' +
+      'They are waiting for you whenever you are ready.',
     enabled: false,
+  },
+  // Security emails: always sent, whatever `enabled` says.
+  {
+    key: 'password_reset',
+    subject: 'Reset your password',
+    body:
+      'Hi {{customerName}}, we got a request to reset your password. Use the button below to choose a new one. ' +
+      'The link works for {{expiresIn}}, and only once.\n\n' +
+      'If you did not ask for this, you can ignore this email: your password will not change.',
+    enabled: true,
+  },
+  {
+    key: 'password_changed',
+    subject: 'Your password was changed',
+    body:
+      'Hi {{customerName}}, the password on your account was just changed.\n\n' +
+      'If this was you, there is nothing more to do. If it was not, reset your password straight away with the button below.',
+    enabled: true,
   },
 ];
 

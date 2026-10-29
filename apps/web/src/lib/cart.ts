@@ -45,9 +45,29 @@ export function getCart(): CartItem[] {
   }
 }
 
+let trackingTimer: number | undefined;
+
+/**
+ * Tells the server about the cart a moment after it last changed, so a logged-in customer who leaves it can be reminded. Guests
+ * are not tracked (the server ignores the call without a login), and the server decides what, if anything, to keep.
+ */
+function scheduleCartTracking(items: CartItem[]): void {
+  if (typeof window === 'undefined') return;
+  window.clearTimeout(trackingTimer);
+  trackingTimer = window.setTimeout(() => {
+    void fetch('/api/proxy/store/cart-recovery/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subtotal: cartTotal(items), items }),
+      keepalive: true,
+    }).catch(() => undefined);
+  }, 1500);
+}
+
 export function saveCart(items: CartItem[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(CART_KEY, JSON.stringify(items));
+  scheduleCartTracking(items);
 }
 
 export function addToCart(item: CartItem): CartItem[] {
@@ -92,6 +112,7 @@ export function updateCartQuantity(
 export function clearCart(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(CART_KEY);
+  scheduleCartTracking([]);
 }
 
 export function cartTotal(items: CartItem[]): number {

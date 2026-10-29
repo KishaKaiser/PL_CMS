@@ -521,21 +521,6 @@ function CheckoutContent() {
       .catch(() => undefined);
   }, [completedOrder, successOrderId, successParam]);
 
-  useEffect(() => {
-    if (cart.length === 0) return;
-    const subtotal = cart.reduce((sum, item) => sum + Number(item.product.price) * item.quantity, 0);
-    if (!Number.isFinite(subtotal)) return;
-    void fetch('/api/proxy/store/cart-recovery/track', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: shippingAddress.email || undefined,
-        subtotal,
-        items: cart,
-      }),
-    }).catch(() => undefined);
-  }, [cart, shippingAddress.email]);
-
   const itemsTotal = cart.reduce(
     (sum, item) => sum + Number(item.product.price) * item.quantity,
     0,
