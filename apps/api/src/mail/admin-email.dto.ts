@@ -1,7 +1,39 @@
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+
+/** The look of the emails. Used on its own for the preview, and as part of what the Email page saves. */
+export class EmailDesignDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(7)
+  accentColor?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  showLogo?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showSiteName?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  trackButtonLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  signature?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  footerText?: string;
+}
 
 /** What the admin Email page saves. Every field is optional: only what is sent is changed. */
-export class SaveEmailSettingsDto {
+export class SaveEmailSettingsDto extends EmailDesignDto {
   @IsOptional()
   @IsIn(['icloud', 'custom'])
   provider?: 'icloud' | 'custom';
@@ -70,4 +102,18 @@ export class SendTestEmailDto {
   @IsString()
   @MaxLength(254)
   to?: string;
+}
+
+/** The emails that can be previewed: the editable ones. */
+export const PREVIEW_TEMPLATES = ['order_confirmation', 'order_progress', 'order_shipped', 'order_alert', 'form_alert'] as const;
+
+export class PreviewEmailDto {
+  @IsIn(PREVIEW_TEMPLATES)
+  template!: (typeof PREVIEW_TEMPLATES)[number];
+
+  /** Design changes not saved yet, so the preview shows what the page currently has. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => EmailDesignDto)
+  design?: EmailDesignDto;
 }

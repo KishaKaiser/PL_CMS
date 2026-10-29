@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { EmailDesignSection } from '../../../components/admin/email-design-section';
 
 interface EmailSettingsView {
   provider: 'icloud' | 'custom';
@@ -15,6 +16,12 @@ interface EmailSettingsView {
   siteUrl: string;
   notifyOnOrders: boolean;
   notifyOnForms: boolean;
+  accentColor: string;
+  showLogo: boolean;
+  showSiteName: boolean;
+  trackButtonLabel: string;
+  signature: string;
+  footerText: string;
   passwordSet: boolean;
 }
 
@@ -120,6 +127,12 @@ export default function AdminEmailPage() {
           siteUrl: form.siteUrl,
           notifyOnOrders: form.notifyOnOrders,
           notifyOnForms: form.notifyOnForms,
+          accentColor: form.accentColor,
+          showLogo: form.showLogo,
+          showSiteName: form.showSiteName,
+          trackButtonLabel: form.trackButtonLabel,
+          signature: form.signature,
+          footerText: form.footerText,
         }),
       });
       if (!res.ok) {
@@ -162,7 +175,7 @@ export default function AdminEmailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-8">
+    <div className="mx-auto max-w-5xl p-8">
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-bold">Email</h1>
         {state.working === 'settings' && <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">Set up</span>}
@@ -293,6 +306,21 @@ export default function AdminEmailPage() {
           {saving ? 'Saving...' : 'Save'}
         </button>
       </section>
+
+      <EmailDesignSection
+        design={{
+          accentColor: form.accentColor,
+          showLogo: form.showLogo,
+          showSiteName: form.showSiteName,
+          trackButtonLabel: form.trackButtonLabel,
+          signature: form.signature,
+          footerText: form.footerText,
+        }}
+        onChange={(patch) => {
+          setForm((current) => (current ? { ...current, ...patch } : current));
+          setMessage('');
+        }}
+      />
 
       <section className="mt-6 rounded-xl border bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Send a test email</h2>

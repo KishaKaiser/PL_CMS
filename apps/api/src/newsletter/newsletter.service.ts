@@ -128,9 +128,15 @@ export class NewsletterService {
       // A newsletter email must always be able to be stopped: without a signed link there is no safe way to offer one.
       if (!secret || !siteUrl) return;
       const link = `${siteUrl}/newsletter/unsubscribe?email=${encodeURIComponent(email)}&token=${unsubscribeToken(email, secret)}`;
+      // The newsletter keeps the design chosen on the Email page. Its footer is always the unsubscribe line.
+      const design = await this.emailSettings.design();
       const content = renderEmail({
         body: `${name ? `Hi ${name},\n\n` : ''}${settings.welcomeBody}`,
+        signature: design.signature,
         footer: `You are receiving this because you subscribed to our newsletter. To stop receiving it, unsubscribe here: ${link}`,
+        siteName: design.siteName,
+        logoUrl: design.logoUrl,
+        accentColor: design.accentColor,
       });
       await this.mail.send({ to: email, subject: settings.welcomeSubject, ...content }, { kind: 'newsletter-welcome' });
     } catch (error) {

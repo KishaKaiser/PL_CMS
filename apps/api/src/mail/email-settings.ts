@@ -21,9 +21,22 @@ export interface EmailSettings {
   siteUrl: string;
   notifyOnOrders: boolean;
   notifyOnForms: boolean;
+  /** The look of the emails: the color of the name, button and links, and whether the logo and site name are shown. */
+  accentColor: string;
+  showLogo: boolean;
+  showSiteName: boolean;
+  /** The label on the "Track your order" button. */
+  trackButtonLabel: string;
+  /** A sign-off after the message in customer emails, for example "Thank you, The Psychic Link". */
+  signature: string;
+  /** Replaces the small "You are receiving this because..." line at the bottom of order emails. Empty keeps the default. */
+  footerText: string;
   /** The mail password, encrypted. Never sent to the browser. */
   passwordEnc: string;
 }
+
+export const DEFAULT_ACCENT_COLOR = '#6f21b6';
+export const DEFAULT_TRACK_BUTTON_LABEL = 'Track your order';
 
 export function defaultEmailSettings(): EmailSettings {
   return {
@@ -38,10 +51,17 @@ export function defaultEmailSettings(): EmailSettings {
     siteUrl: '',
     notifyOnOrders: true,
     notifyOnForms: true,
+    accentColor: DEFAULT_ACCENT_COLOR,
+    showLogo: false,
+    showSiteName: true,
+    trackButtonLabel: DEFAULT_TRACK_BUTTON_LABEL,
+    signature: '',
+    footerText: '',
     passwordEnc: '',
   };
 }
 
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const EMAIL_PATTERN = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 const HOST_PATTERN = /^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/;
 
@@ -88,6 +108,12 @@ export function normalizeEmailSettings(raw: unknown): EmailSettings {
     siteUrl: normalizeSiteUrl(source.siteUrl),
     notifyOnOrders: source.notifyOnOrders !== false,
     notifyOnForms: source.notifyOnForms !== false,
+    accentColor: typeof source.accentColor === 'string' && HEX_COLOR.test(source.accentColor.trim()) ? source.accentColor.trim().toLowerCase() : DEFAULT_ACCENT_COLOR,
+    showLogo: source.showLogo === true,
+    showSiteName: source.showSiteName !== false,
+    trackButtonLabel: text(source.trackButtonLabel, 40).replace(/[\r\n]/g, ' ') || DEFAULT_TRACK_BUTTON_LABEL,
+    signature: typeof source.signature === 'string' ? source.signature.trim().slice(0, 500) : '',
+    footerText: typeof source.footerText === 'string' ? source.footerText.trim().slice(0, 300) : '',
     passwordEnc: typeof source.passwordEnc === 'string' ? source.passwordEnc : '',
   };
 }
