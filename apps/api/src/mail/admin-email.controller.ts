@@ -57,15 +57,15 @@ export class AdminEmailController {
     const values = {
       customerName: 'Alex',
       customerEmail: 'alex@example.com',
-      orderId: 'clx9sample1234567890',
-      orderShort: 'clx9sample12',
+      orderId: 'PL-1042',
+      orderShort: 'PL-1042',
       orderItems: '• 2 × Cat Candle (Green on top, White below) — $40.00\n• 1 × Lavender Soap — $14.00',
       total: '$54.00',
       shipTo: 'Alex Example\n1 Candle Lane\nAustin, TX 78701\nUS',
       stage: 'being packaged',
       carrier: 'USPS',
       trackingNumber: '9400 1118 9922 3197 4284 90',
-      trackingUrl: `${base}/client/orders/clx9sample1234567890`,
+      trackingUrl: `${base}/track-order?order=PL-1042`,
       formTitle: 'Contact us',
       fields: 'Name: Alex\nEmail: alex@example.com\nMessage: Hello! I have a question about a custom candle.',
     };
@@ -75,7 +75,7 @@ export class AdminEmailController {
       button: toCustomer
         ? { url: values.trackingUrl }
         : dto.template === 'order_alert'
-          ? { url: `${base}/admin/orders/clx9sample1234567890`, label: 'Open the order' }
+          ? { url: `${base}/admin/orders`, label: 'Open the order' }
           : { url: `${base}/admin/forms`, label: 'See all submissions' },
       defaultFooter: `You are receiving this because you placed an order at ${title}.`,
       design: dto.design,

@@ -1338,6 +1338,8 @@ model Inventory {
 
 model Order {
   id               String      @id @default(cuid())
+  /// The number customers see (shown as the store's prefix and this number plus 1000, for example PL-1042).
+  orderNumber      Int         @unique @default(autoincrement())
   userId           String
   status           OrderStatus @default(PENDING)
   totalAmount      Decimal

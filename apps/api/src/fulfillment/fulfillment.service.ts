@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { parseOrderReference } from '@pl-cms/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BuyLabelDto, UpdateShipmentStatusDto } from './fulfillment.dto';
 import { EmailService } from './email.service';
@@ -79,9 +80,12 @@ export class FulfillmentService {
     const skip = (page - 1) * limit;
 
     const statusCondition = status ? { status: status as never } : {};
+    // "PL-1042" or "1042" finds that order by its number.
+    const reference = search ? parseOrderReference(search) : null;
     const searchCondition = search
       ? {
           OR: [
+            ...(reference && 'orderNumber' in reference ? [{ orderNumber: reference.orderNumber }] : []),
             { id: { contains: search, mode: 'insensitive' as const } },
             { payerEmail: { contains: search, mode: 'insensitive' as const } },
             {

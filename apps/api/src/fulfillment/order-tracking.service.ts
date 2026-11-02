@@ -1,6 +1,10 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { ORDER_NUMBER_OFFSET, formatOrderNumber, parseOrderReference } from '@pl-cms/shared';
+import { getOrderPrefix } from '../common/order-prefix';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderEmailService } from '../mail/order-emails.service';
+import { signLink, verifyLink } from '../mail/signed-link';
 import { EmailService } from './email.service';
 import { ShipStationTrackingService } from './shipstation-tracking.service';
 import type { UpdateOrderProgressDto } from './fulfillment.dto';
@@ -15,6 +19,10 @@ import {
 } from './order-progress';
 
 const SHIPPED_INDEX = stageIndex('SHIPPED');
+/** What the signed tracking link in an order email is for (so it cannot be used for anything else). */
+export const TRACKING_LINK_PURPOSE = 'order-tracking';
+
+type LoadedOrder = NonNullable<Awaited<ReturnType<OrderTrackingService['loadOrderWhere']>>>;
 
 @Injectable()
 export class OrderTrackingService {
@@ -25,11 +33,16 @@ export class OrderTrackingService {
     private readonly shipStationTracking: ShipStationTrackingService,
     private readonly email: EmailService,
     private readonly orderEmails: OrderEmailService,
+    private readonly config: ConfigService,
   ) {}
 
   private loadOrder(orderId: string) {
+    return this.loadOrderWhere({ id: orderId });
+  }
+
+  private loadOrderWhere(where: { id: string } | { orderNumber: number }) {
     return this.prisma.order.findUnique({
-      where: { id: orderId },
+      where,
       include: {
         items: { include: { product: { select: { name: true } } } },
         shipments: { orderBy: { createdAt: 'desc' } },
@@ -140,11 +153,48 @@ export class OrderTrackingService {
 
   async getTracking(viewer: { id: string; role: string }, orderId: string, options: { includeLive?: boolean } = {}) {
     const isStaff = viewer.role === 'ADMIN' || viewer.role === 'EDITOR';
-    let order = await this.loadOrder(orderId);
+    const order = await this.loadOrder(orderId);
     // The same answer for "no such order" and "someone else's order", so order ids cannot be probed.
     if (!order || (!isStaff && order.userId !== viewer.id)) throw new NotFoundException('Order not found');
+    return this.present(order, options);
+  }
 
-    const build = (current: NonNullable<typeof order>) =>
+  /**
+   * "Where is my order?" by order number (PL-1042, 1042, or an older link's long id). Allowed for staff, for the signed-in
+   * customer who placed it, for a signed link from the order's own email, or when the email address on the order is given.
+   * Any other case gets the same answer as "no such order", so numbers cannot be used to find out what exists.
+   */
+  async lookup(viewer: { id: string; role: string } | null, dto: { order: string; email?: string; token?: string }) {
+    const notFound = new NotFoundException(
+      'We could not find an order with that number. Check the number, and that you typed the email address used for the order.',
+    );
+    const reference = parseOrderReference(dto.order);
+    if (!reference) throw notFound;
+    const order = await this.loadOrderWhere('orderNumber' in reference ? { orderNumber: reference.orderNumber } : { id: reference.id });
+    if (!order || !this.mayView(order, viewer, dto)) throw notFound;
+    return this.present(order);
+  }
+
+  /** The link in an order email: signed with a secret only this site knows, so it works without logging in. */
+  trackingToken(orderId: string): string {
+    const secret = this.signingSecret();
+    return secret ? signLink(TRACKING_LINK_PURPOSE, orderId, secret) : '';
+  }
+
+  private signingSecret() {
+    return this.config.get<string>('JWT_REFRESH_SECRET') || this.config.get<string>('DOCUMENT_ENCRYPTION_KEY') || '';
+  }
+
+  private mayView(order: LoadedOrder, viewer: { id: string; role: string } | null, dto: { email?: string; token?: string }) {
+    if (viewer && (viewer.role === 'ADMIN' || viewer.role === 'EDITOR' || viewer.id === order.userId)) return true;
+    if (dto.token && verifyLink(TRACKING_LINK_PURPOSE, order.id, dto.token, this.signingSecret())) return true;
+    const given = dto.email?.trim().toLowerCase();
+    if (!given) return false;
+    return [order.shippingAddress?.email, order.user.email, order.payerEmail].some((address) => address?.trim().toLowerCase() === given);
+  }
+
+  private async present(order: LoadedOrder, options: { includeLive?: boolean } = {}) {
+    const build = (current: LoadedOrder) =>
       buildTimeline({
         createdAt: current.createdAt,
         updatedAt: current.updatedAt,
@@ -167,7 +217,7 @@ export class OrderTrackingService {
       if (live?.delivered && timeline.currentStage === 'SHIPPED') {
         try {
           await this.markDelivered(order.id, shipment.id, live.deliveredAt ? new Date(live.deliveredAt) : new Date());
-          const refreshed = await this.loadOrder(orderId);
+          const refreshed = await this.loadOrder(order.id);
           if (refreshed) {
             order = refreshed;
             timeline = build(refreshed);
@@ -178,8 +228,11 @@ export class OrderTrackingService {
       }
     }
 
+    const prefix = await getOrderPrefix(this.prisma);
     return {
       orderId: order.id,
+      orderNumber: order.orderNumber + ORDER_NUMBER_OFFSET,
+      orderLabel: formatOrderNumber(order.orderNumber, prefix),
       placedAt: order.createdAt.toISOString(),
       status: order.status,
       timeline,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useOrderLabel } from '../../../lib/order-label';
 
 interface ShippingAddress {
   fullName: string;
@@ -20,6 +21,7 @@ interface Shipment {
 
 interface Order {
   id: string;
+  orderNumber?: number;
   status: string;
   totalAmount: number;
   currency: string;
@@ -59,6 +61,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminOrdersPage() {
+  const orderLabel = useOrderLabel();
   const [data, setData] = useState<OrdersResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -132,7 +135,7 @@ export default function AdminOrdersPage() {
             <input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Order ID, email, or customer name…"
+              placeholder="Order number, email, or customer name…"
               className="flex-1 rounded border px-3 py-2 text-sm"
             />
             <button
@@ -174,7 +177,7 @@ export default function AdminOrdersPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Order ID', 'Customer', 'Status', 'Shipment', 'Total', 'Date', ''].map((h) => (
+                  {['Order', 'Customer', 'Status', 'Shipment', 'Total', 'Date', ''].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600">
                       {h}
                     </th>
@@ -186,9 +189,7 @@ export default function AdminOrdersPage() {
                   const latestShipment = order.shipments[0];
                   return (
                     <tr key={order.id} className="border-t hover:bg-gray-50">
-                      <td className="px-4 py-3 font-mono text-xs">
-                        {order.id.slice(0, 12)}…
-                      </td>
+                      <td className="px-4 py-3 text-sm font-semibold">{orderLabel(order)}</td>
                       <td className="px-4 py-3">
                         <div className="font-medium">{order.user.name}</div>
                         <div className="text-xs text-gray-500">{order.user.email}</div>

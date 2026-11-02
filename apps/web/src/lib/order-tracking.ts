@@ -1,4 +1,4 @@
-/** What `GET /orders/:id/tracking` returns: where an order is, its shipment, and what the carrier says. */
+/** What `GET /orders/:id/tracking` and `POST /orders/lookup` return: where an order is, its shipment, and what the carrier says. */
 
 export type StageKey = 'PLACED' | 'IN_PRODUCTION' | 'PACKAGING' | 'READY_TO_SHIP' | 'SHIPPED' | 'DELIVERED';
 
@@ -18,6 +18,9 @@ export interface TrackingEvent {
 
 export interface OrderTracking {
   orderId: string;
+  /** The number customers know the order by, e.g. 1042 and PL-1042. */
+  orderNumber: number;
+  orderLabel: string;
   placedAt: string;
   status: string;
   timeline: { steps: TrackingStep[]; currentStage: StageKey; closed: 'CANCELLED' | 'REFUNDED' | null };

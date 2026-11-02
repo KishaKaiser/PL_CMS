@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { trackingHref, useOrderLabel } from '../../../lib/order-label';
 
 interface ShippingAddress {
   fullName: string;
@@ -41,6 +42,7 @@ interface Shipment {
 
 interface Order {
   id: string;
+  orderNumber?: number;
   status: string;
   totalAmount: number;
   currency: string;
@@ -74,6 +76,7 @@ function getTrackingUrl(carrier: string | null | undefined, tracking: string): s
 }
 
 export default function ClientOrdersPage() {
+  const orderLabel = useOrderLabel();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -129,8 +132,8 @@ export default function ClientOrdersPage() {
                 <div className="flex flex-wrap items-center justify-between gap-4 p-5">
                   <div>
                     <div className="flex items-center gap-3">
-                      <span className="font-mono text-xs text-gray-400">
-                        #{order.id.slice(0, 12)}…
+                      <span className="text-sm font-semibold text-gray-700">
+                        Order {orderLabel(order)}
                       </span>
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_COLORS[order.status] ?? 'bg-gray-100 text-gray-600'}`}
@@ -201,7 +204,7 @@ export default function ClientOrdersPage() {
 
                     {order.status !== 'PENDING' && (
                       <a
-                        href={`/client/orders/${order.id}`}
+                        href={trackingHref(orderLabel(order))}
                         className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700"
                       >
                         Track order
