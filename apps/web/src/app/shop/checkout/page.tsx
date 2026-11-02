@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { getCart, clearCart, CartItem as StoredCartItem } from '../../../lib/cart';
+import { trackingHref, useOrderLabel } from '../../../lib/order-label';
 
 declare global {
   interface Window {
@@ -163,6 +164,8 @@ interface PurchasedItem {
 
 interface CompletedOrder {
   orderId: string;
+  /** The order's stored number (shown to the customer as PL-1042); filled in once the order has been loaded. */
+  orderNumber?: number;
   paypalOrderId?: string;
   items: PurchasedItem[];
   subtotal: number;
@@ -483,6 +486,7 @@ function CheckoutContent() {
       .then((res) => (res.ok ? res.json() : null))
       .then((order: {
         id: string;
+        orderNumber?: number;
         paypalOrderId?: string | null;
         totalAmount: string | number;
         currency: string;
@@ -507,6 +511,7 @@ function CheckoutContent() {
         const total = Number(order.totalAmount);
         setCompletedOrder({
           orderId: order.id,
+          orderNumber: order.orderNumber,
           paypalOrderId: order.paypalOrderId ?? undefined,
           items,
           subtotal,
@@ -1401,6 +1406,18 @@ export default function CheckoutPage() {
 }
 
 function OrderSuccessPanel({ order }: { order: CompletedOrder }) {
+  const orderLabel = useOrderLabel();
+  const [orderNumber, setOrderNumber] = useState(order.orderNumber);
+  useEffect(() => {
+    if (orderNumber !== undefined) return;
+    // Right after paying, only the order's long id is known; ask for its number.
+    void fetch(`/api/proxy/checkout/orders/${encodeURIComponent(order.orderId)}`)
+      .then((res) => (res.ok ? (res.json() as Promise<{ orderNumber?: number }>) : null))
+      .then((data) => {
+        if (typeof data?.orderNumber === 'number') setOrderNumber(data.orderNumber);
+      })
+      .catch(() => undefined);
+  }, [order.orderId, orderNumber]);
   const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
   return (
     <div className="rounded-2xl border border-green-200 bg-white p-6 shadow-sm print:border-0 print:shadow-none">
@@ -1411,9 +1428,14 @@ function OrderSuccessPanel({ order }: { order: CompletedOrder }) {
           <p className="mt-2 text-gray-600">
             Your payment was successful and your order has been confirmed.
           </p>
-          <p className="mt-3 text-sm text-gray-500">
-            Order #{order.orderId}
-          </p>
+          {orderNumber !== undefined && (
+            <p className="mt-3 text-sm text-gray-500">
+              Order {orderLabel({ id: order.orderId, orderNumber })} ·{' '}
+              <a href={trackingHref(orderLabel({ id: order.orderId, orderNumber }))} className="font-medium text-purple-700 hover:underline print:hidden">
+                Track your order
+              </a>
+            </p>
+          )}
         </div>
         <button
           type="button"

@@ -46,3 +46,20 @@ export class UpdateOrderStatusDto {
   @IsIn(['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'CANCELLED', 'COMPLETED', 'REFUNDED'])
   status!: 'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'SHIPPED' | 'CANCELLED' | 'COMPLETED' | 'REFUNDED';
 }
+
+/** Finding an order to track: its number, plus how the visitor proves it is theirs (the email on the order, or a signed link). */
+export class LookupOrderDto {
+  @IsString()
+  @MaxLength(60)
+  order!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(254)
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  token?: string;
+}

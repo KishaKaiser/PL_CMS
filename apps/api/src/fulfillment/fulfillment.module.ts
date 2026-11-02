@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MailModule } from '../mail/mail.module';
 import { FulfillmentController } from './fulfillment.controller';
+import { OrderLookupController } from './order-lookup.controller';
 import { OrderTrackingController } from './order-tracking.controller';
 import { ShipStationCustomStoreController } from './shipstation-custom-store.controller';
 import { FulfillmentService } from './fulfillment.service';
@@ -11,7 +12,7 @@ import { EmailService } from './email.service';
 
 @Module({
   imports: [MailModule],
-  controllers: [FulfillmentController, ShipStationCustomStoreController, OrderTrackingController],
+  controllers: [FulfillmentController, ShipStationCustomStoreController, OrderTrackingController, OrderLookupController],
   providers: [
     FulfillmentService,
     ShipStationCustomStoreService,

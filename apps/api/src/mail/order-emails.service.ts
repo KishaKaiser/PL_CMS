@@ -1,9 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { formatOrderNumber } from '@pl-cms/shared';
+import { getOrderPrefix } from '../common/order-prefix';
 import { PrismaService } from '../prisma/prisma.service';
 import { ORDER_STAGE_STEPS, carrierLabel } from '../fulfillment/order-progress';
 import { EmailComposer } from './email-composer';
 import { EmailSettingsService } from './email-settings.service';
 import { MailService } from './mail.service';
+import { signLink } from './signed-link';
 
 type LoadedOrder = NonNullable<Awaited<ReturnType<OrderEmailService['loadOrder']>>>;
 
@@ -22,6 +26,7 @@ export class OrderEmailService {
     private readonly mail: MailService,
     private readonly settings: EmailSettingsService,
     private readonly composer: EmailComposer,
+    private readonly config: ConfigService,
   ) {}
 
   private loadOrder(orderId: string) {
@@ -45,12 +50,20 @@ export class OrderEmailService {
     }
   }
 
-  private async trackingUrl(orderId: string) {
+  /**
+   * The link in an email to the tracking page, by order number. It carries a signature made with this site's secret, so the
+   * customer sees their order without logging in, and nobody else can make a link to it.
+   */
+  private async trackingUrl(order: LoadedOrder, label: string) {
     const base = await this.settings.siteUrl();
-    return base ? `${base}/client/orders/${orderId}` : '';
+    if (!base) return '';
+    const secret = this.config.get<string>('JWT_REFRESH_SECRET') || this.config.get<string>('DOCUMENT_ENCRYPTION_KEY') || '';
+    const token = secret ? `&token=${signLink('order-tracking', order.id, secret)}` : '';
+    return `${base}/track-order?order=${encodeURIComponent(label)}${token}`;
   }
 
-  private values(order: LoadedOrder, extra: Record<string, string> = {}) {
+  private async values(order: LoadedOrder, extra: Record<string, string> = {}) {
+    const label = formatOrderNumber(order.orderNumber, await getOrderPrefix(this.prisma));
     const items = order.items
       .map((item) => {
         const summary = (item.customization as { summary?: unknown } | null)?.summary;
@@ -62,8 +75,10 @@ export class OrderEmailService {
     return {
       customerName: address?.fullName || order.user.name || 'there',
       customerEmail: this.customerAddress(order),
-      orderId: order.id,
-      orderShort: order.id.slice(0, 12),
+      // The order number customers know (PL-1042), not the long internal id.
+      orderId: label,
+      orderShort: label,
+      trackingUrl: await this.trackingUrl(order, label),
       orderItems: items,
       total: formatMoney(Number(order.totalAmount), order.currency),
       shipTo: address
@@ -98,13 +113,13 @@ export class OrderEmailService {
       });
       if (claimed.count === 0) return;
 
-      const [emailSettings, trackingUrl, defaultFooter, base] = await Promise.all([
+      const [emailSettings, defaultFooter, base, values] = await Promise.all([
         this.settings.get(),
-        this.trackingUrl(order.id),
         this.defaultFooter(),
         this.settings.siteUrl(),
+        this.values(order),
       ]);
-      const values = this.values(order, { trackingUrl });
+      const trackingUrl = values.trackingUrl;
 
       const confirmation = await this.composer.compose('order_confirmation', values, {
         customer: true,
@@ -140,8 +155,10 @@ export class OrderEmailService {
       const stageLabel = ORDER_STAGE_STEPS.find((step) => step.key === stage)?.label;
       if (!stageLabel) return;
 
-      const [trackingUrl, defaultFooter] = await Promise.all([this.trackingUrl(order.id), this.defaultFooter()]);
-      const email = await this.composer.compose('order_progress', this.values(order, { stage: stageLabel.toLowerCase(), trackingUrl }), {
+      const defaultFooter = await this.defaultFooter();
+      const values = await this.values(order, { stage: stageLabel.toLowerCase() });
+      const trackingUrl = values.trackingUrl;
+      const email = await this.composer.compose('order_progress', values, {
         customer: true,
         button: trackingUrl ? { url: trackingUrl } : null,
         defaultFooter,
@@ -159,12 +176,14 @@ export class OrderEmailService {
       const order = await this.loadOrder(options.orderId);
       if (!order) return;
 
-      const [trackingUrl, defaultFooter] = await Promise.all([this.trackingUrl(order.id), this.defaultFooter()]);
-      const email = await this.composer.compose(
-        'order_shipped',
-        this.values(order, { trackingNumber: options.trackingNumber ?? '', carrier: carrierLabel(options.carrier) || 'the carrier', trackingUrl }),
-        { customer: true, button: trackingUrl ? { url: trackingUrl } : null, defaultFooter },
-      );
+      const defaultFooter = await this.defaultFooter();
+      const values = await this.values(order, { trackingNumber: options.trackingNumber ?? '', carrier: carrierLabel(options.carrier) || 'the carrier' });
+      const trackingUrl = values.trackingUrl;
+      const email = await this.composer.compose('order_shipped', values, {
+        customer: true,
+        button: trackingUrl ? { url: trackingUrl } : null,
+        defaultFooter,
+      });
       if (!email?.enabled) return;
       await this.mail.send({ to: options.to || this.customerAddress(order), subject: email.subject, html: email.html, text: email.text }, { kind: 'order-shipped' });
     } catch (error) {

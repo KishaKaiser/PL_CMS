@@ -11,6 +11,7 @@ import { AdvisorClients } from './advisor-clients';
 import { AdvisorEarnings } from './advisor-earnings';
 import { AdvisorPayoutDetails } from './advisor-payout-details';
 import { PrivateMessageInbox } from './private-message-inbox';
+import { trackingHref, useOrderLabel } from '../lib/order-label';
 
 type DashboardMode = 'client' | 'advisor';
 type DashboardSection =
@@ -42,6 +43,7 @@ interface DashboardUser {
 
 interface DashboardOrder {
   id: string;
+  orderNumber?: number;
   status: string;
   totalAmount: number | string;
   currency: string;
@@ -124,7 +126,7 @@ interface AstrologyDownload {
   createdAt: string;
   generatedAt?: string | null;
   product: { id: string; name: string };
-  order: { id: string; status: string; createdAt: string };
+  order: { id: string; orderNumber?: number; status: string; createdAt: string };
 }
 
 interface DashboardData {
@@ -171,6 +173,7 @@ const emptyPaymentMethod = {
 };
 
 export function AccountDashboard({ mode }: { mode: DashboardMode }) {
+  const orderLabel = useOrderLabel();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState('');
@@ -542,13 +545,18 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                   {data.orders.map((order) => (
                     <div key={order.id} className="flex flex-wrap items-center justify-between gap-4 py-5">
                       <div>
-                        <p className="font-mono text-xs text-gray-500">#{order.id.slice(0, 12)}</p>
+                        <p className="text-sm font-semibold text-gray-700">Order {orderLabel(order)}</p>
                         <p className="mt-1 font-semibold text-gray-950">{order.items.map((item) => item.product.name).join(', ') || 'Order'}</p>
                         <p className="mt-1 text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</p>
                       </div>
                       <div className="text-right">
                         <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">{order.status}</span>
                         <p className="mt-2 text-lg font-bold">${Number(order.totalAmount).toFixed(2)} {order.currency}</p>
+                        {order.status !== 'PENDING' && (
+                          <a href={trackingHref(orderLabel(order))} className="mt-1 inline-block text-sm font-medium text-purple-700 hover:underline">
+                            Track order
+                          </a>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -568,7 +576,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                       <div>
                         <p className="font-semibold text-gray-950">{download.product.name}</p>
                         <p className="mt-1 text-sm text-gray-500">
-                          Order #{download.order.id.slice(0, 12)} · {new Date(download.createdAt).toLocaleDateString()}
+                          Order {orderLabel(download.order)} · {new Date(download.createdAt).toLocaleDateString()}
                         </p>
                         {download.errorMessage && (
                           <p className="mt-2 max-w-2xl rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">

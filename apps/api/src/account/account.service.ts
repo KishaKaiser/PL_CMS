@@ -75,7 +75,7 @@ export class AccountService {
           where: { userId },
           include: {
             product: { select: { id: true, name: true } },
-            order: { select: { id: true, status: true, createdAt: true } },
+            order: { select: { id: true, orderNumber: true, status: true, createdAt: true } },
           },
           orderBy: { createdAt: 'desc' },
           take: 12,

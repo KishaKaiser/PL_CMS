@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { OrderProgressPanel } from '../../../../components/admin/order-progress-panel';
+import { useOrderLabel } from '../../../../lib/order-label';
 
 interface ShippingAddress {
   fullName: string;
@@ -66,6 +67,7 @@ interface Shipment {
 
 interface Order {
   id: string;
+  orderNumber?: number;
   status: string;
   totalAmount: number;
   currency: string;
@@ -117,6 +119,7 @@ const SHIPMENT_STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminOrderDetailPage() {
+  const orderLabel = useOrderLabel();
   const params = useParams<{ orderId: string }>();
   const orderId = params?.orderId ?? '';
 
@@ -260,8 +263,8 @@ export default function AdminOrderDetailPage() {
     <main className="mx-auto max-w-5xl p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Order Detail</h1>
-          <p className="mt-1 font-mono text-sm text-gray-500">{order.id}</p>
+          <h1 className="text-2xl font-bold">Order {orderLabel(order)}</h1>
+          <p className="mt-1 font-mono text-xs text-gray-400">{order.id}</p>
         </div>
         <a href="/admin/orders" className="text-sm text-indigo-600 hover:underline">
           ← Back to Orders
