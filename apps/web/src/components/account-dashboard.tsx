@@ -11,6 +11,7 @@ import { AdvisorClients } from './advisor-clients';
 import { AdvisorEarnings } from './advisor-earnings';
 import { AdvisorPayoutDetails } from './advisor-payout-details';
 import { PrivateMessageInbox } from './private-message-inbox';
+import { PromoOffer } from './phone/promo-offer';
 import { trackingHref, useOrderLabel } from '../lib/order-label';
 
 type DashboardMode = 'client' | 'advisor';
@@ -657,6 +658,7 @@ export function AccountDashboard({ mode }: { mode: DashboardMode }) {
                 <p className="mt-2 text-4xl font-bold text-gray-950">{walletValue}</p>
                 <a href="/client/shop" className="mt-5 inline-block rounded-lg bg-purple-700 px-6 py-3 font-semibold text-white hover:bg-purple-800">Add money to wallet</a>
               </div>
+              {mode === 'client' && <PromoOffer className="mb-6" />}
               {data.wallet.freeMinutes && data.wallet.freeMinutes.total > 0 && (
                 <div className="mb-6 rounded-2xl bg-green-50 p-6">
                   <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">Free minutes</p>

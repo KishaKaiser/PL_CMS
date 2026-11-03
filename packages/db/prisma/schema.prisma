@@ -208,6 +208,7 @@ model ClientProfile {
   queueAssignments        QueueAssignment[]
   appointments            Appointment[] @relation("ClientAppointments")
   freeMinuteGrants        FreeMinuteGrant[]
+  promoClaims             PromoClaim[]
 
   @@map("client_profiles")
 }
@@ -1185,6 +1186,33 @@ model FreeMinuteGrant {
   @@index([clientId, remaining])
   @@index([grantedByUserId, createdAt])
   @@map("free_minute_grants")
+}
+
+// The new customer promotion: a client pays a small price (or nothing, when the promotion is free) for promotional minutes,
+// once per client and once per internet address. ipKey and clientKey are only set while the claim is waiting for payment or
+// paid, and are unique, so the database itself refuses a second claim from the same address or the same client.
+model PromoClaim {
+  id            String    @id @default(cuid())
+  clientId      String
+  // PENDING (waiting for the PayPal payment) or PAID (the minutes were granted). Failed and released claims are cleared.
+  status        String
+  priceCents    Int
+  minutes       Int
+  // The address the claim was made from (an IPv6 address is reduced to its /64 network).
+  ipAddress     String
+  ipKey         String?   @unique
+  clientKey     String?   @unique
+  paypalOrderId String?   @unique
+  captureId     String?
+  payerEmail    String?
+  createdAt     DateTime  @default(now())
+  paidAt        DateTime?
+
+  client ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([createdAt])
+  @@map("promo_claims")
 }
 
 model AdvisorReview {

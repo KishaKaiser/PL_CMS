@@ -18,14 +18,19 @@ export function ReviewForm({ slug, advisorName, primaryColor }: { slug: string; 
   const [posted, setPosted] = useState<{ rating: number; comment: string | null } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // Why this client cannot review yet (the API words it: too little talk time, or no paid minutes after free ones).
+  const [blockedMessage, setBlockedMessage] = useState('');
 
   useEffect(() => {
     fetch(`/api/proxy/phone/advisors/${encodeURIComponent(slug)}/my-review`)
       .then(async (res) => {
         if (res.status === 401) return setAccess('signed-out');
         if (!res.ok) return setAccess('not-a-client');
-        const data = (await res.json()) as { eligible: boolean; review: { rating: number; comment: string | null } | null };
-        if (!data.eligible) return setAccess('not-eligible');
+        const data = (await res.json()) as { eligible: boolean; review: { rating: number; comment: string | null } | null; message?: string | null };
+        if (!data.eligible) {
+          setBlockedMessage(data.message ?? '');
+          return setAccess('not-eligible');
+        }
         if (data.review) setPosted(data.review);
         setAccess('eligible');
       })
@@ -70,7 +75,11 @@ export function ReviewForm({ slug, advisorName, primaryColor }: { slug: string; 
   }
 
   if (access === 'not-eligible') {
-    return <p className="mb-6 text-sm text-gray-500">You can leave a review once you have spoken with {advisorName}.</p>;
+    return (
+      <p className="mb-6 text-sm text-gray-500">
+        {blockedMessage || `You can leave a review once you have spoken with ${advisorName}.`}
+      </p>
+    );
   }
 
   if (posted) {

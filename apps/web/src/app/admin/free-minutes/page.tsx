@@ -6,7 +6,31 @@ interface Promo {
   enabled: boolean;
   minutes: number;
   expiresInDays: number | null;
+  /** What the client pays, in cents; 0 = free and given at sign-up. */
+  priceCents: number;
 }
+
+interface Claim {
+  id: string;
+  status: string;
+  priceCents: number;
+  minutes: number;
+  ipAddress: string;
+  payerEmail: string | null;
+  createdAt: string;
+  paidAt: string | null;
+  holdingAddress: boolean;
+  client: string;
+}
+
+const CLAIM_STATUS: Record<string, string> = {
+  PAID: 'Claimed',
+  PENDING: 'Waiting for payment',
+  CANCELLED: 'Cancelled',
+  EXPIRED: 'Not paid',
+  FAILED: 'Failed',
+  REPLACED: 'Started again',
+};
 
 interface Overview {
   totals: { source: string; grants: number; minutesGiven: number; minutesLeft: number }[];
@@ -20,7 +44,7 @@ interface ClientOption {
   role: string;
 }
 
-const SOURCE_LABEL: Record<string, string> = { ADVISOR: 'From advisors', ADMIN: 'From admin', PROMO: 'Welcome promotion' };
+const SOURCE_LABEL: Record<string, string> = { ADVISOR: 'From advisors', ADMIN: 'From admin', PROMO: 'New customer promotion' };
 
 async function readMessage(res: Response, fallback: string): Promise<string> {
   const data = (await res.json().catch(() => ({}))) as { message?: string | string[] };
@@ -31,7 +55,9 @@ async function readMessage(res: Response, fallback: string): Promise<string> {
 export default function AdminFreeMinutesPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [clients, setClients] = useState<ClientOption[]>([]);
-  const [promo, setPromo] = useState<Promo>({ enabled: false, minutes: 5, expiresInDays: 30 });
+  const [promo, setPromo] = useState<Promo>({ enabled: false, minutes: 5, expiresInDays: 30, priceCents: 99 });
+  const [promoPrice, setPromoPrice] = useState('0.99');
+  const [claims, setClaims] = useState<Claim[]>([]);
   const [promoNeverExpires, setPromoNeverExpires] = useState(false);
   const [send, setSend] = useState({ audience: 'CLIENT' as 'CLIENT' | 'ALL_CLIENTS', clientUserId: '', minutes: '10', expiresInDays: '30', note: '' });
   const [neverExpires, setNeverExpires] = useState(false);
@@ -41,17 +67,20 @@ export default function AdminFreeMinutesPage() {
 
   const load = useCallback(async () => {
     try {
-      const [overviewRes, promoRes, contactsRes] = await Promise.all([
+      const [overviewRes, promoRes, contactsRes, claimsRes] = await Promise.all([
         fetch('/api/proxy/admin/free-minutes'),
         fetch('/api/proxy/admin/free-minutes/promo'),
         fetch('/api/proxy/messages/contacts'),
+        fetch('/api/proxy/admin/free-minutes/promo/claims'),
       ]);
       if (overviewRes.ok) setOverview((await overviewRes.json()) as Overview);
       if (promoRes.ok) {
         const loaded = (await promoRes.json()) as Promo;
         setPromo(loaded);
+        setPromoPrice((loaded.priceCents / 100).toFixed(2));
         setPromoNeverExpires(loaded.expiresInDays === null);
       }
+      if (claimsRes.ok) setClaims((await claimsRes.json()) as Claim[]);
       if (contactsRes.ok) setClients(((await contactsRes.json()) as ClientOption[]).filter((c) => c.role === 'CLIENT'));
     } catch {
       setError('Unable to load free minutes');
@@ -105,13 +134,30 @@ export default function AdminFreeMinutesPage() {
 
   function savePromo(event: FormEvent) {
     event.preventDefault();
+    const price = Number(promoPrice);
+    if (!Number.isFinite(price) || price < 0 || price > 100) {
+      setError('Enter a price between $0.00 (free) and $100.00.');
+      return;
+    }
     void submit(
       '/promo',
       'PUT',
-      { enabled: promo.enabled, minutes: promo.minutes, ...(promoNeverExpires ? {} : { expiresInDays: promo.expiresInDays ?? 30 }) },
-      () => (promo.enabled ? 'The welcome promotion is on.' : 'The welcome promotion is off.'),
+      {
+        enabled: promo.enabled,
+        minutes: promo.minutes,
+        priceCents: Math.round(price * 100),
+        ...(promoNeverExpires ? {} : { expiresInDays: promo.expiresInDays ?? 30 }),
+      },
+      () => (promo.enabled ? 'The new customer promotion is on.' : 'The new customer promotion is off.'),
     );
   }
+
+  function releaseAddress(claim: Claim) {
+    if (!window.confirm(`Let ${claim.ipAddress} claim the promotion again? ${claim.client} keeps their minutes.`)) return;
+    void submit(`/promo/claims/${claim.id}/release`, 'POST', {}, () => 'That internet connection can claim the promotion again.');
+  }
+
+  const promoPriceCents = Math.round((Number(promoPrice) || 0) * 100);
 
   const field = 'mt-1 w-full rounded border border-gray-200 px-3 py-2 text-sm';
 
@@ -129,21 +175,27 @@ export default function AdminFreeMinutesPage() {
       {message && <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{message}</p>}
 
       <section className="rounded-lg border bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold">Welcome promotion for new clients</h2>
+        <h2 className="text-lg font-semibold">New customer promotion</h2>
         <p className="mt-1 text-sm text-gray-600">
-          When on, every client who signs up from now on gets these minutes automatically. Existing clients are not affected;
-          use &quot;Send free minutes&quot; below for them.
+          {promoPriceCents > 0
+            ? `New clients are offered these minutes in their account for $${(promoPriceCents / 100).toFixed(2)}, paid with PayPal. Each client can claim them once, and each internet connection (IP address) can claim them once, so the minutes go to real customers and not to repeat sign-ups. Only clients who have not paid for a call yet are offered them.`
+            : 'Free: every new client gets these minutes automatically when they sign up, but only the first sign-up from each internet connection (IP address) does.'}{' '}
+          Existing clients are not affected; use &quot;Send free minutes&quot; below for them.
           {overview ? ` ${overview.promoClients} client${overview.promoClients === 1 ? '' : 's'} so far.` : ''}
         </p>
         <form onSubmit={savePromo} className="mt-4 space-y-4">
           <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
             <input type="checkbox" checked={promo.enabled} onChange={(event) => setPromo({ ...promo, enabled: event.target.checked })} />
-            Give new clients free minutes
+            Offer new clients promotional minutes
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm font-medium text-gray-700">
-              Free minutes
+              Promotional minutes
               <input type="number" min={1} max={600} value={promo.minutes} onChange={(event) => setPromo({ ...promo, minutes: Number(event.target.value) })} className={field} />
+            </label>
+            <label className="block text-sm font-medium text-gray-700">
+              Price (US dollars, 0 = free)
+              <input type="number" min={0} max={100} step="0.01" value={promoPrice} onChange={(event) => setPromoPrice(event.target.value)} className={field} />
             </label>
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -168,6 +220,40 @@ export default function AdminFreeMinutesPage() {
             Save promotion
           </button>
         </form>
+
+        {claims.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-gray-800">Who claimed it</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              A claim holds its internet connection: nobody else on that connection can claim until you release it (for example for a
+              family sharing one connection, or while you are testing). The client keeps their minutes.
+            </p>
+            <ul className="mt-2 divide-y rounded border text-sm">
+              {claims.map((claim) => (
+                <li key={claim.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+                  <span>
+                    <span className="font-medium">{claim.client}</span>
+                    <span className="text-gray-500">
+                      {' '}
+                      · {claim.minutes} min · {claim.priceCents > 0 ? `$${(claim.priceCents / 100).toFixed(2)}` : 'free'}
+                      {claim.payerEmail ? ` · PayPal ${claim.payerEmail}` : ''}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-3 text-gray-500">
+                    <span>
+                      {CLAIM_STATUS[claim.status] ?? claim.status} · {claim.ipAddress} · {new Date(claim.createdAt).toLocaleDateString()}
+                    </span>
+                    {claim.holdingAddress ? (
+                      <button type="button" disabled={busy} onClick={() => releaseAddress(claim)} className="text-xs font-medium text-purple-700 hover:underline disabled:opacity-50">
+                        Release connection
+                      </button>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border bg-white p-5 shadow-sm">

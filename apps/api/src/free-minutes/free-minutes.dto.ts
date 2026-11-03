@@ -49,4 +49,25 @@ export class WelcomePromoDto {
   @Min(1)
   @Max(365)
   expiresInDays?: number;
+
+  /** What the client pays, in cents; 0 makes the promotion free. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10000)
+  priceCents?: number;
+}
+
+export class ClaimPromoDto {
+  /** The web address of this site as the client sees it; PayPal sends them back to it after paying. */
+  @IsString()
+  @MaxLength(200)
+  returnOrigin!: string;
+}
+
+export class PromoPaymentDto {
+  /** The PayPal order the client was sent to (PayPal adds it to the address as "token"). */
+  @IsString()
+  @MaxLength(100)
+  paypalOrderId!: string;
 }

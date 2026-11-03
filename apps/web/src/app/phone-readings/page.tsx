@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AdvisorGrid } from '../../components/phone/advisor-grid';
+import { PromoOffer } from '../../components/phone/promo-offer';
 import { PublicSiteShell } from '../../components/public-site-shell';
 import { getPublicSiteConfig } from '../../lib/public-cms';
 import { buildSeoMetadata } from '../../lib/seo';
@@ -30,6 +31,8 @@ export default async function PhoneReadingsPage() {
             schedule, or to book a call for later. We ring your phone, connect you, and you only pay for the minutes you talk.
           </p>
         </header>
+
+        <PromoOffer className="mx-auto mb-10 max-w-2xl" />
 
         <AdvisorGrid primaryColor={siteConfig.theme.primaryColor} />
       </main>
