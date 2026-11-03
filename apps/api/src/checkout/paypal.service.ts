@@ -514,6 +514,18 @@ export class PaypalService {
     };
   }
 
+  /** PayPal's status for an order (COMPLETED once it has been paid), for when a capture's outcome is not known. */
+  async getOrderStatus(paypalOrderId: string): Promise<string | null> {
+    const credentialsConfig = await this.getCredentials();
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.getBaseUrl(credentialsConfig.environment)}/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { status?: string };
+    return data.status ?? null;
+  }
+
   async verifyWebhookSignature(
     headers: Record<string, string>,
     rawBody: string,

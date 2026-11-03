@@ -8,6 +8,7 @@ import { publicName } from '../common/public-identity';
 import { ensureAdvisorSlug } from './advisor-slug';
 import { SubmitReviewDto } from './billing.dto';
 import { LIVE_STATUSES } from './billing.service';
+import { reviewAccess } from './review-eligibility';
 
 const MAX_PUBLIC_REVIEWS = 50;
 
@@ -218,12 +219,13 @@ export class PhoneService {
   /** Whether the signed-in client may review this advisor, and what they wrote before if so. */
   async getMyReview(userId: string, slugOrId: string) {
     const advisor = await this.findPublicAdvisor(slugOrId);
-    const eligible = await this.hasSpokenWith(userId, advisor.id);
+    const access = await reviewAccess(this.prisma, userId, advisor.id);
     const review = await this.prisma.advisorReview.findUnique({
       where: { advisorId_userId: { advisorId: advisor.id, userId } },
       select: { rating: true, comment: true },
     });
-    return { eligible, review };
+    // A review posted before these rules stays visible to its author, who still cannot change it.
+    return { eligible: access.eligible || review !== null, review, reason: access.reason, message: access.message };
   }
 
   /**
@@ -233,9 +235,8 @@ export class PhoneService {
   async submitReview(userId: string, slugOrId: string, dto: SubmitReviewDto) {
     const advisor = await this.findPublicAdvisor(slugOrId);
     if (advisor.userId === userId) throw new ForbiddenException('You cannot review yourself.');
-    if (!(await this.hasSpokenWith(userId, advisor.id))) {
-      throw new ForbiddenException('You can review an advisor after you have spoken with them.');
-    }
+    const access = await reviewAccess(this.prisma, userId, advisor.id);
+    if (!access.eligible) throw new ForbiddenException(access.message ?? 'You cannot review this advisor yet.');
 
     const alreadyReviewed = new ConflictException('You have already reviewed this advisor. Reviews cannot be changed once posted.');
     const existing = await this.prisma.advisorReview.findUnique({
@@ -335,15 +336,5 @@ export class PhoneService {
     });
     if (!advisor) throw new NotFoundException('Advisor not found');
     return advisor;
-  }
-
-  private async hasSpokenWith(userId: string, advisorId: string): Promise<boolean> {
-    const client = await this.prisma.clientProfile.findUnique({ where: { userId }, select: { id: true } });
-    if (!client) return false;
-    const session = await this.prisma.callSession.findFirst({
-      where: { clientId: client.id, advisorId, connectedAt: { not: null } },
-      select: { id: true },
-    });
-    return session !== null;
   }
 }

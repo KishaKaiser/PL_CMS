@@ -238,7 +238,7 @@ export class FormsService {
         const profile = await tx.clientProfile.create({
           data: { userId: user.id, displayName: username ? displayNameFromUsername(username) : user.name },
         });
-        await grantWelcomePromo(tx, profile.id);
+        await grantWelcomePromo(tx, profile.id, meta.ipAddress);
       }
 
       if (role === Role.ADVISOR) {
