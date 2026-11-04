@@ -4,9 +4,12 @@ import {
   Logger,
   BadRequestException,
 } from '@nestjs/common';
+import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaypalService } from '../checkout/paypal.service';
 import { OrderEmailService } from '../mail/order-emails.service';
+import { OrderHoldsService } from '../checkout/order-holds.service';
+import { FreeMinutesService } from '../free-minutes/free-minutes.service';
 
 interface PaypalWebhookEvent {
   id?: string;
@@ -27,6 +30,8 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly paypal: PaypalService,
     private readonly orderEmails: OrderEmailService,
+    private readonly holds: OrderHoldsService,
+    private readonly freeMinutes: FreeMinutesService,
   ) {}
 
   /**
@@ -142,7 +147,8 @@ export class PaymentsService {
       where: { paypalCaptureId: captureId },
       create: {
         orderId: order.id,
-        amount: order.totalAmount,
+        // What PayPal took: any part paid from the wallet balance is not part of this payment.
+        amount: new Decimal(order.totalAmount).sub(new Decimal(order.walletAppliedCents).div(100)),
         currency: order.currency,
         method: 'CARD',
         status: 'SUCCEEDED',
@@ -191,6 +197,9 @@ export class PaymentsService {
     }
 
     await this.creditWalletIfNeeded(order.id, payment.id);
+    await this.freeMinutes
+      .fulfilClaimForOrder(order.id, event.resource?.payer?.email_address)
+      .catch((error: unknown) => this.logger.error(`Could not grant promotion minutes for ${order.id}: ${String(error)}`));
 
     this.logger.log(
       `Order ${order.id} confirmed via PayPal webhook (capture ${captureId})`,
@@ -201,30 +210,11 @@ export class PaymentsService {
     const paypalOrderId = event.resource?.supplementary_data?.related_ids?.order_id;
     if (!paypalOrderId) return;
 
-    const order = await this.prisma.order.findUnique({
-      where: { paypalOrderId },
-      include: { items: true },
-    });
+    const order = await this.prisma.order.findUnique({ where: { paypalOrderId }, select: { id: true } });
     if (!order) return;
 
-    // Release inventory reservations for variant items
-    const releases = order.items
-      .filter((item) => item.variantId)
-      .map((item) =>
-        this.prisma.inventory.updateMany({
-          where: { variantId: item.variantId! },
-          data: { reserved: { decrement: item.quantity } },
-        }),
-      );
-
-    if (releases.length > 0) {
-      await this.prisma.$transaction(releases);
-    }
-
-    await this.prisma.order.update({
-      where: { id: order.id },
-      data: { status: 'CANCELLED' },
-    });
+    // Releases the stock, any wallet money the order took, and any promotion place it held.
+    await this.holds.cancelPendingOrder(order.id);
 
     this.logger.log(`Order ${order.id} cancelled via PayPal webhook (capture denied)`);
   }
@@ -262,6 +252,9 @@ export class PaymentsService {
     });
 
     void this.orderEmails.sendOrderPlaced(orderId);
+    await this.freeMinutes
+      .fulfilClaimForOrder(orderId)
+      .catch((error: unknown) => this.logger.error(`Could not grant promotion minutes for ${orderId}: ${String(error)}`));
 
     let creditedCents = 0;
     for (const item of order.items) {

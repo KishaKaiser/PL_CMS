@@ -129,6 +129,11 @@ export class CreateCheckoutDto {
   @IsString()
   couponCode?: string;
 
+  /** Pay with the wallet balance first; the rest (if any) is paid through PayPal. */
+  @IsOptional()
+  @IsBoolean()
+  useWallet?: boolean;
+
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

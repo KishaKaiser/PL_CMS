@@ -1,8 +1,7 @@
-import { ConfigService } from '@nestjs/config';
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@pl-cms/db';
 import { ipKey } from '../common/client-ip';
-import { PaypalService } from '../checkout/paypal.service';
+import { uniqueProductSlug } from '../products/product-slug';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -13,7 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
  *  - An admin gift, or the new customer promotion, can be used with any advisor.
  *
  * Free minutes never touch the wallet balance, so they create no wallet revenue and no refund. The new customer promotion
- * can cost a small price (99 cents by default): it is paid through PayPal, once per client and once per internet address,
+ * can cost a small price (99 cents by default): it is bought through the store checkout, once per client and once per internet address,
  * so that each promotion goes to a real customer and not to someone signing up again and again.
  */
 
@@ -23,6 +22,9 @@ const MAX_ADMIN_MINUTES = 600;
 const MAX_NOTE_LENGTH = 200;
 export const WELCOME_PROMO_KEY = 'welcome';
 const PROMO_SETTING_KEY = 'welcome_promo';
+/** The hidden store product the new customer promotion is bought with, remembered by id so renaming it does no harm. */
+const PROMO_PRODUCT_SETTING_KEY = 'welcome_promo_product_id';
+const PROMO_PRODUCT_NAME = 'New Customer Promotion';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_PROMO_PRICE_CENTS = 10_000;
 /** How long a promotion waits for its PayPal payment before the address and the client are free to try again. */
@@ -129,13 +131,7 @@ function promoGrant(clientId: string, minutes: number, expiresInDays: number | n
 
 @Injectable()
 export class FreeMinutesService {
-  private readonly logger = new Logger(FreeMinutesService.name);
-
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly paypal: PaypalService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ── Using free minutes (billing) ───────────────────────────────────────────
 
@@ -285,7 +281,7 @@ export class FreeMinutesService {
     return !!(call || appointment || spot);
   }
 
-  // ── The new customer promotion (paid) ──────────────────────────────────────
+  // ── The new customer promotion (bought through the checkout) ───────────────
 
   /** What this client can do about the new customer promotion right now. */
   async offerFor(userId: string, ip: string | undefined): Promise<PromoOffer> {
@@ -296,150 +292,156 @@ export class FreeMinutesService {
 
     const client = await this.prisma.clientProfile.findUnique({ where: { userId }, select: { id: true } });
     if (!client) return unavailable;
-    await this.expireStaleClaims();
+    await this.expireStaleClaims(this.prisma);
 
-    const problem = await this.claimProblem(userId, client.id, ip);
+    const problem = await this.claimProblem(this.prisma, userId, client.id, ip);
     if (!problem) return { ...base, status: 'available', message: null };
     return { ...base, status: problem.status, message: problem.message };
   }
 
   /**
-   * Starts a claim: checks the client may have the promotion, holds their place (one claim per client and per internet
-   * address, enforced by the database) and creates the PayPal payment. Returns the PayPal page they approve it on.
+   * The hidden store product the promotion is bought with: it goes in the cart and through the normal checkout, like adding
+   * money to the wallet. Only handed out to a client who can claim the promotion. The checkout works out the price itself.
    */
-  async startClaim(userId: string, ip: string | undefined, returnOrigin: string) {
-    const promo = await readPromo(this.prisma);
+  async promoProduct(userId: string, ip: string | undefined) {
+    const offer = await this.offerFor(userId, ip);
+    if (offer.status === 'blocked' || offer.status === 'claimed') throw new ConflictException(offer.message ?? 'This offer is not available.');
+    if (offer.status !== 'available') throw new BadRequestException(offer.message ?? 'This offer is not available right now.');
+
+    const select = { id: true, name: true, price: true, currency: true } as const;
+    const price = offer.priceCents / 100;
+    const existingId = await this.promoProductId();
+    const existing = existingId ? await this.prisma.product.findUnique({ where: { id: existingId }, select: { ...select, isActive: true } }) : null;
+    if (existing) {
+      if (!existing.isActive || Number(existing.price) !== price) {
+        await this.prisma.product.update({ where: { id: existing.id }, data: { isActive: true, price } });
+      }
+      return { id: existing.id, name: existing.name, price, currency: existing.currency };
+    }
+
+    const created = await this.prisma.product.create({
+      data: {
+        name: PROMO_PRODUCT_NAME,
+        slug: await uniqueProductSlug(this.prisma, PROMO_PRODUCT_NAME),
+        // Bought through the account page, not browsed in the shop, and (like wallet credit) nothing is shipped or emailed.
+        type: 'MINUTE_PACK',
+        description: 'Promotional call minutes for new customers.',
+        price,
+        currency: 'USD',
+        minutesPack: 0,
+        isActive: true,
+        hiddenFromShop: true,
+      },
+      select,
+    });
+    await this.prisma.setting.upsert({
+      where: { key: PROMO_PRODUCT_SETTING_KEY },
+      create: { key: PROMO_PRODUCT_SETTING_KEY, value: created.id },
+      update: { value: created.id },
+    });
+    return { id: created.id, name: created.name, price, currency: created.currency };
+  }
+
+  /** The id of the promotion's store product, if it has been made. */
+  async promoProductId(db: Db = this.prisma): Promise<string | null> {
+    const row = await db.setting.findUnique({ where: { key: PROMO_PRODUCT_SETTING_KEY } });
+    return row?.value ?? null;
+  }
+
+  /** What a promotion order costs and gives right now; throws when the promotion is off. */
+  async promoTerms(db: Db = this.prisma): Promise<{ priceCents: number; minutes: number }> {
+    const promo = await readPromo(db);
     if (!promo.enabled || promo.priceCents <= 0) throw new BadRequestException('This offer is not available right now.');
+    return { priceCents: promo.priceCents, minutes: promo.minutes };
+  }
+
+  /**
+   * Called while a promotion order is being created: checks the client may have the promotion and holds their place (one
+   * claim per client and per internet address, enforced by the database). Throws when they may not, which cancels the order.
+   */
+  async reserveClaimForOrder(db: Db, userId: string, orderId: string, ip: string | undefined, terms: { priceCents: number; minutes: number }) {
     if (!ip) throw new BadRequestException('We could not tell where this request came from, so the offer cannot be claimed. Please try again.');
-    const client = await this.prisma.clientProfile.findUnique({ where: { userId }, select: { id: true } });
+    const client = await db.clientProfile.findUnique({ where: { userId }, select: { id: true } });
     if (!client) throw new ForbiddenException('Only clients can claim this offer.');
 
-    await this.expireStaleClaims();
-    const problem = await this.claimProblem(userId, client.id, ip);
+    await this.expireStaleClaims(db);
+    const problem = await this.claimProblem(db, userId, client.id, ip);
     if (problem) throw new ConflictException(problem.message);
 
     // A claim this client left waiting earlier is replaced by the new one.
-    await this.releaseWhere({ clientId: client.id, status: 'PENDING' }, 'REPLACED');
-
-    let claim: { id: string };
+    await this.releaseWhere(db, { clientId: client.id, status: 'PENDING' }, 'REPLACED');
     try {
-      claim = await this.prisma.promoClaim.create({
+      await db.promoClaim.create({
         data: {
           clientId: client.id,
+          orderId,
           status: 'PENDING',
-          priceCents: promo.priceCents,
-          minutes: promo.minutes,
+          priceCents: terms.priceCents,
+          minutes: terms.minutes,
           ipAddress: ip,
           ipKey: ipKey(ip),
           clientKey: client.id,
         },
-        select: { id: true },
       });
     } catch (error) {
       // Another sign-up from this connection got in first.
       if ((error as { code?: string }).code === 'P2002') throw new ConflictException(BLOCKED_MESSAGE);
       throw error;
     }
-
-    try {
-      const { paypalOrderId, approvalUrl } = await this.paypal.createOrder(
-        claim.id,
-        (promo.priceCents / 100).toFixed(2),
-        'USD',
-        `${returnOrigin}/client/promo`,
-        `${returnOrigin}/client/promo?cancelled=1`,
-      );
-      await this.prisma.promoClaim.update({ where: { id: claim.id }, data: { paypalOrderId } });
-      return { approvalUrl };
-    } catch (error) {
-      await this.releaseWhere({ id: claim.id }, 'FAILED');
-      this.logger.error(`Could not start the promotion payment: ${error instanceof Error ? error.message : String(error)}`);
-      throw new BadRequestException('We could not reach PayPal to start the payment. Please try again in a moment.');
-    }
   }
 
-  /** The client came back from PayPal: take the payment and, once PayPal confirms it, grant the minutes. */
-  async completeClaim(userId: string, paypalOrderId: string) {
-    const claim = await this.ownClaim(userId, paypalOrderId);
-    if (claim.status === 'PAID') return { status: 'paid' as const, minutes: claim.minutes };
-    if (claim.status !== 'PENDING') throw new BadRequestException('This offer is no longer waiting for payment. You can start it again from your account.');
-
-    const notConfirmed = 'PayPal has not confirmed the payment yet. If you approved it, wait a moment and open this page again.';
-    let payerEmail: string | undefined;
-    let captureId: string | undefined;
-    let completed = false;
-    try {
-      const captured = await this.paypal.captureOrder(paypalOrderId);
-      completed = captured.status === 'COMPLETED';
-      payerEmail = captured.payerEmail;
-      captureId = captured.captureId;
-    } catch (error) {
-      // The capture may have gone through on an earlier visit to this page: PayPal then refuses a second one. Ask it.
-      completed = (await this.paypal.getOrderStatus(paypalOrderId).catch(() => null)) === 'COMPLETED';
-      if (!completed) {
-        this.logger.warn(`Promotion capture failed for ${paypalOrderId}: ${error instanceof Error ? error.message : String(error)}`);
-        throw new BadRequestException(notConfirmed);
-      }
-    }
-    if (!completed) throw new BadRequestException(notConfirmed);
-
+  /** The promotion's order has been paid: grant the minutes. Safe to call again for the same order. */
+  async fulfilClaimForOrder(orderId: string, payerEmail?: string | null) {
+    const claim = await this.prisma.promoClaim.findUnique({ where: { orderId }, select: { id: true, clientId: true, status: true, minutes: true } });
+    if (!claim || claim.status === 'PAID') return;
     const promo = await readPromo(this.prisma);
     await this.prisma.$transaction(async (tx) => {
+      // Paid is paid: even if the claim lapsed while the payment was being made, the minutes are granted.
       await tx.promoClaim.updateMany({
-        where: { id: claim.id, status: 'PENDING' },
-        data: { status: 'PAID', paidAt: new Date(), captureId: captureId ?? null, payerEmail: payerEmail ?? null },
+        where: { id: claim.id, status: { not: 'PAID' } },
+        data: { status: 'PAID', paidAt: new Date(), payerEmail: payerEmail ?? null },
       });
       await tx.freeMinuteGrant.createMany({
         data: [promoGrant(claim.clientId, claim.minutes, promo.expiresInDays)],
         skipDuplicates: true,
       });
     });
-    return { status: 'paid' as const, minutes: claim.minutes };
   }
 
-  /** The client left PayPal without paying: free their place so they can try again. */
-  async cancelClaim(userId: string, paypalOrderId: string) {
-    const claim = await this.ownClaim(userId, paypalOrderId);
-    if (claim.status === 'PENDING') await this.releaseWhere({ id: claim.id, status: 'PENDING' }, 'CANCELLED');
-    return { ok: true };
-  }
-
-  private async ownClaim(userId: string, paypalOrderId: string) {
-    const claim = await this.prisma.promoClaim.findUnique({
-      where: { paypalOrderId },
-      select: { id: true, clientId: true, status: true, minutes: true, client: { select: { userId: true } } },
-    });
-    if (!claim || claim.client.userId !== userId) throw new NotFoundException('We could not find that payment.');
-    return claim;
+  /** The promotion's order was cancelled or never paid: free the client's place and their internet connection. */
+  async releaseClaimForOrder(orderId: string, status = 'CANCELLED') {
+    await this.releaseWhere(this.prisma, { orderId, status: 'PENDING' }, status);
   }
 
   /** Why this client cannot claim the promotion, or null when they can. */
   private async claimProblem(
+    db: Db,
     userId: string,
     clientId: string,
     ip: string | undefined,
   ): Promise<{ status: 'claimed' | 'unavailable' | 'blocked'; message: string } | null> {
     const [paidClaim, grant, paidMinutes] = await Promise.all([
-      this.prisma.promoClaim.findFirst({ where: { clientId, status: 'PAID' }, select: { id: true } }),
-      this.prisma.freeMinuteGrant.findFirst({ where: { clientId, promoKey: WELCOME_PROMO_KEY }, select: { id: true } }),
-      this.prisma.walletTransaction.count({ where: { userId, type: 'DEBIT', amount: { gt: 0 } } }),
+      db.promoClaim.findFirst({ where: { clientId, status: 'PAID' }, select: { id: true } }),
+      db.freeMinuteGrant.findFirst({ where: { clientId, promoKey: WELCOME_PROMO_KEY }, select: { id: true } }),
+      // Minutes paid on calls only: paying for an order from the wallet does not make someone a returning customer.
+      db.walletTransaction.count({ where: { userId, type: 'DEBIT', amount: { gt: 0 }, callSessionId: { not: null } } }),
     ]);
     if (paidClaim || grant) return { status: 'claimed', message: 'You have already claimed this offer.' };
     if (paidMinutes > 0) return { status: 'unavailable', message: 'This offer is for new customers.' };
     if (ip) {
-      const taken = await this.prisma.promoClaim.findFirst({ where: { ipKey: ipKey(ip), NOT: { clientId } }, select: { id: true } });
+      const taken = await db.promoClaim.findFirst({ where: { ipKey: ipKey(ip), NOT: { clientId } }, select: { id: true } });
       if (taken) return { status: 'blocked', message: BLOCKED_MESSAGE };
     }
     return null;
   }
 
   /** Claims that never got paid free their address and client after a while. */
-  private async expireStaleClaims() {
-    await this.releaseWhere({ status: 'PENDING', createdAt: { lt: new Date(Date.now() - PENDING_CLAIM_MS) } }, 'EXPIRED');
+  private async expireStaleClaims(db: Db) {
+    await this.releaseWhere(db, { status: 'PENDING', createdAt: { lt: new Date(Date.now() - PENDING_CLAIM_MS) } }, 'EXPIRED');
   }
 
-  private async releaseWhere(where: Prisma.PromoClaimWhereInput, status: string) {
-    await this.prisma.promoClaim.updateMany({ where, data: { status, ipKey: null, clientKey: null } });
+  private async releaseWhere(db: Db, where: Prisma.PromoClaimWhereInput, status: string) {
+    await db.promoClaim.updateMany({ where, data: { status, ipKey: null, clientKey: null } });
   }
 
   // ── Admin ──────────────────────────────────────────────────────────────────

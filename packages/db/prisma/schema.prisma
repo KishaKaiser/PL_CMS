@@ -1202,6 +1202,9 @@ model PromoClaim {
   ipAddress     String
   ipKey         String?   @unique
   clientKey     String?   @unique
+  // The store order the promotion is bought with (it goes through the normal checkout).
+  orderId       String?   @unique
+  // paypalOrderId and captureId are no longer filled in: the payment is recorded on the order.
   paypalOrderId String?   @unique
   captureId     String?
   payerEmail    String?
@@ -1379,6 +1382,10 @@ model Order {
   shippingAmount   Decimal?
   /// Set when the order confirmation email was sent (or taken on), so it goes out once even if payment is confirmed twice.
   confirmationEmailSentAt DateTime?
+  /// How much of the total was paid from the customer's wallet balance, in cents (the rest was paid through PayPal). It is taken from the wallet when the order is created.
+  walletAppliedCents Int       @default(0)
+  /// Set when that wallet money was given back because the order was cancelled or never paid.
+  walletReleasedAt DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
