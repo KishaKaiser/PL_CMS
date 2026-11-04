@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { addToCart, getCart, removeFromCart } from '../../lib/cart';
 import { siteButtonStyle } from '../../lib/site-button';
 import { readMessage } from './phone-format';
 
@@ -12,11 +13,19 @@ interface Offer {
   message: string | null;
 }
 
+interface PromoProduct {
+  id: string;
+  name: string;
+  price: number | string;
+  currency: string;
+}
+
 const price = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 /**
- * The new customer promotion: promotional minutes for a small price, paid with PayPal. Shown only to a signed-in client who
- * can still claim it (or who is told why they cannot, when their internet connection already claimed it); nothing otherwise.
+ * The new customer promotion: promotional minutes for a small price, bought through the store checkout like adding money to the
+ * wallet. Shown only to a signed-in client who can still claim it (or who is told why they cannot, when their internet
+ * connection already claimed it); nothing otherwise.
  */
 export function PromoOffer({ className = '' }: { className?: string }) {
   const [offer, setOffer] = useState<Offer | null>(null);
@@ -36,17 +45,26 @@ export function PromoOffer({ className = '' }: { className?: string }) {
     setBusy(true);
     setError('');
     try {
-      const res = await fetch('/api/proxy/free-minutes/promo/start', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ returnOrigin: window.location.origin }),
+      const res = await fetch('/api/proxy/free-minutes/promo/product');
+      if (!res.ok) throw new Error(await readMessage(res, 'Could not start checkout. Please try again.'));
+      const product = (await res.json()) as PromoProduct;
+
+      // The offer is bought on its own, so other things in the cart have to be checked out (or removed) first.
+      if (getCart().some((item) => item.productId !== product.id)) {
+        throw new Error('Your cart has other items in it. Check out or remove them first, then claim this offer.');
+      }
+      removeFromCart(product.id);
+      addToCart({
+        productId: product.id,
+        productName: product.name,
+        productPrice: Number(product.price),
+        productType: 'MINUTE_PACK',
+        currency: product.currency,
+        quantity: 1,
       });
-      if (!res.ok) throw new Error(await readMessage(res, 'Could not start the payment. Please try again.'));
-      const { approvalUrl } = (await res.json()) as { approvalUrl: string };
-      if (!approvalUrl) throw new Error('PayPal did not return a payment page. Please try again.');
-      window.location.href = approvalUrl;
+      window.location.href = '/shop/checkout';
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start the payment. Please try again.');
+      setError(err instanceof Error ? err.message : 'Could not start checkout. Please try again.');
       setBusy(false);
     }
   }
@@ -71,7 +89,7 @@ export function PromoOffer({ className = '' }: { className?: string }) {
             className="site-button-colors mt-4 rounded-lg px-6 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
             style={siteButtonStyle('#7445ad', '#63379c')}
           >
-            {busy ? 'Opening PayPal…' : `Claim for ${price(offer.priceCents)} with PayPal`}
+            {busy ? 'Opening checkout…' : `Claim for ${price(offer.priceCents)}`}
           </button>
         </>
       ) : (

@@ -37,6 +37,7 @@ interface PayPalButtonConfig {
   };
   createOrder: () => Promise<string>;
   onApprove: (data: { orderID: string }) => Promise<void>;
+  onCancel?: () => void;
   onError: (err: unknown) => void;
 }
 
@@ -173,6 +174,8 @@ interface CompletedOrder {
   discount: number;
   tax: number;
   total: number;
+  /** How much of the total was paid from the wallet balance (the rest went through PayPal). */
+  walletApplied?: number;
   currency: string;
 }
 
@@ -366,6 +369,7 @@ function createCompletedOrderSnapshot(params: {
   discount: number;
   tax: number;
   total: number;
+  walletApplied?: number;
   currency: string;
 }): CompletedOrder {
   return {
@@ -383,9 +387,13 @@ function createCompletedOrderSnapshot(params: {
     discount: params.discount,
     tax: params.tax,
     total: params.total,
+    walletApplied: params.walletApplied,
     currency: params.currency,
   };
 }
+
+/** Wallet credit is bought with real money; the server refuses to pay for it from the wallet, so the option is not offered. */
+const WALLET_CREDIT_NAME = 'Wallet Credit';
 
 function CheckoutContent() {
   const searchParams = useSearchParams();
@@ -409,6 +417,13 @@ function CheckoutContent() {
   const [googlePayLoaded, setGooglePayLoaded] = useState(false);
   const cardFields = useRef<PayPalCardFields | null>(null);
   const renderedWallets = useRef(new Set<string>());
+
+  // The wallet balance, and whether it is used first. The ref lets the PayPal buttons (which keep the function they were drawn with)
+  // see the current choice, and `lastOrder` is the order PayPal is being asked to pay, so it can be cancelled if they back out.
+  const [walletBalanceCents, setWalletBalanceCents] = useState(0);
+  const [useWallet, setUseWallet] = useState(true);
+  const useWalletRef = useRef(false);
+  const lastOrder = useRef<{ id: string; walletAppliedCents: number } | null>(null);
 
   // Shipping state
   const [shippingAddress, setShippingAddress] = useState<ShippingAddress>(emptyAddress);
@@ -452,6 +467,16 @@ function CheckoutContent() {
       .catch(() => setMessage('Failed to load product.'));
   }, [productId, variantId]);
 
+  // The signed-in client's wallet balance (not signed in, or not a client: no wallet option)
+  useEffect(() => {
+    fetch('/api/proxy/wallet/balance')
+      .then((res) => (res.ok ? (res.json() as Promise<{ balanceCents?: number }>) : null))
+      .then((data) => {
+        if (data && typeof data.balanceCents === 'number') setWalletBalanceCents(Math.max(0, data.balanceCents));
+      })
+      .catch(() => undefined);
+  }, []);
+
   // Fetch PayPal client ID
   useEffect(() => {
     Promise.all([
@@ -491,6 +516,7 @@ function CheckoutContent() {
         totalAmount: string | number;
         currency: string;
         shippingAmount?: string | number | null;
+        walletAppliedCents?: number | null;
         items?: Array<{
           quantity: number;
           unitPrice: string | number;
@@ -519,6 +545,7 @@ function CheckoutContent() {
           discount: 0,
           tax: Math.max(0, total - subtotal - shipping),
           total,
+          walletApplied: Number(order.walletAppliedCents ?? 0) / 100,
           currency: order.currency || 'USD',
         });
         setStatus('success');
@@ -537,6 +564,13 @@ function CheckoutContent() {
   const taxableSubtotal = Math.max(0, itemsTotal - discountAmount);
   const taxAmount = ecommerce.taxEnabled && !ecommerce.pricesIncludeTax ? taxableSubtotal * (Number(ecommerce.taxRatePercent) / 100) : 0;
   const grandTotal = Math.max(0, taxableSubtotal + taxAmount + shippingCost);
+  // Paying with the wallet balance first: it covers as much of the total as it can, and PayPal is asked only for the rest.
+  const walletEligible = walletBalanceCents > 0 && cart.length > 0 && !cart.some((item) => item.product.name === WALLET_CREDIT_NAME);
+  const totalCents = Math.round(grandTotal * 100);
+  const walletAppliedCents = walletEligible && useWallet ? Math.min(walletBalanceCents, totalCents) : 0;
+  const amountDue = (totalCents - walletAppliedCents) / 100;
+  const payFullyFromWallet = walletAppliedCents > 0 && walletAppliedCents >= totalCents;
+  useWalletRef.current = walletEligible && useWallet;
   const astrologyItems = cart.filter((item) => item.product.digitalDelivery === 'ASTROLOGY_REPORT');
   const requiresShipping = cart.some((item) => item.product.type === 'PHYSICAL' || !item.product.type);
   const canPay = requiresShipping ? Boolean(selectedRate) : astrologyItems.every((item) => isAstrologyFormComplete(astrologyForms[item.product.id]));
@@ -634,50 +668,64 @@ function CheckoutContent() {
     }
   };
 
-  const createPaypalOrder = useCallback(async () => {
-    setStatus('loading');
-    const checkoutPayload = {
-      items: cart.map((item) => ({
-        productId: item.product.id,
-        variantId: item.variantId,
-        quantity: item.quantity,
-        ...(item.custom
-          ? {
-              custom: {
-                typeId: item.custom.typeId,
-                colorId: item.custom.colorId,
-                color2Id: item.custom.color2Id,
-                sizeId: item.custom.sizeId,
-                herbIds: item.custom.herbIds,
-              },
-            }
-          : {}),
-      })),
-      ...(requiresShipping
+  const buildCheckoutPayload = useCallback(() => ({
+    items: cart.map((item) => ({
+      productId: item.product.id,
+      variantId: item.variantId,
+      quantity: item.quantity,
+      ...(item.custom
         ? {
-            shippingAddress,
-            shippingCarrier: selectedRate?.carrierCode,
-            shippingService: selectedRate?.serviceCode,
-            shippingAmount: shippingCost,
+            custom: {
+              typeId: item.custom.typeId,
+              colorId: item.custom.colorId,
+              color2Id: item.custom.color2Id,
+              sizeId: item.custom.sizeId,
+              herbIds: item.custom.herbIds,
+            },
           }
         : {}),
-      couponCode: coupon?.valid ? coupon.code : undefined,
-      astrologyForms: astrologyItems.map((item) => astrologyForms[item.product.id]).filter(Boolean),
-    };
+    })),
+    ...(requiresShipping
+      ? {
+          shippingAddress,
+          shippingCarrier: selectedRate?.carrierCode,
+          shippingService: selectedRate?.serviceCode,
+          shippingAmount: shippingCost,
+        }
+      : {}),
+    couponCode: coupon?.valid ? coupon.code : undefined,
+    astrologyForms: astrologyItems.map((item) => astrologyForms[item.product.id]).filter(Boolean),
+  }), [astrologyForms, astrologyItems, cart, coupon, requiresShipping, selectedRate, shippingAddress, shippingCost]);
+
+  // Cancels the order PayPal was asked to pay when the buyer backs out or PayPal fails, so the stock, the wallet money and any
+  // promotion place it was holding go back. (The server also does this by itself after a few hours.)
+  const cancelPendingOrder = useCallback(async () => {
+    const pending = lastOrder.current;
+    lastOrder.current = null;
+    if (!pending) return;
+    await fetch(`/api/proxy/checkout/orders/${pending.id}/cancel`, { method: 'PATCH' }).catch(() => undefined);
+  }, []);
+
+  const createPaypalOrder = useCallback(async () => {
+    setStatus('loading');
+    setMessage('');
+    // An earlier try that was not finished gives its holds back before a new order is made.
+    await cancelPendingOrder();
     const res = await fetch('/api/proxy/checkout/paypal-order', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(checkoutPayload),
+      body: JSON.stringify({ ...buildCheckoutPayload(), ...(useWalletRef.current ? { useWallet: true } : {}) }),
     });
     if (!res.ok) {
-      const err = (await res.json().catch(() => ({}))) as { message?: string };
+      const err = await readErrorResponse(res);
       setStatus('error');
       setMessage(err.message ?? 'Failed to create order');
       throw new Error(err.message ?? 'Failed to create order');
     }
-    const data = (await res.json()) as { paypalOrderId: string };
+    const data = (await res.json()) as { paypalOrderId: string; orderId?: string; walletAppliedCents?: number };
+    if (data.orderId) lastOrder.current = { id: data.orderId, walletAppliedCents: data.walletAppliedCents ?? 0 };
     return data.paypalOrderId;
-  }, [astrologyForms, astrologyItems, cart, coupon, requiresShipping, selectedRate, shippingAddress, shippingCost]);
+  }, [buildCheckoutPayload, cancelPendingOrder]);
 
   const capturePaypalOrder = useCallback(async (paypalOrderId: string) => {
     const res = await fetch(
@@ -699,8 +747,10 @@ function CheckoutContent() {
       discount: discountAmount,
       tax: taxAmount,
       total: grandTotal,
+      walletApplied: (lastOrder.current?.walletAppliedCents ?? 0) / 100,
       currency: ecommerce.currency || 'USD',
     });
+    lastOrder.current = null;
     clearCart();
     setCompletedOrder(orderSnapshot);
     setStatus('success');
@@ -710,11 +760,50 @@ function CheckoutContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [cart, discountAmount, ecommerce.currency, grandTotal, itemsTotal, shippingCost, taxAmount]);
 
+  const payFromWallet = useCallback(async () => {
+    setStatus('loading');
+    setMessage('');
+    try {
+      const res = await fetch('/api/proxy/checkout/wallet-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildCheckoutPayload()),
+      });
+      if (!res.ok) {
+        const err = await readErrorResponse(res);
+        throw new Error(err.message ?? 'We could not place the order. Please try again.');
+      }
+      const data = (await res.json()) as { orderId: string; orderNumber?: number; walletAppliedCents?: number };
+      const snapshot = createCompletedOrderSnapshot({
+        orderId: data.orderId,
+        cart,
+        subtotal: itemsTotal,
+        shipping: shippingCost,
+        discount: discountAmount,
+        tax: taxAmount,
+        total: grandTotal,
+        walletApplied: (data.walletAppliedCents ?? totalCents) / 100,
+        currency: ecommerce.currency || 'USD',
+      });
+      if (typeof data.orderNumber === 'number') snapshot.orderNumber = data.orderNumber;
+      clearCart();
+      setCompletedOrder(snapshot);
+      setStatus('success');
+      setMessage('Your order has been placed and paid from your wallet.');
+      setCart([]);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err: unknown) {
+      setStatus('error');
+      setMessage(err instanceof Error ? err.message : 'We could not place the order. Please try again.');
+    }
+  }, [buildCheckoutPayload, cart, discountAmount, ecommerce.currency, grandTotal, itemsTotal, shippingCost, taxAmount, totalCents]);
+
   const handlePaypalError = useCallback((err: unknown) => {
+    void cancelPendingOrder();
     setStatus('error');
     setMessage((currentMessage) => currentMessage || 'PayPal encountered an error. Check that the saved PayPal client ID, secret, and environment match your PayPal account.');
     console.error('PayPal error:', err);
-  }, []);
+  }, [cancelPendingOrder]);
 
   const renderPaypalButtons = useCallback(() => {
     if (!window.paypal || cart.length === 0 || paypalRendered || !selectedRate || !canPay) return;
@@ -738,6 +827,10 @@ function CheckoutContent() {
           },
           createOrder: createPaypalOrder,
           onApprove: async (data) => capturePaypalOrder(data.orderID),
+          onCancel: () => {
+            void cancelPendingOrder();
+            setStatus('idle');
+          },
           onError: handlePaypalError,
         });
         if (button.isEligible && !button.isEligible()) continue;
@@ -756,7 +849,7 @@ function CheckoutContent() {
       }
     };
     void renderButtons();
-  }, [canPay, capturePaypalOrder, cart.length, createPaypalOrder, handlePaypalError, paypalRendered, selectedRate]);
+  }, [canPay, cancelPendingOrder, capturePaypalOrder, cart.length, createPaypalOrder, handlePaypalError, paypalRendered, selectedRate]);
 
   const renderCardFields = useCallback(() => {
     const paypal = window.paypal;
@@ -849,7 +942,7 @@ function CheckoutContent() {
             currencyCode: config.currencyCode,
             merchantCapabilities: config.merchantCapabilities,
             supportedNetworks: config.supportedNetworks,
-            total: { label: 'The Psychic Link', amount: grandTotal.toFixed(2), type: 'final' },
+            total: { label: 'The Psychic Link', amount: amountDue.toFixed(2), type: 'final' },
           });
           session.onvalidatemerchant = async (event) => {
             const validation = await applePay.validateMerchant({
@@ -879,7 +972,7 @@ function CheckoutContent() {
       renderedWallets.current.delete('applepay');
       console.warn('Apple Pay is not available', err);
     });
-  }, [canPay, capturePaypalOrder, createPaypalOrder, grandTotal, handlePaypalError, selectedRate]);
+  }, [amountDue, canPay, capturePaypalOrder, createPaypalOrder, handlePaypalError, selectedRate]);
 
   const renderGooglePay = useCallback(() => {
     const paypal = window.paypal;
@@ -919,7 +1012,7 @@ function CheckoutContent() {
                 countryCode: 'US',
                 currencyCode: ecommerce.currency || 'USD',
                 totalPriceStatus: 'FINAL',
-                totalPrice: grandTotal.toFixed(2),
+                totalPrice: amountDue.toFixed(2),
               },
             });
             await paypalGooglePay.confirmOrder({ orderId, paymentMethodData: paymentData.paymentMethodData });
@@ -938,16 +1031,16 @@ function CheckoutContent() {
       renderedWallets.current.delete('googlepay');
       console.warn('Google Pay is not available', err);
     });
-  }, [canPay, capturePaypalOrder, createPaypalOrder, ecommerce.currency, grandTotal, handlePaypalError, paypalEnvironment, selectedRate]);
+  }, [amountDue, canPay, capturePaypalOrder, createPaypalOrder, ecommerce.currency, handlePaypalError, paypalEnvironment, selectedRate]);
 
   useEffect(() => {
-    if (paypalLoaded && cart.length > 0 && selectedRate && canPay) {
+    if (paypalLoaded && cart.length > 0 && selectedRate && canPay && !payFullyFromWallet) {
       renderPaypalButtons();
       if (showCardFields) renderCardFields();
       renderApplePay();
       if (googlePayLoaded) renderGooglePay();
     }
-  }, [paypalLoaded, googlePayLoaded, canPay, cart, selectedRate, showCardFields, renderPaypalButtons, renderCardFields, renderApplePay, renderGooglePay]);
+  }, [paypalLoaded, googlePayLoaded, canPay, cart, selectedRate, showCardFields, payFullyFromWallet, renderPaypalButtons, renderCardFields, renderApplePay, renderGooglePay]);
 
   useEffect(() => {
     if (!paypalRendered) {
@@ -1080,6 +1173,36 @@ function CheckoutContent() {
               <span>Total</span>
               <span>${grandTotal.toFixed(2)} {ecommerce.currency || 'USD'}</span>
             </div>
+            {walletEligible && totalCents > 0 && (
+              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-purple-200 bg-purple-50/60 p-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={useWallet}
+                  onChange={(event) => {
+                    setUseWallet(event.target.checked);
+                    // The payment buttons are drawn again for the new amount.
+                    setPaypalRendered(false);
+                  }}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="font-medium text-gray-900">Use my wallet balance first</span>{' '}
+                  <span className="text-gray-600">(${(walletBalanceCents / 100).toFixed(2)} available)</span>
+                </span>
+              </label>
+            )}
+            {walletAppliedCents > 0 && (
+              <div className="mt-3 space-y-1">
+                <div className="flex justify-between text-sm text-emerald-700">
+                  <span>Wallet balance</span>
+                  <span>-${(walletAppliedCents / 100).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-base font-bold">
+                  <span>{payFullyFromWallet ? 'Left to pay' : 'Left to pay with PayPal'}</span>
+                  <span>${amountDue.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
             <form onSubmit={applyCoupon} className="mt-5 flex gap-2">
               <input value={couponCode} onChange={(event) => setCouponCode(event.target.value)} placeholder="Coupon code" className="flex-1 rounded-lg border px-3 py-2 text-sm" />
               <button type="submit" className="rounded-lg border border-purple-200 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50">Apply</button>
@@ -1315,7 +1438,19 @@ function CheckoutContent() {
                 </div>
               )}
 
-              {!paypalClientId ? (
+              {payFullyFromWallet && canPay ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">Your wallet balance covers this whole order. Nothing is charged to PayPal or a card.</p>
+                  <button
+                    type="button"
+                    onClick={payFromWallet}
+                    disabled={status === 'loading'}
+                    className="h-12 w-full rounded-lg bg-purple-700 px-4 text-sm font-semibold text-white hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {status === 'loading' ? 'Placing your order...' : `Pay $${grandTotal.toFixed(2)} from wallet`}
+                  </button>
+                </div>
+              ) : !paypalClientId ? (
                 <div className="rounded border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
                   PayPal checkout is not configured. Add the PayPal client ID and secret in Admin Settings → API settings → Billing.
                 </div>
@@ -1490,6 +1625,20 @@ function OrderSuccessPanel({ order }: { order: CompletedOrder }) {
           <span>Total paid</span>
           <span>{formatCurrency(order.total, order.currency)}</span>
         </div>
+        {(order.walletApplied ?? 0) > 0 && (
+          <div className="mt-2 space-y-1 text-sm text-gray-600">
+            <div className="flex justify-between">
+              <span>Paid from your wallet</span>
+              <span>{formatCurrency(order.walletApplied ?? 0, order.currency)}</span>
+            </div>
+            {order.total - (order.walletApplied ?? 0) > 0.004 && (
+              <div className="flex justify-between">
+                <span>Paid with PayPal</span>
+                <span>{formatCurrency(order.total - (order.walletApplied ?? 0), order.currency)}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3 print:hidden">

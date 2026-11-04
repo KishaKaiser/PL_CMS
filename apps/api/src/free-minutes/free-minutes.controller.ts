@@ -1,10 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
 import { Role } from '@pl-cms/shared';
 import { clientIp } from '../common/client-ip';
 import { Roles, RolesGuard } from '../auth/roles.guard';
-import { AdminGiftDto, AdvisorGiftDto, ClaimPromoDto, PromoPaymentDto, WelcomePromoDto } from './free-minutes.dto';
+import { AdminGiftDto, AdvisorGiftDto, WelcomePromoDto } from './free-minutes.dto';
 import { FreeMinutesService } from './free-minutes.service';
 
 type AuthedRequest = { user: { id: string; role: string }; headers: Record<string, string | string[] | undefined>; ip?: string };
@@ -29,35 +29,12 @@ export class FreeMinutesController {
     return this.freeMinutes.offerFor(req.user.id, clientIp(req));
   }
 
-  /** Returns the PayPal page the client pays the promotion price on; PayPal sends them back to /client/promo. */
-  @Post('promo/start')
-  @Roles(Role.CLIENT)
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  startPromo(@Request() req: AuthedRequest, @Body() dto: ClaimPromoDto) {
-    let origin: string;
-    try {
-      const url = new URL(dto.returnOrigin);
-      if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('not a web address');
-      origin = url.origin;
-    } catch {
-      throw new BadRequestException('A web address for this site is needed to start the payment.');
-    }
-    return this.freeMinutes.startClaim(req.user.id, clientIp(req), origin);
-  }
-
-  /** The client is back from PayPal: take the payment and grant the minutes. */
-  @Post('promo/complete')
+  /** The store product the promotion is bought with, to put in the cart and check out like any other purchase. */
+  @Get('promo/product')
   @Roles(Role.CLIENT)
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
-  completePromo(@Request() req: AuthedRequest, @Body() dto: PromoPaymentDto) {
-    return this.freeMinutes.completeClaim(req.user.id, dto.paypalOrderId);
-  }
-
-  /** The client left PayPal without paying. */
-  @Post('promo/cancel')
-  @Roles(Role.CLIENT)
-  cancelPromo(@Request() req: AuthedRequest, @Body() dto: PromoPaymentDto) {
-    return this.freeMinutes.cancelClaim(req.user.id, dto.paypalOrderId);
+  promoProduct(@Request() req: AuthedRequest) {
+    return this.freeMinutes.promoProduct(req.user.id, clientIp(req));
   }
 
   /** An advisor sends 1, 3 or 5 free minutes to a client who has contacted them. */

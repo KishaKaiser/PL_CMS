@@ -70,6 +70,8 @@ interface Order {
   orderNumber?: number;
   status: string;
   totalAmount: number;
+  /** Paid from the customer's wallet balance, in cents (the rest was paid through PayPal). */
+  walletAppliedCents?: number;
   currency: string;
   createdAt: string;
   payerEmail?: string | null;
@@ -333,6 +335,15 @@ export default function AdminOrderDetailPage() {
                   ${Number(order.totalAmount).toFixed(2)} {order.currency}
                 </span>
               </div>
+              {(order.walletAppliedCents ?? 0) > 0 && (
+                <div>
+                  <span className="text-gray-500">Paid from wallet:</span>{' '}
+                  <span className="font-semibold">${((order.walletAppliedCents ?? 0) / 100).toFixed(2)}</span>
+                  {Number(order.totalAmount) * 100 - (order.walletAppliedCents ?? 0) > 0.5 && (
+                    <span className="text-gray-500"> · ${(Number(order.totalAmount) - (order.walletAppliedCents ?? 0) / 100).toFixed(2)} through PayPal</span>
+                  )}
+                </div>
+              )}
               {order.payments[0] && (
                 <div>
                   <span className="text-gray-500">Payment:</span>{' '}

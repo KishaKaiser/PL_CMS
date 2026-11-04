@@ -13,6 +13,9 @@ import { CheckoutService } from './checkout.service';
 import { CreateCheckoutDto } from './checkout.dto';
 import { Roles, RolesGuard } from '../auth/roles.guard';
 import { Role } from '@pl-cms/shared';
+import { clientIp } from '../common/client-ip';
+
+type AuthedRequest = { user: { id: string }; headers: Record<string, string | string[] | undefined>; ip?: string };
 
 @Controller('checkout')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -22,20 +25,20 @@ export class CheckoutController {
 
   /** Create a plain DB order (legacy, no PayPal). */
   @Post()
-  createOrder(
-    @Request() req: { user: { id: string } },
-    @Body() dto: CreateCheckoutDto,
-  ) {
-    return this.checkoutService.createOrder(req.user.id, dto);
+  createOrder(@Request() req: AuthedRequest, @Body() dto: CreateCheckoutDto) {
+    return this.checkoutService.createOrder(req.user.id, dto, clientIp(req));
   }
 
   /** Create a PayPal order; returns paypalOrderId + approvalUrl. */
   @Post('paypal-order')
-  createPaypalOrder(
-    @Request() req: { user: { id: string } },
-    @Body() dto: CreateCheckoutDto,
-  ) {
-    return this.checkoutService.createPaypalOrder(req.user.id, dto);
+  createPaypalOrder(@Request() req: AuthedRequest, @Body() dto: CreateCheckoutDto) {
+    return this.checkoutService.createPaypalOrder(req.user.id, dto, clientIp(req));
+  }
+
+  /** Pay for an order entirely from the wallet balance (no PayPal). */
+  @Post('wallet-order')
+  createWalletOrder(@Request() req: AuthedRequest, @Body() dto: CreateCheckoutDto) {
+    return this.checkoutService.createWalletOrder(req.user.id, dto, clientIp(req));
   }
 
   /** Capture a PayPal order after buyer approval. */
