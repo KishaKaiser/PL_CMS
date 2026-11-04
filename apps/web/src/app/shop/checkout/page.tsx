@@ -421,7 +421,7 @@ function CheckoutContent() {
   // The wallet balance, and whether it is used first. The ref lets the PayPal buttons (which keep the function they were drawn with)
   // see the current choice, and `lastOrder` is the order PayPal is being asked to pay, so it can be cancelled if they back out.
   const [walletBalanceCents, setWalletBalanceCents] = useState(0);
-  const [useWallet, setUseWallet] = useState(true);
+  const [useWallet, setUseWallet] = useState(false);
   const useWalletRef = useRef(false);
   const lastOrder = useRef<{ id: string; walletAppliedCents: number } | null>(null);
 
