@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { OrderStatus, Prisma } from '@pl-cms/db';
+import { customerEmailFor } from '@pl-cms/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from './email.service';
 
@@ -180,7 +181,7 @@ export class ShipStationCustomStoreService {
     });
 
     await this.email.sendShipmentNotification({
-      to: order.shippingAddress?.email ?? order.user.email,
+      to: customerEmailFor(order.shippingAddress?.email, order.user.email),
       customerName: order.user.name,
       orderId: order.id,
       trackingNumber,

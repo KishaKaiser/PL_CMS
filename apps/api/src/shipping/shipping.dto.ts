@@ -10,7 +10,11 @@ import {
   Matches,
   IsIn,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { DELIVERABLE_EMAIL_SOURCE, INVALID_EMAIL_MESSAGE } from '@pl-cms/shared';
+
+/** An address a customer can really receive mail at (see isDeliverableEmail). */
+const DELIVERABLE_EMAIL = new RegExp(DELIVERABLE_EMAIL_SOURCE, 'u');
 
 export class ShippingAddressDto {
   @IsString()
@@ -45,7 +49,9 @@ export class ShippingAddressDto {
   @IsIn(['US'])
   country!: string;
 
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsEmail()
+  @Matches(DELIVERABLE_EMAIL, { message: INVALID_EMAIL_MESSAGE })
   email!: string;
 }
 

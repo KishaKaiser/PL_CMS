@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Prisma } from '@pl-cms/db';
-import { Role } from '@pl-cms/shared';
+import { INVALID_EMAIL_MESSAGE, Role, isDeliverableEmail } from '@pl-cms/shared';
 import * as bcrypt from 'bcryptjs';
 import { normalizeEmailInput } from '../common/input-normalization.util';
 import { assertPublicUsername, displayNameFromUsername, generateUniqueUsername, isPublicRole } from '../common/public-identity';
@@ -213,6 +213,7 @@ export class FormsService {
     const name = readText(data, 'name') || email;
 
     if (!email) throw new BadRequestException('Email is required');
+    if (!isDeliverableEmail(email)) throw new BadRequestException(INVALID_EMAIL_MESSAGE);
     if (password.length < 8) throw new BadRequestException('Password must be at least 8 characters');
 
     const existingEmail = await this.prisma.user.findUnique({ where: { email } });

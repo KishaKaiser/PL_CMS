@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { getCart, clearCart, CartItem as StoredCartItem } from '../../../lib/cart';
 import { trackingHref, useOrderLabel } from '../../../lib/order-label';
+import { DELIVERABLE_EMAIL_SOURCE, INVALID_EMAIL_MESSAGE } from '@pl-cms/shared';
 
 declare global {
   interface Window {
@@ -1304,7 +1305,10 @@ function CheckoutContent() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Email *</label>
+                  {/* The order emails go here, so characters no real address has (a stray ` for example) are refused on the spot. */}
                   <input required type="email" value={shippingAddress.email}
+                    pattern={DELIVERABLE_EMAIL_SOURCE}
+                    title={INVALID_EMAIL_MESSAGE}
                     onChange={(e) => setShippingAddress({ ...shippingAddress, email: e.target.value })}
                     className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
                 </div>

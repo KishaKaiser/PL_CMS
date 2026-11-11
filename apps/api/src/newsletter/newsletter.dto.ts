@@ -1,7 +1,11 @@
-import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { DELIVERABLE_EMAIL_SOURCE, INVALID_EMAIL_MESSAGE } from '@pl-cms/shared';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsEmail, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 export class SubscribeDto {
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsEmail()
+  @Matches(new RegExp(DELIVERABLE_EMAIL_SOURCE, 'u'), { message: INVALID_EMAIL_MESSAGE })
   email!: string;
 
   @IsOptional()
