@@ -285,3 +285,4 @@ export * from './site-settings';
 export * from './site-defaults';
 export * from './astrology-types';
 export * from './order-number';
+export * from './email-address';

@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { parseOrderReference } from '@pl-cms/shared';
+import { customerEmailFor, parseOrderReference } from '@pl-cms/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BuyLabelDto, UpdateShipmentStatusDto } from './fulfillment.dto';
 import { EmailService } from './email.service';
@@ -321,7 +321,7 @@ export class FulfillmentService {
     });
 
     // Send email notification (best-effort)
-    const customerEmail = order.shippingAddress?.email ?? order.user.email;
+    const customerEmail = customerEmailFor(order.shippingAddress?.email, order.user.email);
     await this.email.sendShipmentNotification({
       to: customerEmail,
       customerName: order.user.name,
@@ -404,7 +404,7 @@ export class FulfillmentService {
     // Send shipped notification
     if (dto.status === 'SHIPPED') {
       const customerEmail =
-        shipment.order.shippingAddress?.email ?? shipment.order.user.email;
+        customerEmailFor(shipment.order.shippingAddress?.email, shipment.order.user.email);
       await this.email.sendShipmentNotification({
         to: customerEmail,
         customerName: shipment.order.user.name,

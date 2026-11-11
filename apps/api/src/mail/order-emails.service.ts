@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { formatOrderNumber } from '@pl-cms/shared';
+import { customerEmailFor, formatOrderNumber } from '@pl-cms/shared';
 import { getOrderPrefix } from '../common/order-prefix';
 import { PrismaService } from '../prisma/prisma.service';
 import { ORDER_STAGE_STEPS, carrierLabel } from '../fulfillment/order-progress';
@@ -89,7 +89,7 @@ export class OrderEmailService {
   }
 
   private customerAddress(order: LoadedOrder) {
-    return order.shippingAddress?.email || order.user.email;
+    return customerEmailFor(order.shippingAddress?.email, order.user.email);
   }
 
   private async defaultFooter() {

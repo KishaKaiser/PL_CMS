@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ORDER_NUMBER_OFFSET, formatOrderNumber, parseOrderReference } from '@pl-cms/shared';
+import { ORDER_NUMBER_OFFSET, customerEmailFor, formatOrderNumber, parseOrderReference } from '@pl-cms/shared';
 import { getOrderPrefix } from '../common/order-prefix';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderEmailService } from '../mail/order-emails.service';
@@ -135,7 +135,7 @@ export class OrderTrackingService {
     // The customer's emails go out in the background (a mail server can take a few seconds); they never throw.
     if (target === 'SHIPPED' && !alreadyShipped) {
       void this.email.sendShipmentNotification({
-        to: order.shippingAddress?.email ?? order.user.email,
+        to: customerEmailFor(order.shippingAddress?.email, order.user.email),
         customerName: order.user.name,
         orderId: order.id,
         trackingNumber,
